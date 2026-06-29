@@ -20,6 +20,7 @@
 - `.ai/document_governance.md`
 - `.ai/project_workspace.md`
 - `.ai/update_policy.md`
+- `.ai/commit_policy.md`
 - `.ai/agent_registry.md`
 - `.ai/capabilities.md`
 - `.ai/agents/`

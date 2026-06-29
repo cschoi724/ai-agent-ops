@@ -19,9 +19,10 @@ Agent는 아래 순서로 문서를 확인한다.
 3. `.ai/project_workspace.md`
 4. `.ai/agent_registry.md`
 5. `.ai/capabilities.md`
-6. 자기 역할에 맞는 `.ai/agents/*.md`
-7. 작업 유형에 맞는 `.ai/workflows/*.md`
-8. 프로젝트가 초기화되어 있으면 `.ai_project/` 문서
+6. `.ai/commit_policy.md`
+7. 자기 역할에 맞는 `.ai/agents/*.md`
+8. 작업 유형에 맞는 `.ai/workflows/*.md`
+9. 프로젝트가 초기화되어 있으면 `.ai_project/` 문서
 
 ## 3. 기본 운영
 
@@ -76,3 +77,4 @@ Codex 프로젝트에 적용할 선택 템플릿은 아래 위치에 있다.
 |---|---|
 | 2026-06-29 | `.ai/` 진입점 README v1 작성 |
 | 2026-06-29 | 프로젝트 핵심 문서 템플릿 위치와 source of truth 기준 추가 |
+| 2026-06-29 | AI Agent 커밋 정책 문서 참조 추가 |
