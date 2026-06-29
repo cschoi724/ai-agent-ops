@@ -8,14 +8,16 @@
 
 이 문서는 AI Agent가 PM, Development, QA 역할을 나누어 협업하는 기본 흐름을 정의한다.
 
-`.ai/`는 운영 가이드북과 템플릿 프레임워크이고, 실제 프로젝트별 작업 보드와 협업 기록은 `.ai_project/`에 둔다.
+`.ai/`는 운영 가이드북과 템플릿 프레임워크이고, 실제 프로젝트별 Task Queue와 협업 기록은 `.ai_project/`에 둔다.
 
 ## 2. 기본 원칙
 
 - 모든 Agent는 한국어로 보고한다.
 - 한 번에 하나의 Task 단위로 진행한다.
 - `.ai/` 운영 문서는 사용자 승인 없이 수정하지 않는다.
-- 프로젝트별 상태와 handoff는 `.ai_project/`에 기록한다.
+- 프로젝트별 실행 지시는 `.ai_project/tasks/`에 기록한다.
+- `task_board.md`는 현황 요약판이며 Task 파일을 대체하지 않는다.
+- handoff/report/QA 문서는 Task 진행 과정의 보조 기록이다.
 - 커밋, push, 배포, 외부 설정 변경은 사용자 승인 후 진행한다.
 - 민감정보를 로그, 문서, 보고서에 남기지 않는다.
 
@@ -34,20 +36,23 @@
 ## 4. 기본 흐름
 
 ```text
-PM -> Development -> QA -> PM
+PM creates Task -> Development reads Task Queue -> QA reads ready Task -> PM closes Task
 ```
 
-1. PM Agent가 Task를 정의하고 workflow를 선택한다.
-2. Product Owner가 진행을 승인한다.
-3. Development Agent가 승인된 범위만 구현한다.
-4. QA Agent가 구현 결과를 검증한다.
-5. PM Agent가 커밋, 재작업, 보류 여부를 판단한다.
+1. PM Agent가 `.ai_project/tasks/`에 Task를 생성하고 workflow를 선택한다.
+2. Product Owner가 진행을 승인하면 Task 상태를 `approved`로 바꾼다.
+3. Development Agent가 세션 시작 시 Task Queue에서 자기 역할 또는 capability와 맞는 `approved` Task를 찾는다.
+4. Development Agent가 승인된 범위만 구현하고 Task 상태를 `ready_for_qa`로 바꾼다.
+5. QA Agent가 `ready_for_qa` Task를 찾아 검증한다.
+6. PM Agent가 `done`, `rework_requested`, `blocked`, 보류 여부를 판단한다.
 
 ## 5. 프로젝트 초기화
 
 PM Agent는 사용자가 명시적으로 요청한 경우에만 `.ai_project/`를 생성한다.
 
 초기 구조는 `.ai/project_workspace.md`를 따른다.
+
+Task Queue 운영 기준은 `.ai/task_queue.md`를 따른다.
 
 ## 6. Workflow 선택
 
@@ -77,3 +82,4 @@ Task가 인증/권한/개인정보/로그를 건드리면 QA Agent의 security_c
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-06-29 | Codex 기준 기본 workflow v1 작성 |
+| 2026-06-29 | Task Queue 기반 실행 흐름 추가 |

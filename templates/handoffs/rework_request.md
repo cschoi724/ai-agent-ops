@@ -2,11 +2,18 @@
 
 작성일: {{DATE}}  
 작성 Agent: QA Agent  
+대상 Task ID: {{TASK_ID}}  
 대상 Task: {{TASK_NAME}}  
 Workflow: {{WORKFLOW}}  
 Active Agents: PM Agent, Development Agent, QA Agent  
 Active Capabilities: {{ACTIVE_CAPABILITIES}}  
-상태: Rework Needed
+상태: rework_requested
+
+## Source Task
+
+```text
+{{TASK_FILE_PATH}}
+```
 
 ## 재작업이 필요한 이유
 

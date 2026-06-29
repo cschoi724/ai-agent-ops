@@ -24,7 +24,7 @@
 대부분의 작업은 아래 기본 흐름을 따른다.
 
 ```text
-PM -> Development -> QA -> PM
+PM creates Task -> Development executes Task -> QA verifies Task -> PM closes Task
 ```
 
 단, Task 유형에 따라 PM/Development/QA의 검토 관점을 추가한다.
@@ -32,7 +32,7 @@ PM -> Development -> QA -> PM
 예시:
 
 ```text
-PM -> Development -> QA(security_check 포함) -> PM
+PM creates Task -> Development executes -> QA(security_check 포함) -> PM closes
 ```
 
 ## 4. Workflow 선택 기준
@@ -48,7 +48,7 @@ PM Agent가 Task 시작 전에 workflow를 선택한다.
 
 ## 5. Task별 기록 필수 항목
 
-`.ai_project/handoffs/` 문서에는 아래 항목을 기록한다.
+`.ai_project/tasks/`의 Task 파일에는 아래 항목을 기록한다.
 
 ```text
 ## Workflow
@@ -59,8 +59,11 @@ PM Agent가 Task 시작 전에 workflow를 선택한다.
 - Additional Review Points:
 ```
 
+handoff 문서는 Task 파일을 보조하며, 실행 기준은 항상 Task 파일이다.
+
 ## 6. 변경 이력
 
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-06-29 | Workflow 문서 구조 v1 작성 |
+| 2026-06-29 | Task Queue 기반 공통 흐름 반영 |

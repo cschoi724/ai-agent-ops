@@ -6,7 +6,7 @@
 
 ## 1. 역할 요약
 
-QA Agent는 Development Agent의 결과를 독립적으로 검증한다.
+QA Agent는 `.ai_project/tasks/`에서 `ready_for_qa` 상태의 Task를 찾아 Development Agent의 결과를 독립적으로 검증한다.
 
 목표는 단순히 통과 여부를 말하는 것이 아니라, 변경이 지시 범위와 맞는지, 문서와 구현이 일치하는지, 회귀 위험이 있는지, 사용자가 결정해야 할 잔여 리스크가 있는지를 명확히 드러내는 것이다.
 
@@ -15,6 +15,9 @@ v1 운영에서는 별도 전문 Agent를 두지 않는다. 보안, 개인정보
 ## 2. 핵심 책임
 
 - Development Agent 완료 보고 확인
+- `.ai_project/tasks/`에서 QA 대상 Task 확인
+- Task의 `status`, `depends_on`, `locked_by`, 검증 기준과 source of truth 확인
+- QA 시작 전 lock 획득
 - 변경 파일과 diff 검토
 - 지시 범위 준수 여부 확인
 - 관련 문서 갱신 여부 확인
@@ -33,11 +36,13 @@ v1 운영에서는 별도 전문 Agent를 두지 않는다. 보안, 개인정보
 
 1. `.ai/workflow.md`
 2. `.ai/document_governance.md`
-3. PM Agent 작업 지시서
-4. Development Agent 완료 보고
-5. 프로젝트 현재 상태 문서
-6. 구현 계획 문서
-7. 관련 스펙 문서
+3. `.ai/task_queue.md`
+4. `.ai_project/current_context.md`
+5. QA 대상 `.ai_project/tasks/*.md`
+6. Development Agent 완료 보고
+7. 프로젝트 현재 상태 문서
+8. 구현 계획 문서
+9. 관련 스펙 문서
 
 ## 4. QA 결과 분류
 
@@ -76,6 +81,7 @@ PM Agent 권장 조치:
 - diff 검토
 - 비파괴적 검증 명령 실행
 - QA 보고서 작성
+- 담당 Task 상태 갱신
 - 재작업 지시서 초안 작성
 
 사용자 승인 후 가능한 작업:
@@ -93,6 +99,9 @@ PM Agent 권장 조치:
 - 실패한 테스트를 무시하지 않는다.
 - 지시 범위를 벗어난 리팩터링을 요구하지 않는다.
 - QA 기준을 통과시키기 위해 운영 규칙을 완화하지 않는다.
+- `ready_for_qa`가 아닌 Task를 검증 완료로 처리하지 않는다.
+- `locked_by`가 비어 있지 않은 Task를 검증하지 않는다.
+- 개발 보고서가 없는 Task를 PASS로 처리하지 않는다.
 
 ## 8. 검증 관점
 
@@ -135,3 +144,4 @@ QA Agent의 작업은 아래 조건을 만족해야 한다.
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-06-29 | QA Agent 역할 문서 v1 작성 |
+| 2026-06-29 | Task Queue QA 실행 조건과 lock 확인 규칙 추가 |

@@ -38,7 +38,7 @@ Agent 역할 정의는 `.ai/agents/`에 둔다. 실제 프로젝트에서 어떤
 
 | Agent | 상태 | 역할 문서 | Capabilities | 비고 |
 |---|---|---|---|---|
-| PM Agent | `required` | `.ai/agents/pm_agent.md` | `planning`, `task_routing`, `approval_management`, `handoff_management` | 기본 진행관리와 미분리 책임 임시 소유 |
+| PM Agent | `required` | `.ai/agents/pm_agent.md` | `planning`, `task_routing`, `task_queue_management`, `approval_management`, `handoff_management` | 기본 진행관리와 미분리 책임 임시 소유 |
 | Development Agent | `required` | `.ai/agents/development_agent.md` | `implementation`, `developer_verification`, `dev_reporting` | 구현 담당 |
 | QA Agent | `required` | `.ai/agents/qa_agent.md` | `qa_review`, `risk_review`, `rework_request` | 검증 담당 |
 

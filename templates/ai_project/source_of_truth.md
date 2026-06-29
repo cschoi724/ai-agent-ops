@@ -26,9 +26,11 @@
 | 영역 | 최종 기준 | 보조 기준 | 충돌 시 처리 |
 |---|---|---|---|
 | Agent 운영 원칙 | `.ai/` | `.ai_project/` | 운영 원칙은 `.ai/` 우선 |
-| Agent 구성/작업 상태 | `.ai_project/agent_registry.md`, `.ai_project/task_board.md` | handoff/report/QA 문서 | PM Agent가 정리 후 사용자 확인 |
+| Agent 구성 | `.ai_project/agent_registry.md` | `.ai/agent_registry.md` | 프로젝트 활성 구성은 `.ai_project/` 우선 |
+| Agent 실행 Task | `.ai_project/tasks/` | `.ai_project/task_board.md`, handoff/report/QA 문서 | Task 파일 우선 |
+| Agent 작업 상태 요약 | `.ai_project/task_board.md` | `.ai_project/tasks/` | 충돌 시 Task 파일 기준으로 보드 갱신 |
 | 제품/기술 결정 | `DECISIONS.md` | 회의록, 이슈, PR | 최신 승인 결정 우선 |
-| 구현 계획 | `IMPLEMENTATION_PLAN.md` | Task Board | 계획 변경은 PM Agent가 문서화 |
+| 구현 계획 | `IMPLEMENTATION_PLAN.md` | `.ai_project/tasks/`, `.ai_project/task_board.md` | 계획 변경은 PM Agent가 문서화 |
 | 현재 상태 | `CURRENT_STATUS.md` | CHANGELOG, QA 결과 | 코드/검증 결과 확인 후 갱신 |
 | 아키텍처 | `ARCHITECTURE.md` | 코드, ADR, 설계 노트 | 실제 코드와 결정 문서 모두 확인 |
 | 변경 이력 | `CHANGELOG.md` | Git commit, PR | 누락 시 CHANGELOG 갱신 |
@@ -67,7 +69,7 @@
 2. 실제 코드 동작과 문서가 다르면 코드와 검증 결과를 먼저 확인한다.
 3. 문서가 오래되었으면 PM Agent가 갱신 필요성을 보고한다.
 4. Agent 운영 문서와 프로젝트 기술 문서가 충돌하면 영역을 분리해 해석한다.
-5. 충돌 해결 후 관련 문서와 `.ai_project/task_board.md`를 갱신한다.
+5. 충돌 해결 후 관련 Task 파일과 `.ai_project/task_board.md`를 갱신한다.
 
 ## 7. 변경 이력
 

@@ -2,11 +2,18 @@
 
 작성일: {{DATE}}  
 작성 Agent: Development Agent  
+대상 Task ID: {{TASK_ID}}  
 대상 Task: {{TASK_NAME}}  
 Workflow: {{WORKFLOW}}  
 Active Agents: PM Agent, Development Agent, QA Agent  
 Active Capabilities: {{ACTIVE_CAPABILITIES}}  
-상태: Dev Done
+상태: ready_for_qa
+
+## Source Task
+
+```text
+{{TASK_FILE_PATH}}
+```
 
 ## 변경 파일
 

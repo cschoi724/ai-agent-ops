@@ -10,7 +10,7 @@
 ## 2. 기본 흐름
 
 ```text
-PM -> QA -> PM
+PM creates docs Task -> PM updates docs -> QA reviews -> PM closes
 ```
 
 현재 v1에서는 별도 문서 전담 Agent를 두지 않는다. PM Agent가 문서 초안 작성을 담당하고 QA Agent가 일관성을 검토한다. 단, `.ai/` 운영 문서는 `.ai/document_governance.md` 기준으로 사용자 승인 후만 수정한다.
@@ -46,3 +46,4 @@ v1에서는 별도 Agent hook을 추가하지 않는다. 아래 조건은 PM 또
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-06-29 | Docs Workflow v1 작성 |
+| 2026-06-29 | Task Queue 기반 기본 흐름 반영 |

@@ -10,7 +10,7 @@
 ## 2. 기본 흐름
 
 ```text
-PM -> QA -> PM -> Product Owner Approval
+PM creates release Task -> QA checks -> PM prepares release -> Product Owner Approval
 ```
 
 현재 v1에서는 별도 릴리즈 전담 Agent를 두지 않는다. PM Agent와 QA Agent가 릴리즈 준비 항목을 나누어 확인한다.
@@ -47,3 +47,4 @@ v1에서는 별도 Agent hook을 추가하지 않는다. 아래 조건은 PM 또
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-06-29 | Release Workflow v1 작성 |
+| 2026-06-29 | Task Queue 기반 기본 흐름 반영 |

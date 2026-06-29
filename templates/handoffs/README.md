@@ -6,9 +6,11 @@
 
 ## 1. 목적
 
-이 문서는 Agent 간 인수인계 문서의 템플릿을 정의한다.
+이 문서는 Agent 간 인수인계 보조 문서의 템플릿을 정의한다.
 
 실제 프로젝트별 인수인계 문서는 `.ai_project/handoffs/`에 생성한다. `.ai/templates/handoffs/`에는 진행 기록을 누적하지 않는다.
+
+Task 실행 지시의 source of truth는 `.ai_project/tasks/`의 Task 파일이다. Handoff 문서는 긴 설명, 세부 배경, 보조 보고가 필요할 때만 사용한다.
 
 ## 2. 파일명 규칙
 
@@ -32,7 +34,7 @@ YYYY-MM-DD_[task-name]_[handoff-type].md
 ```text
 작성일:
 작성 Agent:
-대상 Task:
+대상 Task ID:
 Workflow:
 Active Agents:
 Active Capabilities:
@@ -133,3 +135,4 @@ Active Capabilities:
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-06-29 | Handoff 템플릿 v1 작성 |
+| 2026-06-29 | Task Queue 기준 보조 문서 역할 명시 |

@@ -10,10 +10,10 @@
 ## 2. 기본 흐름
 
 ```text
-PM -> Development -> QA -> PM
+PM creates bugfix Task -> Development fixes -> QA verifies regression -> PM closes
 ```
 
-긴급하고 범위가 작으면 PM Agent가 원인 확인과 수정 범위를 짧게 정리한 뒤 Development Agent로 넘긴다.
+긴급하고 범위가 작아도 PM Agent는 Task 파일에 원인 확인 범위와 수정 범위를 짧게 남긴 뒤 Development Agent가 Queue에서 확인하게 한다.
 
 ## 3. 단계별 책임
 
@@ -46,3 +46,4 @@ v1에서는 별도 Agent hook을 추가하지 않는다. 아래 조건은 PM 또
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-06-29 | Bugfix Workflow v1 작성 |
+| 2026-06-29 | Task Queue 기반 기본 흐름 반영 |

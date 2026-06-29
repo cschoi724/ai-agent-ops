@@ -2,11 +2,18 @@
 
 작성일: {{DATE}}  
 작성 Agent: QA Agent  
+대상 Task ID: {{TASK_ID}}  
 대상 Task: {{TASK_NAME}}  
 Workflow: {{WORKFLOW}}  
 Active Agents: PM Agent, Development Agent, QA Agent  
 Active Capabilities: {{ACTIVE_CAPABILITIES}}  
 QA 결과: PASS / PASS_WITH_RISK / FAIL / BLOCKED
+
+## Source Task
+
+```text
+{{TASK_FILE_PATH}}
+```
 
 ## 확인 범위
 

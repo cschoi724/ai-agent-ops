@@ -25,9 +25,10 @@
 |---|---|---|
 | `planning` | 현재 상태 파악, 다음 작업 후보 정리 | PM Agent |
 | `task_routing` | Task 유형 분류와 workflow 선택 | PM Agent |
+| `task_queue_management` | `.ai_project/tasks/` Task 생성, 상태 관리, 요약 갱신 | PM Agent |
 | `approval_management` | 사용자 승인 게이트 관리 | PM Agent |
-| `handoff_management` | Agent 간 인수인계 문서 관리 | PM Agent |
-| `documentation` | 작업 지시서, 운영 문서, 변경 요약 작성 | PM Agent |
+| `handoff_management` | Agent 간 보조 인수인계 문서 관리 | PM Agent |
+| `documentation` | Task 문서, 운영 문서, 변경 요약 작성 | PM Agent |
 | `release_planning` | 버전, 릴리즈 범위, 배포 승인 항목 정리 | PM Agent |
 | `technical_review` | 기술 선택지, 구조 영향, 외부 SDK/API 조사 항목 정리 | PM Agent |
 | `implementation` | 승인된 범위의 코드/문서 구현 | Development Agent |
@@ -74,3 +75,4 @@ Task가 인증/권한/개인정보/로그를 건드리면 QA Agent의 security_c
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-06-29 | Capability 정의 v1 작성 |
+| 2026-06-29 | Task Queue 관리 capability 추가 |

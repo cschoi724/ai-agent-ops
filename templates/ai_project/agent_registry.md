@@ -25,6 +25,7 @@
 |---|---|---|
 | `planning` | PM Agent | 기본 |
 | `task_routing` | PM Agent | 기본 |
+| `task_queue_management` | PM Agent | 기본 |
 | `approval_management` | PM Agent | 기본 |
 | `handoff_management` | PM Agent | 기본 |
 | `documentation` | PM Agent | 후속 분리 가능 |
