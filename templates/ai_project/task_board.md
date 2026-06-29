@@ -24,6 +24,7 @@
 | in_progress | 0 | |
 | ready_for_qa | 0 | |
 | qa_in_progress | 0 | |
+| qa_passed | 0 | |
 | rework_requested | 0 | |
 | blocked | 0 | |
 | done | 0 | |

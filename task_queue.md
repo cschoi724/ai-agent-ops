@@ -31,6 +31,7 @@
 | `in_progress` | 담당 Agent가 작업 중 | Development Agent 또는 QA Agent |
 | `ready_for_qa` | 개발 완료 후 QA 대기 | Development Agent |
 | `qa_in_progress` | QA Agent 검증 중 | QA Agent |
+| `qa_passed` | QA 통과 후 PM Agent 완료 확정 대기 | PM Agent |
 | `rework_requested` | QA 결과 재작업 필요 | QA Agent / PM Agent |
 | `blocked` | 외부 요인으로 차단 | 담당 Agent |
 | `done` | PM Agent가 완료 확정 | PM Agent |
@@ -46,8 +47,10 @@ Agent는 아래 상태 전이만 수행한다. 이 표에 없는 전이는 PM Ag
 | `approved` | `in_progress` | Development Agent | 실행 가능 조건 충족, lock 획득 |
 | `in_progress` | `ready_for_qa` | Development Agent | 개발 보고 작성 완료 |
 | `ready_for_qa` | `qa_in_progress` | QA Agent | QA 가능 조건 충족, lock 획득 |
-| `qa_in_progress` | `done` | PM Agent | QA 통과 후 PM 확정 |
+| `qa_in_progress` | `qa_passed` | QA Agent | `PASS` 또는 `PASS_WITH_RISK` QA 보고 작성 완료, lock 해제 |
+| `qa_passed` | `done` | PM Agent | QA 통과 결과 검토 후 PM 확정 |
 | `qa_in_progress` | `rework_requested` | QA Agent / PM Agent | 수정 필요 |
+| `qa_passed` | `rework_requested` | PM Agent | PM 검토 중 수정 필요 확인 |
 | `rework_requested` | `approved` | PM Agent | 재작업 범위 확정 및 사용자 승인 |
 | `blocked` | `approved` | PM Agent | 차단 해소 및 사용자 승인 |
 | `approved` | `blocked` | 담당 Agent | 외부 차단 발견 |
@@ -150,11 +153,13 @@ Task 파일은 아래 형식을 권장한다.
 
 Task 파일 상단에는 YAML front matter를 둔다.
 
+생성 직후 `proposed` Task 예시:
+
 ```yaml
 ---
 id: T-YYYYMMDD-001
 title: Task title
-status: approved
+status: proposed
 type: feature | bugfix | docs | release | ops
 priority: P1
 target_agent: Development Agent
@@ -166,7 +171,7 @@ allowed_paths:
 source_of_truth:
   - ios/ippeo/Docs/CURRENT_STATUS.md
 created_by: PM Agent
-approved_by: Product Owner
+approved_by:
 locked_by:
 locked_at:
 lock_session:
@@ -178,11 +183,13 @@ qa_to: .ai_project/qa/T-YYYYMMDD-001_qa-report.md
 ---
 ```
 
+PM Agent가 사용자 또는 Product Owner 승인을 확인하면 `status: approved`와 `approved_by: Product Owner`를 함께 갱신한다. Development Agent는 `approved_by`가 비어 있는 Task를 실행하지 않는다.
+
 ## 10. Agent별 Queue 확인 규칙
 
 PM Agent:
 
-1. `proposed`, `blocked`, `rework_requested`, `ready_for_qa`, `done` 후보 Task를 확인한다.
+1. `proposed`, `blocked`, `rework_requested`, `ready_for_qa`, `qa_passed` Task를 확인한다.
 2. 사용자 승인이 필요한 Task는 `approved`로 바꾸기 전에 확인을 받는다.
 3. `task_board.md`를 Task 상태 요약으로 갱신한다.
 
@@ -198,8 +205,10 @@ QA Agent:
 1. 실행 가능 조건을 만족하는 `ready_for_qa` Task를 찾는다.
 2. 우선순위와 의존성 기준으로 하나만 선택한다.
 3. 검증 시작 전 lock을 획득하고 Task 상태를 `qa_in_progress`로 바꾼다.
-4. 검증 결과에 따라 Task 상태를 `done` 후보, `rework_requested`, `blocked` 중 하나로 갱신하고 QA 보고서를 `qa/`에 작성한다.
-5. 완료 또는 차단 처리 시 lock을 비운다.
+4. 검증 결과에 따라 QA 보고서를 `qa/`에 작성한다.
+5. 결과가 `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`로 바꾸고 PM Agent의 완료 확정을 기다린다.
+6. 결과가 `FAIL`이면 `rework_requested`, `BLOCKED`면 `blocked`로 갱신한다.
+7. 완료 또는 차단 처리 시 lock을 비운다.
 
 ## 11. 충돌 처리
 
@@ -215,3 +224,5 @@ QA Agent:
 |---|---|
 | 2026-06-29 | Task Queue 정책 v1 작성 |
 | 2026-06-29 | 상태 전이, 실행 가능 조건, lock, priority, dependency 규칙 추가 |
+| 2026-06-29 | QA 통과 후 PM 확정 대기 상태 `qa_passed` 추가 |
+| 2026-06-29 | 생성 직후 Task의 `approved_by` 기본값 기준 명확화 |

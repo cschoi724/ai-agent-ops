@@ -38,9 +38,9 @@ Agent 역할 정의는 `.ai/agents/`에 둔다. 실제 프로젝트에서 어떤
 
 | Agent | 상태 | 역할 문서 | Capabilities | 비고 |
 |---|---|---|---|---|
-| PM Agent | `required` | `.ai/agents/pm_agent.md` | `planning`, `task_routing`, `task_queue_management`, `approval_management` | 기본 진행관리와 미분리 책임 임시 소유 |
+| PM Agent | `required` | `.ai/agents/pm_agent.md` | `planning`, `task_routing`, `task_queue_management`, `approval_management`, `documentation`, `release_planning`, `technical_review` | 기본 진행관리와 미분리 PM capability 임시 소유 |
 | Development Agent | `required` | `.ai/agents/development_agent.md` | `implementation`, `developer_verification`, `dev_reporting` | 구현 담당 |
-| QA Agent | `required` | `.ai/agents/qa_agent.md` | `qa_review`, `risk_review`, `rework_request` | 검증 담당 |
+| QA Agent | `required` | `.ai/agents/qa_agent.md` | `qa_review`, `risk_review`, `security_check`, `release_check`, `rework_request` | 검증, 보안/릴리즈 확인 관점 포함 |
 
 ## 5. 후속 확장 원칙
 
@@ -101,3 +101,4 @@ Agent 역할 정의는 `.ai/agents/`에 둔다. 실제 프로젝트에서 어떤
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-06-29 | Agent Registry v1 작성 |
+| 2026-06-29 | 초기 Agent capability 목록을 Capabilities 문서와 정합화 |

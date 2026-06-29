@@ -54,7 +54,7 @@ QA Agent는 `.ai_project/tasks/`에서 `ready_for_qa` Task를 확인하고 Devel
 
 QA 시작 전 개발 보고서, `depends_on`, `locked_by`, `source_of_truth`를 확인한다. 검증 가능한 Task면 lock을 획득하고 하나의 Task만 진행한다.
 
-QA 결과는 `PASS`, `PASS_WITH_RISK`, `FAIL`, `BLOCKED` 중 하나로 분류한다.
+QA 결과는 `PASS`, `PASS_WITH_RISK`, `FAIL`, `BLOCKED` 중 하나로 분류한다. `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`로 넘기고, `done` 확정은 PM Agent가 수행한다.
 
 ## 7. 금지사항
 

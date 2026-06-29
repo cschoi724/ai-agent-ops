@@ -18,7 +18,7 @@ AI Agent 운영 문서는 두 레이어로 분리한다.
 | 경로 | 성격 | 저장소 포함 | 수정 정책 |
 |---|---|---|---|
 | `.ai/` | AI Agent 운영 가이드북, 역할, workflow, capability, 템플릿 | 현재 프로젝트 저장소에서는 제외 | 사용자 승인 없이 수정 금지 |
-| `.ai_project/` | 프로젝트별 Task Queue, 작업 보드, 보고서, QA 기록, Agent 운영 결정, source of truth 매핑 | 현재 프로젝트 저장소에 포함 | 프로젝트 운영 중 갱신 가능 |
+| `.ai_project/` | 프로젝트별 Task Queue, 작업 보드, 보고서, QA 기록, Agent 운영 결정, source of truth 매핑 | 기본적으로 현재 프로젝트 저장소에 포함, 초기 예외 가능 | 프로젝트 운영 중 갱신 가능 |
 
 ## 3. `.ai/` 운영 기준
 
@@ -52,7 +52,9 @@ git clone https://github.com/cschoi724/ai-agent-ops.git .ai
 
 `.ai_project/`는 특정 프로젝트에 종속되는 협업 데이터다.
 
-새 프로젝트에서 `.ai_project/`는 프로젝트 저장소에 포함한다.
+새 프로젝트에서 `.ai_project/`는 기본적으로 프로젝트 저장소에 포함한다.
+
+단, 초기 마이그레이션, 운영 실험, 루트 저장소 미구성처럼 프로젝트 저장소 포함 시점이 확정되지 않은 경우에는 사용자 결정으로 `.ai_project/`를 로컬 전용으로 둘 수 있다. 이 예외는 적용 대상 프로젝트의 migration 문서 또는 `.ai_project/ops_decisions.md`에 기록한다.
 
 역할:
 
@@ -160,3 +162,4 @@ Agent는 아래 순서로 문서를 해석한다.
 |---|---|
 | 2026-06-29 | `.ai/`와 `.ai_project/` 분리 운영 기준 v1 작성 |
 | 2026-06-29 | Task Queue 기반 `.ai_project/` 구조 추가 |
+| 2026-06-29 | `.ai_project/` 저장소 포함 기본값과 초기 예외 기준 정리 |

@@ -13,7 +13,7 @@ allowed_paths:
 source_of_truth:
   - {{SOURCE_OF_TRUTH}}
 created_by: PM Agent
-approved_by: {{APPROVER}}
+approved_by:
 locked_by:
 locked_at:
 lock_session:

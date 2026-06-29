@@ -44,7 +44,8 @@ PM creates Task -> Development reads Task Queue -> QA reads ready Task -> PM clo
 3. Development Agent가 세션 시작 시 Task Queue에서 자기 역할 또는 capability와 맞는 `approved` Task를 찾는다.
 4. Development Agent가 승인된 범위만 구현하고 Task 상태를 `ready_for_qa`로 바꾼다.
 5. QA Agent가 `ready_for_qa` Task를 찾아 검증한다.
-6. PM Agent가 `done`, `rework_requested`, `blocked`, 보류 여부를 판단한다.
+6. QA Agent가 통과 결과를 `qa_passed`로 넘기거나 `rework_requested`, `blocked`로 분류한다.
+7. PM Agent가 `done`, 재작업, 차단, 보류 여부를 최종 판단한다.
 
 ## 5. 프로젝트 초기화
 
@@ -83,3 +84,4 @@ Task가 인증/권한/개인정보/로그를 건드리면 QA Agent의 security_c
 |---|---|
 | 2026-06-29 | Codex 기준 기본 workflow v1 작성 |
 | 2026-06-29 | Task Queue 기반 실행 흐름 추가 |
+| 2026-06-29 | QA 통과 후 PM 완료 확정 단계를 명확화 |
