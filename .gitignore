@@ -1,0 +1,22 @@
+.DS_Store
+Thumbs.db
+
+# Editor and OS noise
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local temporary files
+*.tmp
+*.temp
+*.bak
+*.log
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Project-specific AI workspace belongs to the target project, not ai-agent-ops
+.ai_project/
