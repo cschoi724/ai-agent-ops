@@ -16,7 +16,7 @@
 - Agent별 역할과 권한 조정
 - Capability 소유권 변경
 - workflow override 적용
-- handoff/report/QA 운영 방식 변경
+- Task Queue/report/QA 운영 방식 변경
 - `ai-agent-ops` 템플릿 적용 또는 migration 결정
 
 ## 3. 기록 형식

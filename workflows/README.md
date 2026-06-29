@@ -59,7 +59,7 @@ PM Agent가 Task 시작 전에 workflow를 선택한다.
 - Additional Review Points:
 ```
 
-handoff 문서는 Task 파일을 보조하며, 실행 기준은 항상 Task 파일이다.
+report와 QA 문서는 Task 파일을 보조하며, 실행 기준은 항상 Task 파일이다.
 
 ## 6. 변경 이력
 

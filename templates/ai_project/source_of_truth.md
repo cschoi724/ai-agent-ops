@@ -27,7 +27,7 @@
 |---|---|---|---|
 | Agent 운영 원칙 | `.ai/` | `.ai_project/` | 운영 원칙은 `.ai/` 우선 |
 | Agent 구성 | `.ai_project/agent_registry.md` | `.ai/agent_registry.md` | 프로젝트 활성 구성은 `.ai_project/` 우선 |
-| Agent 실행 Task | `.ai_project/tasks/` | `.ai_project/task_board.md`, handoff/report/QA 문서 | Task 파일 우선 |
+| Agent 실행 Task | `.ai_project/tasks/` | `.ai_project/task_board.md`, report/QA 문서 | Task 파일 우선 |
 | Agent 작업 상태 요약 | `.ai_project/task_board.md` | `.ai_project/tasks/` | 충돌 시 Task 파일 기준으로 보드 갱신 |
 | 제품/기술 결정 | `DECISIONS.md` | 회의록, 이슈, PR | 최신 승인 결정 우선 |
 | 구현 계획 | `IMPLEMENTATION_PLAN.md` | `.ai_project/tasks/`, `.ai_project/task_board.md` | 계획 변경은 PM Agent가 문서화 |

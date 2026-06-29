@@ -32,7 +32,7 @@
 5. `.ai_project/task_board.md`
 6. `.ai_project/source_of_truth.md`
 7. `.ai_project/ops_decisions.md`
-8. 필요한 handoff/report/qa 문서
+8. 필요한 report/qa 문서
 
 ## 4. PM Agent
 

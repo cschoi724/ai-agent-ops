@@ -21,7 +21,7 @@ Agent 역할 정의는 `.ai/agents/`에 둔다. 실제 프로젝트에서 어떤
 - 분리되지 않은 capability는 PM Agent가 임시 소유하고 필요 시 새 Agent로 위임한다.
 - Agent 삭제보다 `disabled` 상태를 우선한다.
 - Workflow는 Agent 이름보다 capability를 우선 참조한다.
-- Task마다 실제 참여 Agent를 `.ai_project/handoffs/` 문서에 기록한다.
+- Task마다 실제 참여 Agent와 capability를 `.ai_project/tasks/` Task 파일에 기록한다.
 - `.ai/` 운영 문서는 `.ai/document_governance.md` 기준으로 보호한다.
 
 ## 3. 상태값
@@ -38,7 +38,7 @@ Agent 역할 정의는 `.ai/agents/`에 둔다. 실제 프로젝트에서 어떤
 
 | Agent | 상태 | 역할 문서 | Capabilities | 비고 |
 |---|---|---|---|---|
-| PM Agent | `required` | `.ai/agents/pm_agent.md` | `planning`, `task_routing`, `task_queue_management`, `approval_management`, `handoff_management` | 기본 진행관리와 미분리 책임 임시 소유 |
+| PM Agent | `required` | `.ai/agents/pm_agent.md` | `planning`, `task_routing`, `task_queue_management`, `approval_management` | 기본 진행관리와 미분리 책임 임시 소유 |
 | Development Agent | `required` | `.ai/agents/development_agent.md` | `implementation`, `developer_verification`, `dev_reporting` | 구현 담당 |
 | QA Agent | `required` | `.ai/agents/qa_agent.md` | `qa_review`, `risk_review`, `rework_request` | 검증 담당 |
 
@@ -66,19 +66,19 @@ Agent 역할 정의는 `.ai/agents/`에 둔다. 실제 프로젝트에서 어떤
 4. `.ai/agents/{name}_agent.md` 역할 문서를 추가한다.
 5. `.ai/agent_registry.md`와 `.ai/capabilities.md`에 확장 항목과 capability 소유권 변경을 추가한다.
 6. 필요한 workflow에 hook 또는 추가 검토 단계를 추가한다.
-7. 첫 적용 Task의 `.ai_project/handoffs/` 문서에 활성 Agent로 기록한다.
+7. 첫 적용 Task의 `.ai_project/tasks/` Task 파일에 활성 Agent로 기록한다.
 
 ## 7. Agent 비활성화 절차
 
 1. `.ai_project/agent_registry.md`에서 상태를 `disabled`로 변경한다.
 2. workflow에서 해당 Agent 이름이 직접 언급된 부분이 있으면 capability 기준으로 바꾼다.
-3. 과거 handoff 문서는 수정하지 않는다.
+3. 과거 Task/report/QA 문서는 수정하지 않는다.
 4. 역할 문서는 삭제하지 않고 보관한다.
 5. PM/Development/QA 비활성화는 일반적으로 권장하지 않지만, 프로젝트 특수 상황에서는 사용자 승인 후 `.ai_project/agent_registry.md`에 명시한다.
 
 ## 8. Task별 참여 Agent 기록 형식
 
-`.ai_project/handoffs/` 문서에는 아래 항목을 포함한다.
+`.ai_project/tasks/` Task 파일에는 아래 항목을 포함한다.
 
 ```text
 ## Active Agents For This Task

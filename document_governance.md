@@ -10,7 +10,7 @@
 
 이 문서는 운영 문서의 변경 권한, 변경 절차, 예외 조건을 정의한다.
 
-프로젝트별 Task Queue, 작업 보드, handoff, 보고서, Agent 운영 결정 기록은 `.ai/`가 아니라 `.ai_project/`에 둔다. 제품/기술 결정은 적용 대상 프로젝트 문서 영역에 둔다. `.ai_project/`는 프로젝트 종속 문서 영역이며, 수정 규칙은 `.ai/project_workspace.md`와 `.ai/task_queue.md`를 따른다.
+프로젝트별 Task Queue, 작업 보드, 보고서, QA 기록, Agent 운영 결정 기록은 `.ai/`가 아니라 `.ai_project/`에 둔다. 제품/기술 결정은 적용 대상 프로젝트 문서 영역에 둔다. `.ai_project/`는 프로젝트 종속 문서 영역이며, 수정 규칙은 `.ai/project_workspace.md`와 `.ai/task_queue.md`를 따른다.
 
 ## 2. 보호 대상
 

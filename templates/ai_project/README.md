@@ -21,7 +21,6 @@
 | `.ai_project/source_of_truth.md` | 프로젝트 기준 문서와 충돌 처리 기준 |
 | `.ai_project/ops_decisions.md` | Agent 운영 결정 기록 |
 | `.ai_project/workflow_overrides.md` | 프로젝트별 workflow 예외 |
-| `.ai_project/handoffs/` | Agent 간 인수인계 |
 | `.ai_project/reports/` | 개발 완료 보고 |
 | `.ai_project/qa/` | QA 보고 |
 | `.ai_project/release/` | 릴리즈 준비 기록 |

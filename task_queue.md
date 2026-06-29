@@ -8,7 +8,7 @@
 
 이 문서는 Agent들이 복사/붙여넣기 지시에 의존하지 않고, 공유 작업 큐를 통해 자기 작업을 찾고 실행하는 기준을 정의한다.
 
-`.ai_project/tasks/`의 Task 파일은 Agent 실행 지시의 source of truth다. `.ai_project/task_board.md`는 현황 요약판이며, `handoffs/`, `reports/`, `qa/`는 Task 진행 과정의 보조 기록이다.
+`.ai_project/tasks/`의 Task 파일은 Agent 실행 지시의 source of truth다. `.ai_project/task_board.md`는 현황 요약판이며, `reports/`, `qa/`는 Task 진행 과정의 보조 기록이다.
 
 ## 2. 기본 원칙
 
@@ -204,7 +204,7 @@ QA Agent:
 ## 11. 충돌 처리
 
 - Task 파일과 `task_board.md`가 다르면 Task 파일을 우선한다.
-- Task 파일과 handoff 문서가 다르면 Task 파일을 우선한다.
+- Task 파일과 report/QA 문서가 다르면 Task 파일을 우선한다.
 - Task 파일과 프로젝트 기술 문서가 다르면 `.ai_project/source_of_truth.md`에 지정된 프로젝트 문서를 확인한다.
 - Task 상태 변경이 애매하면 PM Agent가 사용자에게 확인한다.
 - lock 상태가 애매하면 PM Agent가 사용자 확인 후 해제 또는 유지한다.

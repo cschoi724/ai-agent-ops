@@ -67,7 +67,7 @@ PM Agent가 작성하는 주요 산출물:
 
 - Task 제안
 - `.ai_project/tasks/` Task 파일
-- Development Agent 지시서 또는 handoff 보조 문서
+- `.ai_project/tasks/` Task 파일과 필요 시 보조 운영 문서
 - QA Agent 지시서
 - 사용자 결정 요청
 - 커밋 전 점검 보고
