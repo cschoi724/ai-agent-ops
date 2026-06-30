@@ -28,13 +28,17 @@ Agent는 아래 순서로 문서를 확인한다.
 
 ## 3. 기본 운영
 
-초기 활성 Agent는 아래 3개다.
+기본 실행 Agent는 아래 3개다.
 
 - PM Agent
 - Development Agent
 - QA Agent
 
-이 구성은 고정 상한이 아니라 시작점이다. 운영 중 반복 부담이나 독립 검토 필요성이 생기면 PM Agent가 새 Agent 추가와 capability 위임을 제안한다.
+AI Ops Agent는 제품 Task 실행 라인 밖에서 운영 프로세스를 점검하는 독립 Agent로 선택 활성화할 수 있다.
+
+- AI Ops Agent
+
+이 구성은 고정 상한이 아니라 시작점이다. 운영 중 반복 부담이나 독립 검토 필요성이 생기면 PM Agent가 새 실행 Agent 추가와 capability 위임을 제안한다. 운영 프로세스 충돌이나 역할 경계 문제는 AI Ops Agent가 별도로 점검한다.
 
 ## 4. 저장소 원칙
 
@@ -90,3 +94,4 @@ Codex 프로젝트에 적용할 선택 템플릿은 아래 위치에 있다.
 | 2026-06-29 | Task Queue 정책과 템플릿 참조 추가 |
 | 2026-06-29 | `.ai_project/` Git 포함 정책의 기본/예외 기준 명확화 |
 | 2026-06-29 | AI Agent Ops 튜토리얼 문서 참조 추가 |
+| 2026-06-30 | AI Ops Agent 독립 운영 기준 추가 |

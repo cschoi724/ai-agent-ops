@@ -8,7 +8,9 @@
 
 이 폴더는 Task 유형별 workflow를 정의한다.
 
-초기 활성 Agent는 PM, Development, QA다. Workflow는 이 세 Agent 안에서 역할을 분배하되, 나중에 새 Agent가 필요해지면 `.ai/capabilities.md` 기준으로 capability를 위임하고 흐름을 확장할 수 있게 둔다.
+기본 실행 Agent는 PM, Development, QA다. Workflow는 이 세 Agent 안에서 역할을 분배하되, 나중에 새 실행 Agent가 필요해지면 `.ai/capabilities.md` 기준으로 capability를 위임하고 흐름을 확장할 수 있게 둔다.
+
+AI Ops Agent는 제품 Task 실행 workflow에 참여하지 않는다. 운영 프로세스, 역할 경계, Task Queue 규칙 충돌을 독립 점검하고 `.ai_project/ops_issues.md`에 기록한다.
 
 ## 2. 기본 Workflow
 
@@ -67,3 +69,4 @@ report와 QA 문서는 Task 파일을 보조하며, 실행 기준은 항상 Task
 |---|---|
 | 2026-06-29 | Workflow 문서 구조 v1 작성 |
 | 2026-06-29 | Task Queue 기반 공통 흐름 반영 |
+| 2026-06-30 | AI Ops Agent의 workflow 비참여 원칙 추가 |

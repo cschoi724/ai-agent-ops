@@ -8,7 +8,7 @@
 
 이 문서는 Agent가 제공하는 capability와 초기 소유자를 정의한다.
 
-초기 활성 Agent는 PM, Development, QA다. 새 Agent가 추가되기 전까지 분리되지 않은 capability는 PM Agent가 임시 소유하거나 QA 검증 관점에 포함한다.
+초기 실행 Agent는 PM, Development, QA다. AI Ops Agent는 실행 흐름 밖에서 운영 프로세스를 독립 점검하는 선택 활성 Agent다. 새 실행 Agent가 추가되기 전까지 분리되지 않은 capability는 PM Agent가 임시 소유하거나 QA 검증 관점에 포함한다.
 
 ## 2. 기본 원칙
 
@@ -18,6 +18,7 @@
 - 보안, 문서, 릴리즈, 기술 조사 같은 관점은 새 Agent가 생기기 전까지 PM/QA 검토 항목에 통합한다.
 - 새 Agent가 추가되면 capability 소유권을 PM에서 해당 Agent로 위임할 수 있다.
 - capability 추가/삭제는 `.ai/document_governance.md` 기준으로 사용자 승인 후 진행한다.
+- AI Ops Agent의 capability는 제품 Task 실행 capability가 아니라 운영 프로세스 점검 capability다.
 
 ## 3. Core Capabilities
 
@@ -37,7 +38,10 @@
 | `risk_review` | 회귀 위험과 잔여 리스크 정리 | QA Agent |
 | `security_check` | 인증, 권한, 개인정보, 민감정보 로그 노출 점검 | QA Agent |
 | `release_check` | 배포 전 검증 항목 확인 | QA Agent |
-| `rework_request` | 재작업 지시서 작성 | QA Agent |
+| `rework_request` | rework 요청 작성 | QA Agent |
+| `ops_audit` | Agent 운영 문서와 실제 운영 상태의 충돌 점검 | AI Ops Agent |
+| `process_governance` | Task Queue, 승인, lock, report/QA 흐름의 운영 규칙 점검 | AI Ops Agent |
+| `agent_boundary_review` | Agent 역할/권한/책임 경계와 새 Agent 추가 영향 검토 | AI Ops Agent |
 
 ## 4. 후속 위임 기준
 
@@ -75,3 +79,4 @@ Task가 인증/권한/개인정보/로그를 건드리면 QA Agent의 security_c
 |---|---|
 | 2026-06-29 | Capability 정의 v1 작성 |
 | 2026-06-29 | Task Queue 관리 capability 추가 |
+| 2026-06-30 | AI Ops Agent 운영 점검 capability 추가 |

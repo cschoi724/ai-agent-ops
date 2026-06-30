@@ -15,14 +15,14 @@
 | 항목 | 값 |
 |---|---|
 | 현재 운영 모드 | {{OPS_MODE}} |
-| 활성 Agent | PM Agent, Development Agent, QA Agent |
+| 활성 Agent | PM Agent, Development Agent, QA Agent, AI Ops Agent |
 | 현재 우선 Task | {{CURRENT_TASK_ID}} |
 | 다음 확인 위치 | `.ai_project/tasks/` |
 | Lock timeout | 240분 |
 
 ## 3. 현재 주의사항
 
-- 
+- AI Ops Agent는 제품 Task 실행 라인에 참여하지 않고, 운영 프로세스 문제를 `.ai_project/ops_issues.md`에 기록한다.
 
 ## 4. 세션 시작 체크
 
@@ -38,3 +38,4 @@
 | 날짜 | 변경 내용 |
 |---|---|
 | {{DATE}} | 현재 Agent 컨텍스트 문서 초기화 |
+| {{DATE}} | AI Ops Agent 독립 운영 기준 추가 |

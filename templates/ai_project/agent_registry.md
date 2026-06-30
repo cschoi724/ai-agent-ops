@@ -16,10 +16,11 @@
 | PM Agent | `enabled` | `.ai/agents/pm_agent.md` | 초기 활성 |
 | Development Agent | `enabled` | `.ai/agents/development_agent.md` | 초기 활성 |
 | QA Agent | `enabled` | `.ai/agents/qa_agent.md` | 초기 활성 |
+| AI Ops Agent | `enabled` | `.ai/agents/ai_ops_agent.md` | 독립 운영 프로세스 점검, 제품 Task 실행 라인 제외 |
 
 ## 3. Delegated Capabilities
 
-초기에는 PM/Development/QA 기본 capability 구성을 따른다.
+기본 실행 capability는 PM/Development/QA 구성을 따른다. 운영 프로세스 점검 capability는 AI Ops Agent가 담당한다.
 
 | Capability | 현재 담당 | 비고 |
 |---|---|---|
@@ -38,9 +39,13 @@
 | `security_check` | QA Agent | 후속 분리 가능 |
 | `release_check` | QA Agent | 후속 분리 가능 |
 | `rework_request` | QA Agent | 기본 |
+| `ops_audit` | AI Ops Agent | 운영 문서와 실제 운영 상태 충돌 점검 |
+| `process_governance` | AI Ops Agent | Task Queue/승인/lock/report/QA 흐름 점검 |
+| `agent_boundary_review` | AI Ops Agent | Agent 역할/권한 경계와 확장 영향 검토 |
 
 ## 4. Agent 변경 기록
 
 | 날짜 | 변경 내용 | 승인 |
 |---|---|---|
 | {{DATE}} | PM/Development/QA 초기 활성 구성 | Product Owner |
+| {{DATE}} | AI Ops Agent 독립 운영 점검 Agent로 활성화 | Product Owner |

@@ -20,6 +20,7 @@
 | `.ai_project/task_board.md` | Task Queue 요약 보드 |
 | `.ai_project/source_of_truth.md` | 프로젝트 기준 문서와 충돌 처리 기준 |
 | `.ai_project/ops_decisions.md` | Agent 운영 결정 기록 |
+| `.ai_project/ops_issues.md` | AI Agent 운영 프로세스 이슈와 개선 제안 |
 | `.ai_project/workflow_overrides.md` | 프로젝트별 workflow 예외 |
 | `.ai_project/reports/` | 개발 완료 보고 |
 | `.ai_project/qa/` | QA 보고 |
@@ -40,3 +41,4 @@
 | 날짜 | 변경 내용 |
 |---|---|
 | {{DATE}} | `.ai_project/` 초기화 |
+| {{DATE}} | AI Ops Issues 문서 항목 추가 |

@@ -6,7 +6,7 @@
 
 ## 1. 목적
 
-이 문서는 AI Agent가 PM, Development, QA 역할을 나누어 협업하는 기본 흐름을 정의한다.
+이 문서는 AI Agent가 PM, Development, QA 역할을 나누어 협업하는 기본 실행 흐름을 정의한다. AI Ops Agent는 이 실행 흐름 밖에서 운영 프로세스를 독립 점검한다.
 
 `.ai/`는 운영 가이드북과 템플릿 프레임워크이고, 실제 프로젝트별 Task Queue와 협업 기록은 `.ai_project/`에 둔다.
 
@@ -21,15 +21,23 @@
 - 커밋, push, 배포, 외부 설정 변경은 사용자 승인 후 진행한다.
 - 민감정보를 로그, 문서, 보고서에 남기지 않는다.
 
-## 3. 초기 활성 Agent
+## 3. 기본 Agent 구성
 
-초기 활성 Agent는 아래 3개다. 이 구성은 고정 상한이 아니라 기본 시작점이다.
+기본 실행 Agent는 아래 3개다. 이 구성은 고정 상한이 아니라 기본 시작점이다.
 
 | Agent | 역할 문서 | 핵심 책임 |
 |---|---|---|
-| PM Agent | `.ai/agents/pm_agent.md` | 작업 정의, 승인 게이트, 지시서, 통합 판단 |
+| PM Agent | `.ai/agents/pm_agent.md` | 작업 정의, 승인 게이트, Task Queue 관리, 통합 판단 |
 | Development Agent | `.ai/agents/development_agent.md` | 승인된 범위의 구현과 개발 보고 |
 | QA Agent | `.ai/agents/qa_agent.md` | 검증, 리스크 정리, 재작업 지시 |
+
+독립 운영 Agent:
+
+| Agent | 역할 문서 | 핵심 책임 |
+|---|---|---|
+| AI Ops Agent | `.ai/agents/ai_ops_agent.md` | 운영 프로세스 감사, 역할/권한 충돌 점검, 개선 제안 |
+
+AI Ops Agent는 제품 Task 실행 라인에 참여하지 않고 Task 상태를 변경하지 않는다. 운영 이슈는 프로젝트의 `.ai_project/ops_issues.md`에 기록한다.
 
 보안, 문서, 릴리즈, 구조 검토는 초기에는 별도 Agent로 분리하지 않고 PM/Development/QA 책임 안에 포함한다. 운영 중 반복 부담이 생기면 PM Agent가 새 Agent 분리와 capability 위임을 제안한다.
 
@@ -76,7 +84,7 @@ Workflow는 `.ai/capabilities.md`의 capability를 기준으로 확장한다.
 Task가 인증/권한/개인정보/로그를 건드리면 QA Agent의 security_check 관점을 필수 검증 항목에 추가한다.
 ```
 
-새 Agent는 실제 운영 중 반복 부담이나 독립 검토 필요성이 명확해진 뒤 사용자 승인으로 추가한다. 추가된 Agent는 `.ai/agent_registry.md`, `.ai/capabilities.md`, 관련 workflow에 연결한다.
+새 실행 Agent는 실제 운영 중 반복 부담이나 독립 검토 필요성이 명확해진 뒤 사용자 승인으로 추가한다. 추가된 Agent는 `.ai/agent_registry.md`, `.ai/capabilities.md`, 관련 workflow에 연결한다. AI Ops Agent는 실행 Agent가 아니므로 운영 프로세스 점검 hook으로만 사용한다.
 
 ## 8. 변경 이력
 
@@ -85,3 +93,4 @@ Task가 인증/권한/개인정보/로그를 건드리면 QA Agent의 security_c
 | 2026-06-29 | Codex 기준 기본 workflow v1 작성 |
 | 2026-06-29 | Task Queue 기반 실행 흐름 추가 |
 | 2026-06-29 | QA 통과 후 PM 완료 확정 단계를 명확화 |
+| 2026-06-30 | AI Ops Agent를 실행 흐름 밖의 독립 운영 Agent로 추가 |
