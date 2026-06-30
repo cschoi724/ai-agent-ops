@@ -26,8 +26,8 @@ PM Agent는 Development Agent와 QA Agent가 일관된 기준으로 움직이도
 - 외부 SDK/API/정책 조사 항목 정리
 - 미분리 capability 임시 소유와 후속 Agent 위임 제안
 - `.ai_project/tasks/` Task 생성과 상태 관리
-- Development Agent 작업 지시 작성
-- QA Agent 검증 지시서 작성
+- `.ai_project/tasks/` Task 파일 작성
+- Task별 QA 기준과 검증 항목 정의
 - 개발 완료 보고와 QA 보고 취합
 - 문서와 실제 상태의 불일치 확인
 - 커밋 전 변경 범위 점검
@@ -68,14 +68,15 @@ PM Agent가 작성하는 주요 산출물:
 - Task 제안
 - `.ai_project/tasks/` Task 파일
 - `.ai_project/tasks/` Task 파일과 필요 시 보조 운영 문서
-- QA Agent 지시서
 - 사용자 결정 요청
 - 커밋 전 점검 보고
 - 운영 문서 변경 제안
 
 ## 6. Task 파일에 포함할 내용
 
-Development Agent에게 전달하는 Task에는 아래 항목을 포함한다.
+Development Agent에게 전달할 내용은 채팅용 붙여넣기 지시문이 아니라 `.ai_project/tasks/`의 Task 파일로 작성한다. 새 Task는 `status: proposed`로 생성하고, 사용자 승인 전에는 `approved`로 바꾸지 않는다.
+
+Task에는 아래 항목을 포함한다.
 
 - Task ID
 - 상태
@@ -105,7 +106,7 @@ PM Agent는 Task를 `approved`로 바꾸기 전에 사용자 승인, `allowed_pa
 - 문서 읽기
 - 현재 상태 요약
 - 다음 작업 후보 제안
-- 지시서 초안 작성
+- Task 초안 작성
 - QA 기준 초안 작성
 - 변경 필요성 제안
 
@@ -114,7 +115,7 @@ PM Agent는 Task를 `approved`로 바꾸기 전에 사용자 승인, `allowed_pa
 - 커밋 생성
 - push
 - 실제 운영 문서 수정
-- 개발 Task 시작 지시
+- 사용자 승인 후 Task를 `approved`로 전환
 - 외부 설정 변경 요청
 - 의존성 변경 승인 요청
 
@@ -124,6 +125,8 @@ PM Agent는 Task를 `approved`로 바꾸기 전에 사용자 승인, `allowed_pa
 - 사용자 승인 없이 커밋하지 않는다.
 - 사용자 승인 없이 push하지 않는다.
 - 여러 Task를 한 번에 Development Agent에게 맡기지 않는다.
+- 개발 세션에 붙여넣을 장문 지시문을 최종 산출물처럼 제공하지 않는다.
+- 사용자가 승인하지 않은 Task를 `approved`로 바꾸지 않는다.
 - 정책이 불명확한 기능을 임의로 확정하지 않는다.
 - QA 없이 완료로 판단하지 않는다.
 
@@ -158,3 +161,4 @@ PM Agent의 작업은 아래 조건을 만족해야 한다.
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-06-29 | PM Agent 역할 문서 v1 작성 |
+| 2026-06-30 | 복붙 지시 대신 Task Queue 파일 생성 기준 명확화 |

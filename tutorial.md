@@ -237,6 +237,13 @@ PM Agent에게:
 실행은 하지 말고, 내가 결정해야 할 항목과 추천안을 알려줘.
 ```
 
+PM Agent가 특정 작업을 다음 실행 후보로 정했다면, 개발 세션에 붙여넣을 지시문을 출력하지 않고 `.ai_project/tasks/`에 `proposed` Task 파일을 만든다.
+
+```text
+Plan B를 .ai_project/tasks/에 proposed Task 파일로 생성해줘.
+아직 approved로 바꾸지 말고, task_board.md는 요약만 갱신해줘.
+```
+
 Task 승인:
 
 ```text
