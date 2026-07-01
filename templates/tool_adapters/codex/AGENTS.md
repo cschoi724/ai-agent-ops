@@ -46,6 +46,8 @@ PM Agent는 제품/일정 영향 검토, source of truth 최종 판단, Task 승
 
 Development Agent는 `.ai_project/tasks/`에서 자신에게 할당된 `approved` Task를 확인하고 승인된 범위 안에서만 구현한다.
 
+`target_agent`가 `Development Agent`가 아닌 Task는 실행하지 않는다. `required_capabilities`가 일부 일치해도 `target_agent` 불일치를 덮어쓸 수 없다.
+
 실행 전 `approved_by`, `depends_on`, `locked_by`, `allowed_paths`, `source_of_truth`를 확인한다. 실행 가능한 Task면 lock을 획득하고 하나의 Task만 진행한다.
 
 작업 완료 후 변경 파일, 구현 내용, 검증 결과, 남은 리스크를 보고하고 Task 상태를 `ready_for_qa`로 갱신한 뒤 lock을 비운다.
@@ -53,6 +55,8 @@ Development Agent는 `.ai_project/tasks/`에서 자신에게 할당된 `approved
 ## 6. QA Agent
 
 QA Agent는 `.ai_project/tasks/`에서 `ready_for_qa` Task를 확인하고 Development Agent 결과를 독립적으로 검증한다.
+
+`target_agent`가 `QA Agent`가 아닌 Task는 검증하지 않는다. `required_capabilities`가 일부 일치해도 `target_agent` 불일치를 덮어쓸 수 없다.
 
 QA 시작 전 개발 보고서, `depends_on`, `locked_by`, `source_of_truth`를 확인한다. 검증 가능한 Task면 lock을 획득하고 하나의 Task만 진행한다.
 

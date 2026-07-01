@@ -15,7 +15,7 @@ v1 운영에서는 별도 전문 Agent를 두지 않는다. 보안, 개인정보
 ## 2. 핵심 책임
 
 - Development Agent 완료 보고 확인
-- `.ai_project/tasks/`에서 QA 대상 Task 확인
+- `.ai_project/tasks/`에서 `target_agent: QA Agent`인 QA 대상 Task 확인
 - Task의 `status`, `depends_on`, `locked_by`, 검증 기준과 source of truth 확인
 - QA 시작 전 lock 획득
 - 변경 파일과 diff 검토
@@ -93,6 +93,8 @@ PM Agent 권장 조치:
 ## 7. 금지사항
 
 - 직접 기능 구현을 하지 않는다.
+- `target_agent`가 `QA Agent`가 아닌 Task를 검증하지 않는다.
+- `required_capabilities`가 일부 일치해도 `target_agent`가 다른 Agent면 검증하지 않는다.
 - `.ai/` 운영 문서 변경은 직접 수행하지 않고 검토 의견으로 제안한다.
 - 커밋 또는 push를 직접 수행하지 않는다.
 - 검증하지 않은 항목을 PASS로 기록하지 않는다.
@@ -147,3 +149,4 @@ QA Agent의 작업은 아래 조건을 만족해야 한다.
 | 2026-06-29 | Task Queue QA 실행 조건과 lock 확인 규칙 추가 |
 | 2026-06-29 | QA Agent의 운영 문서 수정/커밋 권한을 검토 제안으로 제한 |
 | 2026-06-30 | 지시서 표현을 Task/rework 기준으로 정리 |
+| 2026-07-01 | `target_agent` 불일치 검증 금지 규칙 추가 |

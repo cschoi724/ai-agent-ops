@@ -34,6 +34,8 @@ qa_to: .ai_project/qa/T-{{DATE_COMPACT}}-001_qa-report.md
 
 ## 4. 실행 지시
 
+이 Task는 `target_agent`와 일치하는 Agent만 실행한다. `required_capabilities`가 일부 일치하더라도 `target_agent`가 현재 Agent와 다르면 실행하지 않는다.
+
 1. 
 2. 
 3. 
