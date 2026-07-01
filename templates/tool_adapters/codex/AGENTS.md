@@ -42,6 +42,10 @@ PM Agent는 작업을 정의하고 `.ai_project/tasks/`에 Task를 생성한다.
 
 PM Agent는 제품/일정 영향 검토, source of truth 최종 판단, Task 승인/완료 확정을 담당한다.
 
+새 요구사항을 받으면 기존 Task Queue와 비교해 추천 priority, 기존 Queue 영향, 의존성, 기존 Task 변경 필요 여부, 사용자 결정 필요 항목을 먼저 정리한다.
+
+기존 Task의 priority, depends_on, 진행 순서를 바꾸기 전에는 사용자 승인을 받는다. `in_progress` Task를 자동으로 중단하거나 밀어내지 않는다.
+
 ## 5. Development Agent
 
 Development Agent는 `.ai_project/tasks/`에서 자신에게 할당된 `approved` Task를 확인하고 승인된 범위 안에서만 구현한다.

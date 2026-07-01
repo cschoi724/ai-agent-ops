@@ -142,7 +142,28 @@ depends_on:
   - T-YYYYMMDD-001
 ```
 
-## 8. Task 파일 위치
+## 8. 새 요구사항 우선순위 조정
+
+새 요구사항이 들어오면 PM Agent는 기존 Task Queue를 먼저 확인하고 priority와 의존성을 제안한다.
+
+확인 대상:
+
+- `proposed` Task
+- `approved` Task
+- `in_progress` Task
+- `blocked` Task
+- 기존 `depends_on`
+
+규칙:
+
+- 새 요구사항은 기본적으로 `proposed` Task 후보로 정리한다.
+- 기존 Task의 `priority`, `depends_on`, 진행 순서를 바꾸기 전에는 사용자 승인을 받는다.
+- `in_progress` Task는 자동으로 중단하거나 밀어내지 않는다.
+- 새 요구사항이 릴리즈 차단, 장애, 정책 리스크, 보안/개인정보 리스크를 만들면 PM Agent가 우선순위 상승을 제안할 수 있다.
+- PM Agent는 우선순위 변경 이유와 기존 Queue 영향을 함께 보고한다.
+- Development Agent와 QA Agent는 PM Agent가 승인한 상태와 priority 기준으로만 실행한다.
+
+## 9. Task 파일 위치
 
 Task 파일은 아래 형식을 권장한다.
 
@@ -156,7 +177,7 @@ Task 파일은 아래 형식을 권장한다.
 .ai_project/tasks/T-20260629-001_ai-agent-ops-migration.md
 ```
 
-## 9. Task 메타데이터
+## 10. Task 메타데이터
 
 Task 파일 상단에는 YAML front matter를 둔다.
 
@@ -169,6 +190,7 @@ title: Task title
 status: proposed
 type: feature | bugfix | docs | release | ops
 priority: P1
+priority_reason: Current priority rationale
 target_agent: Development Agent
 required_capabilities:
   - implementation
@@ -192,7 +214,7 @@ qa_to: .ai_project/qa/T-YYYYMMDD-001_qa-report.md
 
 PM Agent가 사용자 또는 Product Owner 승인을 확인하면 `status: approved`와 `approved_by: Product Owner`를 함께 갱신한다. Development Agent는 `approved_by`가 비어 있는 Task를 실행하지 않는다.
 
-## 10. Agent별 Queue 확인 규칙
+## 11. Agent별 Queue 확인 규칙
 
 PM Agent:
 
@@ -219,7 +241,7 @@ QA Agent:
 7. 결과가 `FAIL`이면 `rework_requested`, `BLOCKED`면 `blocked`로 갱신한다.
 8. 완료 또는 차단 처리 시 lock을 비운다.
 
-## 11. Target Agent Hard Stop
+## 12. Target Agent Hard Stop
 
 `target_agent`는 Task 실행 권한의 최우선 라우팅 필드다.
 
@@ -241,7 +263,7 @@ required_capabilities:
 
 위 Task는 QA Agent만 실행한다. Development Agent가 `release_check`와 관련된 검증을 수행할 수 있더라도 이 Task를 실행하지 않는다.
 
-## 12. 충돌 처리
+## 13. 충돌 처리
 
 - Task 파일과 `task_board.md`가 다르면 Task 파일을 우선한다.
 - Task 파일과 report/QA 문서가 다르면 Task 파일을 우선한다.
@@ -249,7 +271,7 @@ required_capabilities:
 - Task 상태 변경이 애매하면 PM Agent가 사용자에게 확인한다.
 - lock 상태가 애매하면 PM Agent가 사용자 확인 후 해제 또는 유지한다.
 
-## 13. 변경 이력
+## 14. 변경 이력
 
 | 날짜 | 변경 내용 |
 |---|---|
@@ -258,3 +280,4 @@ required_capabilities:
 | 2026-06-29 | QA 통과 후 PM 확정 대기 상태 `qa_passed` 추가 |
 | 2026-06-29 | 생성 직후 Task의 `approved_by` 기본값 기준 명확화 |
 | 2026-07-01 | `target_agent` 불일치 hard stop 규칙 추가 |
+| 2026-07-01 | 새 요구사항 우선순위 조정 규칙 추가 |

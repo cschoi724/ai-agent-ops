@@ -3,7 +3,8 @@ id: T-{{DATE_COMPACT}}-001
 title: {{TASK_TITLE}}
 status: proposed
 type: {{TASK_TYPE}}
-priority: P2
+priority: {{PRIORITY}}
+priority_reason: {{PRIORITY_REASON}}
 target_agent: {{TARGET_AGENT}}
 required_capabilities:
   - {{REQUIRED_CAPABILITY}}
@@ -32,7 +33,15 @@ qa_to: .ai_project/qa/T-{{DATE_COMPACT}}-001_qa-report.md
 
 ## 3. 제외 범위
 
-## 4. 실행 지시
+## 4. 우선순위와 Queue 영향
+
+- 추천 priority: `{{PRIORITY}}`
+- priority 근거:
+- 기존 Queue 영향:
+- 의존성:
+- 기존 Task 변경 필요 여부:
+
+## 5. 실행 지시
 
 이 Task는 `target_agent`와 일치하는 Agent만 실행한다. `required_capabilities`가 일부 일치하더라도 `target_agent`가 현재 Agent와 다르면 실행하지 않는다.
 
@@ -40,33 +49,33 @@ qa_to: .ai_project/qa/T-{{DATE_COMPACT}}-001_qa-report.md
 2. 
 3. 
 
-## 5. 검증 기준
+## 6. 검증 기준
 
 - 
 
-## 6. 완료 후 산출물
+## 7. 완료 후 산출물
 
 - 개발 보고: `{{DEV_REPORT_PATH}}`
 - QA 보고: `{{QA_REPORT_PATH}}`
 - 필요 시 갱신 문서:
 
-## 7. 차단 조건
+## 8. 차단 조건
 
 - 
 
-## 8. 상태 전이 기록
+## 9. 상태 전이 기록
 
 | 날짜 | Agent | 이전 상태 | 다음 상태 | 사유 |
 |---|---|---|---|---|
 | {{DATE}} | PM Agent |  | proposed | Task 생성 |
 
-## 9. Lock 기록
+## 10. Lock 기록
 
 | 날짜 | Agent | 작업 | 사유 |
 |---|---|---|---|
 |  |  |  |  |
 
-## 10. 변경 이력
+## 11. 변경 이력
 
 | 날짜 | Agent | 변경 내용 |
 |---|---|---|
