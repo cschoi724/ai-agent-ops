@@ -55,13 +55,15 @@ PM creates Task -> Development reads Task Queue -> QA reads ready Task -> PM clo
 6. QA Agent가 통과 결과를 `qa_passed`로 넘기거나 `rework_requested`, `blocked`로 분류한다.
 7. PM Agent가 `done`, 재작업, 차단, 보류 여부를 최종 판단한다.
 
-## 5. 프로젝트 초기화
+## 5. 프로젝트 초기화와 운영 마이그레이션
 
-PM Agent는 사용자가 명시적으로 요청한 경우에만 `.ai_project/`를 생성한다.
+AI Ops Agent는 사용자가 명시적으로 요청한 경우에만 `.ai_project/` 초기화 또는 운영 마이그레이션을 주도한다.
 
 초기 구조는 `.ai/project_workspace.md`를 따른다.
 
 Task Queue 운영 기준은 `.ai/task_queue.md`를 따른다.
+
+새 프로젝트 또는 기존 프로젝트에 AI Agent 운영 체계를 도입할 때는 `.ai/workflows/ops_migration.md`를 따른다. PM Agent는 제품/일정 영향과 source of truth 최종 판단을 담당하고, Development/QA Agent는 코드/빌드 영향 검증이 필요할 때만 참여한다.
 
 ## 6. Workflow 선택
 
@@ -94,3 +96,4 @@ Task가 인증/권한/개인정보/로그를 건드리면 QA Agent의 security_c
 | 2026-06-29 | Task Queue 기반 실행 흐름 추가 |
 | 2026-06-29 | QA 통과 후 PM 완료 확정 단계를 명확화 |
 | 2026-06-30 | AI Ops Agent를 실행 흐름 밖의 독립 운영 Agent로 추가 |
+| 2026-07-01 | 프로젝트 초기화와 운영 마이그레이션 주체를 AI Ops Agent로 정리 |

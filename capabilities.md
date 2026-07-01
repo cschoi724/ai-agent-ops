@@ -42,6 +42,7 @@
 | `ops_audit` | Agent 운영 문서와 실제 운영 상태의 충돌 점검 | AI Ops Agent |
 | `process_governance` | Task Queue, 승인, lock, report/QA 흐름의 운영 규칙 점검 | AI Ops Agent |
 | `agent_boundary_review` | Agent 역할/권한/책임 경계와 새 Agent 추가 영향 검토 | AI Ops Agent |
+| `ops_migration` | 새 프로젝트 또는 기존 프로젝트에 AI Agent 운영 체계 도입 | AI Ops Agent |
 
 ## 4. 후속 위임 기준
 
@@ -80,3 +81,4 @@ Task가 인증/권한/개인정보/로그를 건드리면 QA Agent의 security_c
 | 2026-06-29 | Capability 정의 v1 작성 |
 | 2026-06-29 | Task Queue 관리 capability 추가 |
 | 2026-06-30 | AI Ops Agent 운영 점검 capability 추가 |
+| 2026-07-01 | AI Ops Agent 운영 마이그레이션 capability 추가 |

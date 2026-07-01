@@ -42,6 +42,7 @@
 | `ops_audit` | AI Ops Agent | 운영 문서와 실제 운영 상태 충돌 점검 |
 | `process_governance` | AI Ops Agent | Task Queue/승인/lock/report/QA 흐름 점검 |
 | `agent_boundary_review` | AI Ops Agent | Agent 역할/권한 경계와 확장 영향 검토 |
+| `ops_migration` | AI Ops Agent | 새 프로젝트 또는 기존 프로젝트에 AI Agent 운영 체계 도입 |
 
 ## 4. Agent 변경 기록
 

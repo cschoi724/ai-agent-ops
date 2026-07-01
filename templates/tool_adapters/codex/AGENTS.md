@@ -20,6 +20,7 @@
 | PM Agent | `.ai/agents/pm_agent.md` |
 | Development Agent | `.ai/agents/development_agent.md` |
 | QA Agent | `.ai/agents/qa_agent.md` |
+| AI Ops Agent | `.ai/agents/ai_ops_agent.md` |
 
 ## 3. 프로젝트 상태 확인
 
@@ -32,13 +33,14 @@
 5. `.ai_project/task_board.md`
 6. `.ai_project/source_of_truth.md`
 7. `.ai_project/ops_decisions.md`
-8. 필요한 report/qa 문서
+8. `.ai_project/ops_issues.md`
+9. 필요한 report/qa 문서
 
 ## 4. PM Agent
 
 PM Agent는 작업을 정의하고 `.ai_project/tasks/`에 Task를 생성한다.
 
-PM Agent는 사용자가 명시적으로 요청한 경우에만 `.ai_project/` 초기 구조를 생성할 수 있다.
+PM Agent는 제품/일정 영향 검토, source of truth 최종 판단, Task 승인/완료 확정을 담당한다.
 
 ## 5. Development Agent
 
@@ -56,7 +58,15 @@ QA 시작 전 개발 보고서, `depends_on`, `locked_by`, `source_of_truth`를 
 
 QA 결과는 `PASS`, `PASS_WITH_RISK`, `FAIL`, `BLOCKED` 중 하나로 분류한다. `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`로 넘기고, `done` 확정은 PM Agent가 수행한다.
 
-## 7. 금지사항
+## 7. AI Ops Agent
+
+AI Ops Agent는 제품 Task 실행 라인 밖에서 운영 프로세스를 점검한다.
+
+새 프로젝트 또는 기존 프로젝트에 AI Agent 운영 체계를 도입할 때는 `.ai/workflows/ops_migration.md`를 기준으로 `.ai_project/` 초기 구조, 운영 문서, source of truth 매핑, AGENTS.md 병합안을 준비한다.
+
+AI Ops Agent는 제품 Task 생성, 승인, 상태 변경, 코드 수정, QA 판정 변경을 하지 않는다.
+
+## 8. 금지사항
 
 - 사용자 승인 없이 `.ai/` 운영 문서를 수정하지 않는다.
 - 사용자 승인 없이 커밋하지 않는다.

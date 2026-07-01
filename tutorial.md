@@ -2,7 +2,7 @@
 
 작성일: 2026-06-29
 상태: Draft v1
-범위: Codex 기준 PM / Development / QA Agent 운영 튜토리얼
+범위: Codex 기준 PM / Development / QA / AI Ops Agent 운영 튜토리얼
 
 ## 1. 목적
 
@@ -25,7 +25,7 @@ AI Agent 운영은 두 영역으로 나눈다.
 
 ## 3. 기본 Agent
 
-초기 운영은 아래 세 Agent로 시작한다.
+기본 실행 운영은 아래 세 Agent로 시작한다.
 
 | Agent | 핵심 역할 |
 |---|---|
@@ -34,6 +34,14 @@ AI Agent 운영은 두 영역으로 나눈다.
 | QA Agent | 개발 결과 검증, 리스크 분석, 재작업 필요 여부 정리 |
 
 이 세 Agent는 고정 상한이 아니다. 운영 중 반복 부담이 커지면 PM Agent가 새 Agent 추가와 capability 위임을 제안한다.
+
+AI Ops Agent는 실행 Agent가 아니라 독립 운영 Agent다.
+
+| Agent | 핵심 역할 |
+|---|---|
+| AI Ops Agent | 운영 프로세스 점검, 역할/권한 충돌 확인, AI 운영 마이그레이션 주도 |
+
+AI Ops Agent는 제품 Task 생성, 승인, 상태 변경, 코드 수정, QA 판정을 하지 않는다.
 
 ## 4. 사람이 하는 일
 
@@ -55,7 +63,7 @@ AI Agent 운영은 두 영역으로 나눈다.
 
 1. 프로젝트 루트에 `.ai/`를 준비한다.
 2. 프로젝트 `.gitignore`에 `.ai/`를 제외한다.
-3. PM Agent가 사용자 승인 후 `.ai_project/`를 생성한다.
+3. AI Ops Agent가 사용자 승인 후 `.ai_project/` 초기화 또는 운영 마이그레이션을 진행한다.
 4. `.ai_project/source_of_truth.md`에 프로젝트 기준 문서를 매핑한다.
 5. `.ai_project/agent_registry.md`에 활성 Agent를 기록한다.
 6. PM Agent가 첫 Task를 `.ai_project/tasks/`에 생성한다.
@@ -155,6 +163,33 @@ QA Agent는 검증 세션이다.
 8. lock을 비운다.
 
 QA Agent는 직접 기능 구현을 하지 않고, 커밋 또는 push도 직접 수행하지 않는다.
+
+### AI Ops Agent 세션
+
+AI Ops Agent는 운영 프로세스 점검과 AI 운영 마이그레이션 세션이다.
+
+시작 시 확인:
+
+1. `.ai/agents/ai_ops_agent.md`
+2. `.ai/workflows/ops_migration.md`
+3. `.ai/project_workspace.md`
+4. `.ai/task_queue.md`
+5. `.ai_project/current_context.md`
+6. `.ai_project/agent_registry.md`
+7. `.ai_project/ops_issues.md`
+8. `.ai_project/ops_migration_plan.md`
+
+주요 작업:
+
+- 새 프로젝트 AI 운영 초기화
+- 기존 프로젝트 AI 운영 마이그레이션 계획 작성
+- `.ai_project/` 운영 문서 구조 점검
+- 기존 `AGENTS.md`와 운영 지침 병합안 작성
+- source of truth 매핑 초안 작성
+- 운영 프로세스 충돌과 모호성 기록
+- `.ai_project/ops_issues.md`와 `.ai_project/ops_migration_plan.md` 갱신
+
+AI Ops Agent는 제품 Task 상태를 변경하지 않는다.
 
 ## 7. Task 상태 흐름
 
@@ -266,6 +301,15 @@ ready_for_qa Task가 있으면 하나만 검증해줘.
 결과는 PASS, PASS_WITH_RISK, FAIL, BLOCKED 중 하나로 분류해줘.
 ```
 
+AI Ops Agent에게:
+
+```text
+너는 이 프로젝트의 AI Ops Agent야.
+.ai/agents/ai_ops_agent.md와 .ai/workflows/ops_migration.md를 기준으로
+현재 프로젝트에 AI Agent 운영 체계를 적용하거나 점검해줘.
+제품 Task 상태는 변경하지 말고, 운영 이슈와 마이그레이션 계획만 문서화해줘.
+```
+
 ## 10. 커밋과 Push
 
 기본 기준:
@@ -295,6 +339,7 @@ ready_for_qa Task가 있으면 하나만 검증해줘.
 - `.ai/`가 존재한다.
 - `.ai/`가 적용 대상 프로젝트 저장소에서 제외된다.
 - `.ai_project/` 생성 위치가 결정됐다.
+- AI Ops Agent가 운영 마이그레이션 범위와 생성 파일 목록을 제시했다.
 - 기존 프로젝트 source of truth 문서 위치가 확인됐다.
 
 Task 시작 전:
@@ -319,3 +364,4 @@ Task 종료 전:
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-06-29 | AI Agent Ops 튜토리얼 v1 작성 |
+| 2026-07-01 | AI Ops Agent와 운영 마이그레이션 흐름 추가 |

@@ -8,7 +8,7 @@
 
 이 문서는 Agent가 세션을 시작하거나 재개할 때 가장 먼저 확인할 현재 운영 컨텍스트를 요약한다.
 
-실제 실행 지시는 `.ai_project/tasks/`의 Task 파일을 기준으로 한다. 이 문서는 현재 초점과 주의사항을 빠르게 파악하기 위한 안내판이다.
+실제 실행 기준은 `.ai_project/tasks/`의 Task 파일이다. 이 문서는 현재 초점과 주의사항을 빠르게 파악하기 위한 안내판이다.
 
 ## 2. 현재 운영 상태
 
@@ -17,12 +17,13 @@
 | 현재 운영 모드 | {{OPS_MODE}} |
 | 활성 Agent | PM Agent, Development Agent, QA Agent, AI Ops Agent |
 | 현재 우선 Task | {{CURRENT_TASK_ID}} |
-| 다음 확인 위치 | `.ai_project/tasks/` |
+| 다음 확인 위치 | `.ai_project/tasks/`, `.ai_project/ops_migration_plan.md` |
 | Lock timeout | 240분 |
 
 ## 3. 현재 주의사항
 
 - AI Ops Agent는 제품 Task 실행 라인에 참여하지 않고, 운영 프로세스 문제를 `.ai_project/ops_issues.md`에 기록한다.
+- AI 운영 체계 도입 또는 마이그레이션은 AI Ops Agent가 `.ai/workflows/ops_migration.md` 기준으로 주도한다.
 
 ## 4. 세션 시작 체크
 
@@ -39,3 +40,4 @@
 |---|---|
 | {{DATE}} | 현재 Agent 컨텍스트 문서 초기화 |
 | {{DATE}} | AI Ops Agent 독립 운영 기준 추가 |
+| {{DATE}} | AI Ops Agent 운영 마이그레이션 기준 추가 |
