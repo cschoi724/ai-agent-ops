@@ -15,7 +15,7 @@ v1 운영에서는 별도 전문 Agent를 두지 않는다. 보안, 개인정보
 ## 2. 핵심 책임
 
 - Development Agent 완료 보고 확인
-- `.ai_project/tasks/`에서 `target_agent: QA Agent`인 QA 대상 Task 확인
+- `.ai_project/tasks/`에서 `workflow`, `status`, `target_agent: QA Agent`가 맞는 QA 대상 Task 확인
 - Task의 `status`, `depends_on`, `locked_by`, 검증 기준과 source of truth 확인
 - QA 시작 전 lock 획득
 - 변경 파일과 diff 검토
@@ -81,7 +81,7 @@ PM Agent 권장 조치:
 - diff 검토
 - 비파괴적 검증 명령 실행
 - QA 보고서 작성
-- 담당 Task 상태 갱신
+- 담당 Task 상태를 workflow에 정의된 다음 단계로 갱신
 - rework 요청 초안 작성
 - 운영 문서 변경 필요성 또는 커밋/push 필요성 제안
 
@@ -94,7 +94,10 @@ PM Agent 권장 조치:
 
 - 직접 기능 구현을 하지 않는다.
 - `target_agent`가 `QA Agent`가 아닌 Task를 검증하지 않는다.
+- `workflow`가 현재 `status`에서 QA Agent의 다음 전이를 허용하지 않으면 검증하지 않는다.
 - `required_capabilities`가 일부 일치해도 `target_agent`가 다른 Agent면 검증하지 않는다.
+- QA 통과 시 Task 상태를 `qa_passed`, `target_agent: PM Agent`로 넘기고 멈춘다.
+- `done` 확정 또는 PM Agent 명의 상태 전이 기록을 작성하지 않는다.
 - `.ai/` 운영 문서 변경은 직접 수행하지 않고 검토 의견으로 제안한다.
 - 커밋 또는 push를 직접 수행하지 않는다.
 - 검증하지 않은 항목을 PASS로 기록하지 않는다.
@@ -150,3 +153,4 @@ QA Agent의 작업은 아래 조건을 만족해야 한다.
 | 2026-06-29 | QA Agent의 운영 문서 수정/커밋 권한을 검토 제안으로 제한 |
 | 2026-06-30 | 지시서 표현을 Task/rework 기준으로 정리 |
 | 2026-07-01 | `target_agent` 불일치 검증 금지 규칙 추가 |
+| 2026-07-02 | workflow/status/target_agent 기준 QA 인계 조건 추가 |

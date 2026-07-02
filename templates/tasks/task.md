@@ -5,7 +5,8 @@ status: proposed
 type: {{TASK_TYPE}}
 priority: {{PRIORITY}}
 priority_reason: {{PRIORITY_REASON}}
-target_agent: {{TARGET_AGENT}}
+workflow: {{WORKFLOW}}
+target_agent: PM Agent
 required_capabilities:
   - {{REQUIRED_CAPABILITY}}
 depends_on: []
@@ -43,7 +44,7 @@ qa_to: .ai_project/qa/T-{{DATE_COMPACT}}-001_qa-report.md
 
 ## 5. 실행 지시
 
-이 Task는 `target_agent`와 일치하는 Agent만 실행한다. `required_capabilities`가 일부 일치하더라도 `target_agent`가 현재 Agent와 다르면 실행하지 않는다.
+이 Task는 `workflow`, `status`, `target_agent` 조합에 맞는 Agent만 실행한다. `target_agent`는 현재 `status`에서 Task를 처리할 Agent다. 작업 완료 시 `status`와 `target_agent`를 workflow에 정의된 다음 처리 상태로 갱신한다.
 
 1. 
 2. 

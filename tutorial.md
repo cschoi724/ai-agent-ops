@@ -114,9 +114,10 @@ Development Agent는 실제 구현 세션이다.
 
 실행 가능한 Task 조건:
 
-- `status: approved`
+- `workflow`가 현재 `status`에서 Development Agent 전이를 허용함
+- 기본 구현 workflow에서는 `status: approved`
 - `approved_by`가 비어 있지 않음
-- `target_agent` 또는 `required_capabilities`가 자신과 맞음
+- `target_agent: Development Agent`
 - `allowed_paths`가 명시됨
 - `depends_on`이 모두 `done`
 - `locked_by`가 비어 있음
@@ -128,7 +129,7 @@ Development Agent는 실제 구현 세션이다.
 3. 승인된 범위 안에서만 구현한다.
 4. 가능한 검증을 수행한다.
 5. 개발 보고서를 `.ai_project/reports/`에 작성한다.
-6. Task 상태를 `ready_for_qa`로 바꾸고 lock을 비운다.
+6. Task 상태를 `ready_for_qa`, `target_agent: QA Agent`로 바꾸고 lock을 비운다.
 
 Development Agent는 사용자 승인 없이 커밋하거나 push하지 않는다.
 
@@ -147,7 +148,9 @@ QA Agent는 검증 세션이다.
 
 실행 가능한 QA 조건:
 
-- `status: ready_for_qa`
+- `workflow`가 현재 `status`에서 QA Agent 전이를 허용함
+- 기본 구현 workflow에서는 `status: ready_for_qa`
+- `target_agent: QA Agent`
 - 개발 보고서가 존재함
 - `depends_on`이 모두 `done`
 - `locked_by`가 비어 있음
@@ -158,7 +161,7 @@ QA Agent는 검증 세션이다.
 2. Task 상태를 `qa_in_progress`로 바꾸고 lock을 획득한다.
 3. 변경 범위, 문서 일치성, 검증 결과, 리스크를 확인한다.
 4. QA 보고서를 `.ai_project/qa/`에 작성한다.
-5. 결과가 `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`로 바꾼다.
+5. 결과가 `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`, `target_agent: PM Agent`로 바꾸고 멈춘다.
 6. 결과가 `FAIL`이면 `rework_requested`로 바꾼다.
 7. 외부 요인으로 검증할 수 없으면 `blocked`로 바꾼다.
 8. lock을 비운다.
@@ -233,7 +236,8 @@ title: Social Login callback payload 계약 정리
 status: proposed
 type: docs
 priority: P1
-target_agent: Development Agent
+workflow: docs
+target_agent: PM Agent
 required_capabilities:
   - implementation
 depends_on: []
@@ -260,6 +264,7 @@ qa_to: .ai_project/qa/T-20260629-001_qa-report.md
 ```yaml
 status: approved
 approved_by: Product Owner
+target_agent: Development Agent
 ```
 
 Development Agent는 승인 전 Task를 실행하지 않는다.

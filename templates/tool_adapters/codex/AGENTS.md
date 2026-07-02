@@ -46,27 +46,27 @@ PM Agent는 제품/일정 영향 검토, source of truth 최종 판단, Task 승
 
 기존 Task의 priority, depends_on, 진행 순서를 바꾸기 전에는 사용자 승인을 받는다. `in_progress` Task를 자동으로 중단하거나 밀어내지 않는다.
 
-다음 작업을 안내할 때는 Task ID, 상태, 담당 Agent, 담당 근거, 열 세션, 사용자 요청을 함께 표시한다. Task 이름만 말하지 않는다.
+다음 작업을 안내할 때는 Task ID, workflow, 상태, 담당 Agent, 담당 근거, 열 세션, 사용자 요청을 함께 표시한다. Task 이름만 말하지 않는다.
 
 ## 5. Development Agent
 
 Development Agent는 `.ai_project/tasks/`에서 자신에게 할당된 `approved` Task를 확인하고 승인된 범위 안에서만 구현한다.
 
-`target_agent`가 `Development Agent`가 아닌 Task는 실행하지 않는다. `required_capabilities`가 일부 일치해도 `target_agent` 불일치를 덮어쓸 수 없다.
+`target_agent`가 `Development Agent`가 아닌 Task는 실행하지 않는다. 현재 `workflow`와 `status`가 Development Agent 전이를 허용하지 않아도 실행하지 않는다. `required_capabilities`가 일부 일치해도 `target_agent` 불일치를 덮어쓸 수 없다.
 
 실행 전 `approved_by`, `depends_on`, `locked_by`, `allowed_paths`, `source_of_truth`를 확인한다. 실행 가능한 Task면 lock을 획득하고 하나의 Task만 진행한다.
 
-작업 완료 후 변경 파일, 구현 내용, 검증 결과, 남은 리스크를 보고하고 Task 상태를 `ready_for_qa`로 갱신한 뒤 lock을 비운다.
+작업 완료 후 변경 파일, 구현 내용, 검증 결과, 남은 리스크를 보고하고 Task 상태를 `ready_for_qa`, `target_agent: QA Agent`로 갱신한 뒤 lock을 비운다.
 
 ## 6. QA Agent
 
 QA Agent는 `.ai_project/tasks/`에서 `ready_for_qa` Task를 확인하고 Development Agent 결과를 독립적으로 검증한다.
 
-`target_agent`가 `QA Agent`가 아닌 Task는 검증하지 않는다. `required_capabilities`가 일부 일치해도 `target_agent` 불일치를 덮어쓸 수 없다.
+`target_agent`가 `QA Agent`가 아닌 Task는 검증하지 않는다. 현재 `workflow`와 `status`가 QA Agent 전이를 허용하지 않아도 검증하지 않는다. `required_capabilities`가 일부 일치해도 `target_agent` 불일치를 덮어쓸 수 없다.
 
 QA 시작 전 개발 보고서, `depends_on`, `locked_by`, `source_of_truth`를 확인한다. 검증 가능한 Task면 lock을 획득하고 하나의 Task만 진행한다.
 
-QA 결과는 `PASS`, `PASS_WITH_RISK`, `FAIL`, `BLOCKED` 중 하나로 분류한다. `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`로 넘기고, `done` 확정은 PM Agent가 수행한다.
+QA 결과는 `PASS`, `PASS_WITH_RISK`, `FAIL`, `BLOCKED` 중 하나로 분류한다. `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`, `target_agent: PM Agent`로 넘기고, `done` 확정은 PM Agent가 수행한다.
 
 ## 7. AI Ops Agent
 

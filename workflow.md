@@ -17,6 +17,8 @@
 - `.ai/` 운영 문서는 사용자 승인 없이 수정하지 않는다.
 - 프로젝트별 실행 지시는 `.ai_project/tasks/`에 기록한다.
 - `task_board.md`는 현황 요약판이며 Task 파일을 대체하지 않는다.
+- Task 실행은 Agent별 고정 권한보다 Task의 `workflow`, `status`, `target_agent` 조합을 우선한다.
+- `target_agent`는 현재 `status`에서 Task를 처리할 Agent를 뜻한다.
 - report/QA 문서는 Task 진행 과정의 보조 기록이다.
 - 커밋, push, 배포, 외부 설정 변경은 사용자 승인 후 진행한다.
 - 민감정보를 로그, 문서, 보고서에 남기지 않는다.
@@ -47,12 +49,12 @@ AI Ops Agent는 제품 Task 실행 라인에 참여하지 않고 Task 상태를 
 PM creates Task -> Development reads Task Queue -> QA reads ready Task -> PM closes Task
 ```
 
-1. PM Agent가 `.ai_project/tasks/`에 Task를 생성하고 workflow를 선택한다.
-2. Product Owner가 진행을 승인하면 Task 상태를 `approved`로 바꾼다.
-3. Development Agent가 세션 시작 시 Task Queue에서 자기 역할 또는 capability와 맞는 `approved` Task를 찾는다.
-4. Development Agent가 승인된 범위만 구현하고 Task 상태를 `ready_for_qa`로 바꾼다.
-5. QA Agent가 `ready_for_qa` Task를 찾아 검증한다.
-6. QA Agent가 통과 결과를 `qa_passed`로 넘기거나 `rework_requested`, `blocked`로 분류한다.
+1. PM Agent가 `.ai_project/tasks/`에 Task를 생성하고 `workflow`를 선택한다.
+2. Product Owner가 진행을 승인하면 PM Agent가 Task 상태를 `approved`로 바꾸고 첫 `target_agent`를 지정한다.
+3. `target_agent`인 Agent가 세션 시작 시 Task Queue에서 자기에게 넘어온 Task를 찾는다.
+4. Agent는 Task의 `workflow`에 정의된 현재 `status`의 허용 전이만 수행한다.
+5. Agent는 자기 단계가 끝나면 `status`와 `target_agent`를 workflow에 정의된 다음 처리 상태로 갱신한다.
+6. QA Agent가 통과 결과를 `qa_passed`와 `target_agent: PM Agent`로 넘기거나 `rework_requested`, `blocked`로 분류한다.
 7. PM Agent가 `done`, 재작업, 차단, 보류 여부를 최종 판단한다.
 
 ## 5. 프로젝트 초기화와 운영 마이그레이션
@@ -67,7 +69,7 @@ Task Queue 운영 기준은 `.ai/task_queue.md`를 따른다.
 
 ## 6. Workflow 선택
 
-Task 유형별 흐름은 `.ai/workflows/`를 따른다.
+Task 유형별 흐름은 `.ai/workflows/`를 따른다. 새 Agent가 추가되면 Agent별 권한표를 크게 늘리기보다 필요한 workflow에 상태 전이와 전이 후 `target_agent`를 추가한다.
 
 | Task 유형 | Workflow |
 |---|---|
@@ -97,3 +99,4 @@ Task가 인증/권한/개인정보/로그를 건드리면 QA Agent의 security_c
 | 2026-06-29 | QA 통과 후 PM 완료 확정 단계를 명확화 |
 | 2026-06-30 | AI Ops Agent를 실행 흐름 밖의 독립 운영 Agent로 추가 |
 | 2026-07-01 | 프로젝트 초기화와 운영 마이그레이션 주체를 AI Ops Agent로 정리 |
+| 2026-07-02 | `workflow`, `status`, `target_agent` 기반 실행 흐름으로 개정 |

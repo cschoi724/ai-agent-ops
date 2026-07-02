@@ -22,7 +22,18 @@ PM creates feature Task -> Development executes -> QA verifies -> PM closes
 | 검증 | `qa_review`, `risk_review` | QA Agent | QA 보고 |
 | 통합 판단 | `approval_management` | PM Agent | 커밋/보류/재작업 판단 |
 
-## 4. Optional Hooks
+## 4. 기본 상태 전이
+
+| 현재 status | 수행 Agent | 다음 status | 다음 target_agent |
+|---|---|---|---|
+| `proposed` | PM Agent | `approved` | Development Agent |
+| `approved` | Development Agent | `in_progress` | Development Agent |
+| `in_progress` | Development Agent | `ready_for_qa` | QA Agent |
+| `ready_for_qa` | QA Agent | `qa_in_progress` | QA Agent |
+| `qa_in_progress` | QA Agent | `qa_passed` | PM Agent |
+| `qa_passed` | PM Agent | `done` | PM Agent |
+
+## 5. Optional Hooks
 
 v1에서는 별도 Agent hook을 추가하지 않는다. 아래 조건은 PM 또는 QA의 추가 검토 관점으로 처리한다.
 
@@ -33,16 +44,17 @@ v1에서는 별도 Agent hook을 추가하지 않는다. 아래 조건은 PM 또
 | 사용자/운영/개발 문서 변경이 큼 | `documentation` | PM Agent 작성, QA Agent 검토 |
 | 배포 대상 기능임 | `release_planning`, `release_check` | PM Agent / QA Agent |
 
-## 5. 완료 조건
+## 6. 완료 조건
 
 - Task 승인 범위의 구현이 완료됐다.
 - Development Agent가 가능한 검증을 수행했다.
 - QA Agent가 `PASS`, `PASS_WITH_RISK`, `FAIL`, `BLOCKED` 중 하나로 결과를 분류했다.
 - 남은 리스크와 사용자 결정 항목이 분리되어 있다.
 
-## 6. 변경 이력
+## 7. 변경 이력
 
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-06-29 | Feature Workflow v1 작성 |
 | 2026-06-29 | Task Queue 기반 기본 흐름 반영 |
+| 2026-07-02 | workflow 기준 status/target_agent 전이 표 추가 |

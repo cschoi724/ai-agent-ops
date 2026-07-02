@@ -132,7 +132,7 @@ AI Ops Agent는 아래 항목을 중심으로 점검한다.
 - Task lock, report, QA 기록 위치가 일관적인가
 - `.ai/` 템플릿 규칙과 `.ai_project/` 실제 운영이 어긋나는가
 - `.ai/` 원격 업데이트 후 변경된 규칙이 `.ai_project/`에 반영되었는가
-- `.ai_project/workflow_overrides.md`가 `.ai/`의 hard stop, 승인, lock, 상태 전이 규칙을 약화하거나 재정의하지 않는가
+- `.ai_project/workflow_overrides.md`가 `.ai/`의 workflow routing, 승인, lock, 상태 전이 규칙을 약화하거나 재정의하지 않는가
 - 새 Agent 추가가 기존 Agent 권한을 침범하지 않는가
 - 운영 마이그레이션 계획이 제품 Task 실행 권한과 분리되어 있는가
 - 기존 프로젝트 문서를 삭제하지 않고 source of truth로 연결하는가

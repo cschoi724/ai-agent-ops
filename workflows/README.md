@@ -43,6 +43,8 @@ PM creates Task -> Development executes -> QA(security_check 포함) -> PM close
 PM Agent가 Task 시작 전에 workflow를 선택한다.
 AI 운영 체계 도입은 제품 Task가 아니므로 AI Ops Agent가 `Ops Migration` workflow를 선택하고 주도한다.
 
+Agent는 Task의 `workflow`, `status`, `target_agent` 조합으로 현재 실행 가능 여부를 판단한다. 작업 완료 시 `status`와 `target_agent`를 해당 workflow가 정의한 다음 처리 상태로 갱신한다.
+
 | Task 성격 | 권장 Workflow |
 |---|---|
 | 새 기능 구현 | Feature |
@@ -59,6 +61,8 @@ AI 운영 체계 도입은 제품 Task가 아니므로 AI Ops Agent가 `Ops Migr
 ## Workflow
 
 - Type:
+- Status:
+- Target Agent:
 - Active Agents:
 - Active Capabilities:
 - Additional Review Points:
@@ -74,3 +78,4 @@ report와 QA 문서는 Task 파일을 보조하며, 실행 기준은 항상 Task
 | 2026-06-29 | Task Queue 기반 공통 흐름 반영 |
 | 2026-06-30 | AI Ops Agent의 workflow 비참여 원칙 추가 |
 | 2026-07-01 | Ops Migration workflow 추가 |
+| 2026-07-02 | workflow/status/target_agent 기준 실행 조건 추가 |

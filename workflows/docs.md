@@ -24,7 +24,18 @@ PM creates docs Task -> PM updates docs -> QA reviews -> PM closes
 | 검토 | `qa_review`, `risk_review` | QA Agent | 문서 일관성 검토 |
 | 확정 판단 | `approval_management` | PM Agent / Product Owner | 반영/보류 판단 |
 
-## 4. Optional Hooks
+## 4. 기본 상태 전이
+
+| 현재 status | 수행 Agent | 다음 status | 다음 target_agent |
+|---|---|---|---|
+| `proposed` | PM Agent | `approved` | PM Agent |
+| `approved` | PM Agent | `in_progress` | PM Agent |
+| `in_progress` | PM Agent | `ready_for_qa` | QA Agent |
+| `ready_for_qa` | QA Agent | `qa_in_progress` | QA Agent |
+| `qa_in_progress` | QA Agent | `qa_passed` | PM Agent |
+| `qa_passed` | PM Agent | `done` | PM Agent |
+
+## 5. Optional Hooks
 
 v1에서는 별도 Agent hook을 추가하지 않는다. 아래 조건은 PM 또는 QA의 추가 검토 관점으로 처리한다.
 
@@ -34,16 +45,17 @@ v1에서는 별도 Agent hook을 추가하지 않는다. 아래 조건은 PM 또
 | 보안/개인정보 정책 문서 | `security_check` | QA Agent |
 | 배포 문서 | `release_planning`, `release_check` | PM Agent / QA Agent |
 
-## 5. 완료 조건
+## 6. 완료 조건
 
 - 문서 목적과 적용 범위가 명확하다.
 - 기존 문서와 충돌하지 않는다.
 - 초안, 확정, 실행 지시가 구분되어 있다.
 - 보호 문서 수정은 사용자 승인 범위 안에서만 이뤄졌다.
 
-## 6. 변경 이력
+## 7. 변경 이력
 
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-06-29 | Docs Workflow v1 작성 |
 | 2026-06-29 | Task Queue 기반 기본 흐름 반영 |
+| 2026-07-02 | workflow 기준 status/target_agent 전이 표 추가 |
