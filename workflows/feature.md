@@ -18,7 +18,7 @@ PM creates feature Task -> Development executes -> QA verifies -> PM closes
 | 단계 | Capability | 기본 Agent | 산출물 |
 |---|---|---|---|
 | 기획/범위 정의 | `planning`, `task_routing` | PM Agent | `.ai_project/tasks/` Task |
-| 구현 | `implementation`, `developer_verification` | Development Agent | 코드/문서 변경, 개발 보고 |
+| 구현 | `implementation`, `developer_verification` | Development Agent | 코드/문서 변경, 작업 보고 |
 | 검증 | `qa_review`, `risk_review` | QA Agent | QA 보고 |
 | 통합 판단 | `approval_management` | PM Agent | 커밋/보류/재작업 판단 |
 

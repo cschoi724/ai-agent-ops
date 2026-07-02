@@ -15,7 +15,7 @@
 | Agent | 핵심 책임 | 주요 산출물 |
 |---|---|---|
 | PM Agent | 방향 정리, Task Queue 관리, 승인 게이트 관리 | Task 파일, Task Board 요약, 결정 필요 항목 |
-| Development Agent | 승인된 Task 범위의 구현, 테스트, 개발 보고 | 코드 변경, 테스트 결과, 개발 완료 보고, Task 상태 갱신 |
+| Development Agent | 승인된 Task 범위의 구현, 테스트, 작업 보고 | 코드 변경, 테스트 결과, 작업 완료 보고, Task 상태 갱신 |
 | QA Agent | 구현 결과 검증, 리스크 분석, 재작업 지시 | QA 보고서, Task 상태 갱신, 잔여 리스크 |
 | AI Ops Agent | 운영 프로세스 감사, 역할/권한 충돌 점검, 개선 제안 | 운영 이슈 기록, 개선안, 충돌 점검 보고 |
 

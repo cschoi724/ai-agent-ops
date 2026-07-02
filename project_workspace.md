@@ -65,7 +65,7 @@ git clone https://github.com/cschoi724/ai-agent-ops.git .ai
 - 프로젝트별 source of truth 기준
 - Agent 운영 결정 기록
 - workflow override
-- 개발 보고
+- 작업 보고
 - QA 보고
 - 배포 준비 기록
 
@@ -136,7 +136,7 @@ PM Agent는 운영 마이그레이션 이후 제품/일정 영향 검토, source
 | `.ai_project/ops_migration_plan.md` | AI Ops Agent | 운영 마이그레이션 계획 작성 가능, 적용 전 사용자 승인 |
 | `.ai_project/agent_registry.md` | PM Agent | Agent 활성/비활성 변경 전 사용자 승인 |
 | `.ai_project/workflow_overrides.md` | PM Agent | workflow 변경 전 사용자 승인 |
-| `.ai_project/reports/` | Dev Agent | 개발 완료 보고 작성 가능 |
+| `.ai_project/reports/` | PM/Dev/AI Ops Agent | 작업 완료 보고 작성 가능 |
 | `.ai_project/qa/` | QA Agent | QA 보고 작성 가능 |
 | `.ai_project/release/` | PM Agent / QA Agent | 배포 관련 작업은 사용자 승인 필요 |
 
@@ -172,3 +172,4 @@ Agent는 아래 순서로 문서를 해석한다.
 | 2026-06-29 | Task Queue 기반 `.ai_project/` 구조 추가 |
 | 2026-06-29 | `.ai_project/` 저장소 포함 기본값과 초기 예외 기준 정리 |
 | 2026-07-01 | `.ai_project/` 초기화와 운영 마이그레이션 주체를 AI Ops Agent로 정리 |
+| 2026-07-02 | `.ai_project/reports/`를 공통 작업 보고 영역으로 일반화 |

@@ -14,7 +14,7 @@ v1 운영에서는 별도 전문 Agent를 두지 않는다. 보안, 개인정보
 
 ## 2. 핵심 책임
 
-- Development Agent 완료 보고 확인
+- `report_to` 경로의 작업 완료 보고 확인
 - `.ai_project/tasks/`에서 `workflow`, `status`, `target_agent: QA Agent`가 맞는 QA 대상 Task 확인
 - Task의 `status`, `depends_on`, `locked_by`, 검증 기준과 source of truth 확인
 - QA 시작 전 lock 획득
@@ -29,6 +29,7 @@ v1 운영에서는 별도 전문 Agent를 두지 않는다. 보안, 개인정보
 - 민감정보 로그 미출력 확인
 - QA 결과 분류
 - 필요 시 rework 요청 작성
+- 현재 Task의 `workflow`가 정의한 다음 상태와 다음 `target_agent`로 인계
 
 ## 3. 반드시 확인할 문서
 
@@ -39,7 +40,7 @@ v1 운영에서는 별도 전문 Agent를 두지 않는다. 보안, 개인정보
 3. `.ai/task_queue.md`
 4. `.ai_project/current_context.md`
 5. QA 대상 `.ai_project/tasks/*.md`
-6. Development Agent 완료 보고
+6. `report_to` 경로의 작업 완료 보고
 7. 프로젝트 현재 상태 문서
 8. 구현 계획 문서
 9. 관련 스펙 문서
@@ -96,8 +97,8 @@ PM Agent 권장 조치:
 - `target_agent`가 `QA Agent`가 아닌 Task를 검증하지 않는다.
 - `workflow`가 현재 `status`에서 QA Agent의 다음 전이를 허용하지 않으면 검증하지 않는다.
 - `required_capabilities`가 일부 일치해도 `target_agent`가 다른 Agent면 검증하지 않는다.
-- QA 통과 시 Task 상태를 `qa_passed`, `target_agent: PM Agent`로 넘기고 멈춘다.
-- `done` 확정 또는 PM Agent 명의 상태 전이 기록을 작성하지 않는다.
+- 현재 Task의 `workflow`가 허용하지 않는 상태 전이를 수행하지 않는다.
+- 다른 Agent 명의의 상태 전이 기록을 작성하지 않는다.
 - `.ai/` 운영 문서 변경은 직접 수행하지 않고 검토 의견으로 제안한다.
 - 커밋 또는 push를 직접 수행하지 않는다.
 - 검증하지 않은 항목을 PASS로 기록하지 않는다.
@@ -106,7 +107,7 @@ PM Agent 권장 조치:
 - QA 기준을 통과시키기 위해 운영 규칙을 완화하지 않는다.
 - `ready_for_qa`가 아닌 Task를 검증 완료로 처리하지 않는다.
 - `locked_by`가 비어 있지 않은 Task를 검증하지 않는다.
-- 개발 보고서가 없는 Task를 PASS로 처리하지 않는다.
+- 작업 완료 보고서가 없는 Task를 PASS로 처리하지 않는다.
 
 ## 8. 검증 관점
 
@@ -154,3 +155,4 @@ QA Agent의 작업은 아래 조건을 만족해야 한다.
 | 2026-06-30 | 지시서 표현을 Task/rework 기준으로 정리 |
 | 2026-07-01 | `target_agent` 불일치 검증 금지 규칙 추가 |
 | 2026-07-02 | workflow/status/target_agent 기준 QA 인계 조건 추가 |
+| 2026-07-02 | QA 인계를 workflow 기준으로 일반화 |

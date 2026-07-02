@@ -64,9 +64,9 @@ QA Agent는 `.ai_project/tasks/`에서 `ready_for_qa` Task를 확인하고 Devel
 
 `target_agent`가 `QA Agent`가 아닌 Task는 검증하지 않는다. 현재 `workflow`와 `status`가 QA Agent 전이를 허용하지 않아도 검증하지 않는다. `required_capabilities`가 일부 일치해도 `target_agent` 불일치를 덮어쓸 수 없다.
 
-QA 시작 전 개발 보고서, `depends_on`, `locked_by`, `source_of_truth`를 확인한다. 검증 가능한 Task면 lock을 획득하고 하나의 Task만 진행한다.
+QA 시작 전 `report_to` 경로의 작업 보고서, `depends_on`, `locked_by`, `source_of_truth`를 확인한다. 검증 가능한 Task면 lock을 획득하고 하나의 Task만 진행한다.
 
-QA 결과는 `PASS`, `PASS_WITH_RISK`, `FAIL`, `BLOCKED` 중 하나로 분류한다. `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`, `target_agent: PM Agent`로 넘기고, `done` 확정은 PM Agent가 수행한다.
+QA 결과는 `PASS`, `PASS_WITH_RISK`, `FAIL`, `BLOCKED` 중 하나로 분류한다. 상태 전이는 현재 Task의 `workflow`, `status`, `target_agent` 조합이 허용하는 범위에서만 수행한다. 다른 Agent 명의의 상태 전이 기록은 작성하지 않는다.
 
 ## 7. AI Ops Agent
 

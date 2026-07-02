@@ -1,5 +1,7 @@
 # Development Report
 
+이 템플릿은 Development Agent 전용 상세 보고가 필요할 때 참고한다. 기본 작업 완료 보고는 `task_report.md`를 우선 사용한다.
+
 작성일: {{DATE}}  
 작성 Agent: Development Agent  
 대상 Task ID: {{TASK_ID}}  

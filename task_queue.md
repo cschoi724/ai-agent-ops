@@ -21,6 +21,10 @@ Task 실행 흐름은 Agent별 고정 권한보다 Task의 `workflow`, `status`,
 - `target_agent`는 현재 `status`에서 이 Task를 처리할 Agent를 뜻한다.
 - Agent는 Task의 `workflow`에 정의된 현재 `status`의 허용 전이만 수행한다.
 - Agent는 작업 완료 시 `status`와 `target_agent`를 workflow에 정의된 다음 처리 상태로 갱신한다.
+- 기본 workflow에서는 Agent가 한 번의 완료 처리에서 한 단계의 상태 전이만 수행한다.
+- 상태 전이 후 `target_agent`가 자신이 아니면 다음 Agent에게 인계한다.
+- workflow가 명시적으로 연속 전이를 허용하지 않는 한 다음 Agent 단계까지 이어서 처리하지 않는다.
+- Agent는 다른 Agent 명의의 상태 전이 기록을 작성하지 않는다.
 - Agent는 `target_agent`가 자신과 맞는 Task만 처리한다.
 - `target_agent`가 명시되어 있으면 `target_agent`가 `required_capabilities`보다 우선한다.
 - `target_agent`가 현재 Agent와 다르면 승인 상태와 capability 일치 여부와 관계없이 실행하지 않는다.
@@ -29,7 +33,7 @@ Task 실행 흐름은 Agent별 고정 권한보다 Task의 `workflow`, `status`,
 - 실행 가능한 Task는 `approved_by`가 비어 있지 않아야 한다.
 - Task는 `depends_on`이 모두 완료된 경우에만 실행한다.
 - Agent는 잠금 필드가 비어 있는 Task만 시작할 수 있다.
-- Agent는 Task를 시작하기 전 상태를 갱신하고, 완료 후 보고서 경로를 Task 파일에 기록한다.
+- Agent는 Task를 시작하기 전 상태를 갱신하고, 완료 후 공통 작업 보고서 경로를 Task 파일에 기록한다.
 - 동시에 여러 Task를 병렬 실행하지 않는다. 같은 Agent는 하나의 `in_progress` Task만 가진다.
 
 ## 3. Task 상태값
@@ -89,7 +93,7 @@ QA Agent가 Task를 실행하려면 아래 조건을 모두 만족해야 한다.
 - 기본 구현 workflow에서는 `status: ready_for_qa`
 - `target_agent: QA Agent`
 - `required_capabilities`가 QA Agent의 capability와 일치
-- 개발 보고서가 `report_to` 경로에 존재함
+- 작업 보고서가 `report_to` 경로에 존재함
 - `depends_on`에 있는 Task가 모두 `done`
 - `locked_by`가 비어 있음
 
@@ -217,7 +221,7 @@ lock_session:
 lock_timeout_minutes: 240
 created_at: YYYY-MM-DD
 updated_at: YYYY-MM-DD
-report_to: .ai_project/reports/T-YYYYMMDD-001_dev-report.md
+report_to: .ai_project/reports/T-YYYYMMDD-001_task-report.md
 qa_to: .ai_project/qa/T-YYYYMMDD-001_qa-report.md
 ---
 ```
@@ -239,7 +243,7 @@ Development Agent:
 2. `target_agent`가 다른 Agent면 실행하지 않는다.
 3. 우선순위와 의존성 기준으로 하나만 선택한다.
 4. 작업 시작 전 lock을 획득하고 Task 상태를 `in_progress`로 바꾼다.
-5. 완료 후 개발 보고서를 `reports/`에 작성하고 Task 상태를 `ready_for_qa`, `target_agent: QA Agent`로 바꾸며 lock을 비운다.
+5. 완료 후 작업 보고서를 `reports/`에 작성하고 Task 상태를 `ready_for_qa`, `target_agent: QA Agent`로 바꾸며 lock을 비운다.
 
 QA Agent:
 
@@ -248,7 +252,7 @@ QA Agent:
 3. 우선순위와 의존성 기준으로 하나만 선택한다.
 4. 검증 시작 전 lock을 획득하고 Task 상태를 `qa_in_progress`로 바꾼다.
 5. 검증 결과에 따라 QA 보고서를 `qa/`에 작성한다.
-6. 결과가 `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`, `target_agent: PM Agent`로 바꾸고 PM Agent의 완료 확정을 기다린다.
+6. 기본 workflow에서 결과가 `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`, `target_agent: PM Agent`로 바꾸고 PM Agent에게 인계한다. 다른 workflow가 명시적으로 다른 전이를 정하면 해당 workflow를 따른다.
 7. 결과가 `FAIL`이면 `rework_requested`, `BLOCKED`면 `blocked`로 갱신한다.
 8. 완료 또는 차단 처리 시 lock을 비운다.
 
@@ -266,6 +270,8 @@ QA Agent:
 - `required_capabilities`가 일부 일치해도 `target_agent` 불일치를 덮어쓸 수 없다.
 - `target_agent`가 비어 있거나 `any`인 경우에만 `required_capabilities`로 담당 Agent를 판단한다.
 - 담당 Agent가 애매하면 실행하지 않고 PM Agent에게 라우팅 확인을 요청한다.
+- 다음 전이 후 `target_agent`가 다른 Agent로 바뀌면, workflow가 명시적으로 연속 전이를 허용하지 않는 한 그 Agent의 단계까지 이어서 처리하지 않는다.
+- 상태 전이 기록의 `Agent` 값은 실제로 현재 세션에 부여된 역할만 사용한다.
 
 예:
 
@@ -297,3 +303,5 @@ required_capabilities:
 | 2026-07-01 | 새 요구사항 우선순위 조정 규칙 추가 |
 | 2026-07-02 | PM Agent 다음 작업 안내에 담당 Agent 표시 기준 추가 |
 | 2026-07-02 | `workflow`, `status`, `target_agent` 기반 상태 전이 기준 추가 |
+| 2026-07-02 | `report_to` 기본값을 공통 Task Report로 일반화 |
+| 2026-07-02 | 기본 workflow의 단일 상태 전이와 workflow별 예외 가능성 추가 |

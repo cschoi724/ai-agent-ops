@@ -30,7 +30,7 @@
 | Agent | 역할 문서 | 핵심 책임 |
 |---|---|---|
 | PM Agent | `.ai/agents/pm_agent.md` | 작업 정의, 승인 게이트, Task Queue 관리, 통합 판단 |
-| Development Agent | `.ai/agents/development_agent.md` | 승인된 범위의 구현과 개발 보고 |
+| Development Agent | `.ai/agents/development_agent.md` | 승인된 범위의 구현과 작업 보고 |
 | QA Agent | `.ai/agents/qa_agent.md` | 검증, 리스크 정리, 재작업 지시 |
 
 독립 운영 Agent:
@@ -54,8 +54,10 @@ PM creates Task -> Development reads Task Queue -> QA reads ready Task -> PM clo
 3. `target_agent`인 Agent가 세션 시작 시 Task Queue에서 자기에게 넘어온 Task를 찾는다.
 4. Agent는 Task의 `workflow`에 정의된 현재 `status`의 허용 전이만 수행한다.
 5. Agent는 자기 단계가 끝나면 `status`와 `target_agent`를 workflow에 정의된 다음 처리 상태로 갱신한다.
-6. QA Agent가 통과 결과를 `qa_passed`와 `target_agent: PM Agent`로 넘기거나 `rework_requested`, `blocked`로 분류한다.
-7. PM Agent가 `done`, 재작업, 차단, 보류 여부를 최종 판단한다.
+6. 기본 workflow에서는 Agent가 한 번에 한 단계만 전이하고, 전이 후 `target_agent`가 자신이 아니면 다음 Agent에게 인계한다.
+7. QA Agent가 통과 결과를 `qa_passed`와 `target_agent: PM Agent`로 넘기거나 `rework_requested`, `blocked`로 분류한다.
+8. PM Agent가 `done`, 재작업, 차단, 보류 여부를 최종 판단한다.
+9. 특정 workflow가 연속 전이 또는 다른 완료 주체를 명시하면 해당 workflow를 따른다.
 
 ## 5. 프로젝트 초기화와 운영 마이그레이션
 

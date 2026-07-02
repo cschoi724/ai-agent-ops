@@ -33,7 +33,7 @@
 | `technical_review` | 기술 선택지, 구조 영향, 외부 SDK/API 조사 항목 정리 | PM Agent |
 | `implementation` | 승인된 범위의 코드/문서 구현 | Development Agent |
 | `developer_verification` | 개발자가 수행하는 빌드/테스트 확인 | Development Agent |
-| `dev_reporting` | 개발 완료 보고 작성 | Development Agent |
+| `dev_reporting` | Development Agent 관점의 작업 완료 보고 작성 | Development Agent |
 | `qa_review` | 변경 결과 검증 | QA Agent |
 | `risk_review` | 회귀 위험과 잔여 리스크 정리 | QA Agent |
 | `security_check` | 인증, 권한, 개인정보, 민감정보 로그 노출 점검 | QA Agent |

@@ -22,7 +22,7 @@ lock_session:
 lock_timeout_minutes: 240
 created_at: {{DATE}}
 updated_at: {{DATE}}
-report_to: .ai_project/reports/T-{{DATE_COMPACT}}-001_dev-report.md
+report_to: .ai_project/reports/T-{{DATE_COMPACT}}-001_task-report.md
 qa_to: .ai_project/qa/T-{{DATE_COMPACT}}-001_qa-report.md
 ---
 
@@ -46,6 +46,8 @@ qa_to: .ai_project/qa/T-{{DATE_COMPACT}}-001_qa-report.md
 
 이 Task는 `workflow`, `status`, `target_agent` 조합에 맞는 Agent만 실행한다. `target_agent`는 현재 `status`에서 Task를 처리할 Agent다. 작업 완료 시 `status`와 `target_agent`를 workflow에 정의된 다음 처리 상태로 갱신한다.
 
+기본 workflow에서는 한 Agent가 한 번의 완료 처리에서 한 단계의 상태 전이만 수행한다. 상태 전이 후 `target_agent`가 다른 Agent가 되면 인계한다. workflow가 명시적으로 연속 전이를 허용하지 않는 한 다음 Agent 단계를 이어서 처리하지 않으며, 다른 Agent 명의의 상태 전이 기록을 대신 작성하지 않는다.
+
 1. 
 2. 
 3. 
@@ -56,7 +58,7 @@ qa_to: .ai_project/qa/T-{{DATE_COMPACT}}-001_qa-report.md
 
 ## 7. 완료 후 산출물
 
-- 개발 보고: `{{DEV_REPORT_PATH}}`
+- 작업 보고: `{{TASK_REPORT_PATH}}`
 - QA 보고: `{{QA_REPORT_PATH}}`
 - 필요 시 갱신 문서:
 

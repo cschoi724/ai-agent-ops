@@ -30,7 +30,7 @@ AI Agent 운영은 두 영역으로 나눈다.
 | Agent | 핵심 역할 |
 |---|---|
 | PM Agent | 작업 정의, 승인 게이트, Task Queue 관리, 최종 판단 |
-| Development Agent | 승인된 Task 범위 안에서 구현, 검증, 개발 보고 |
+| Development Agent | 승인된 Task 범위 안에서 구현, 검증, 작업 보고 |
 | QA Agent | 개발 결과 검증, 리스크 분석, 재작업 필요 여부 정리 |
 
 이 세 Agent는 고정 상한이 아니다. 운영 중 반복 부담이 커지면 PM Agent가 새 Agent 추가와 capability 위임을 제안한다.
@@ -93,7 +93,7 @@ PM Agent는 프로젝트 진행관리 세션이다.
 - 사용자 승인 필요 항목 정리
 - Task 파일 생성
 - Task 상태를 `proposed`에서 `approved`로 변경
-- Development / QA 보고 확인
+- 작업 / QA 보고 확인
 - `qa_passed` Task를 `done`으로 확정할지 판단
 - `task_board.md` 요약 갱신
 
@@ -128,7 +128,7 @@ Development Agent는 실제 구현 세션이다.
 2. Task 상태를 `in_progress`로 바꾸고 lock을 획득한다.
 3. 승인된 범위 안에서만 구현한다.
 4. 가능한 검증을 수행한다.
-5. 개발 보고서를 `.ai_project/reports/`에 작성한다.
+5. 작업 보고서를 `.ai_project/reports/`에 작성한다.
 6. Task 상태를 `ready_for_qa`, `target_agent: QA Agent`로 바꾸고 lock을 비운다.
 
 Development Agent는 사용자 승인 없이 커밋하거나 push하지 않는다.
@@ -143,7 +143,7 @@ QA Agent는 검증 세션이다.
 2. `.ai/agents/qa_agent.md`
 3. `.ai_project/current_context.md`
 4. `ready_for_qa` 상태의 Task
-5. Development Agent 보고서
+5. `report_to` 경로의 작업 보고서
 6. Task의 `source_of_truth`
 
 실행 가능한 QA 조건:
@@ -151,7 +151,7 @@ QA Agent는 검증 세션이다.
 - `workflow`가 현재 `status`에서 QA Agent 전이를 허용함
 - 기본 구현 workflow에서는 `status: ready_for_qa`
 - `target_agent: QA Agent`
-- 개발 보고서가 존재함
+- `report_to` 경로의 작업 보고서가 존재함
 - `depends_on`이 모두 `done`
 - `locked_by`가 비어 있음
 
@@ -161,7 +161,7 @@ QA Agent는 검증 세션이다.
 2. Task 상태를 `qa_in_progress`로 바꾸고 lock을 획득한다.
 3. 변경 범위, 문서 일치성, 검증 결과, 리스크를 확인한다.
 4. QA 보고서를 `.ai_project/qa/`에 작성한다.
-5. 결과가 `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`, `target_agent: PM Agent`로 바꾸고 멈춘다.
+5. 기본 workflow에서 결과가 `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`, `target_agent: PM Agent`로 바꾸고 PM Agent에게 인계한다. 다른 workflow가 명시적으로 다른 전이를 정하면 해당 workflow를 따른다.
 6. 결과가 `FAIL`이면 `rework_requested`로 바꾼다.
 7. 외부 요인으로 검증할 수 없으면 `blocked`로 바꾼다.
 8. lock을 비운다.
@@ -254,7 +254,7 @@ lock_session:
 lock_timeout_minutes: 240
 created_at: 2026-06-29
 updated_at: 2026-06-29
-report_to: .ai_project/reports/T-20260629-001_dev-report.md
+report_to: .ai_project/reports/T-20260629-001_task-report.md
 qa_to: .ai_project/qa/T-20260629-001_qa-report.md
 ---
 ```
@@ -314,7 +314,7 @@ Development Agent에게:
 ```text
 .ai/task_queue.md와 .ai_project/current_context.md를 확인하고,
 내 역할에 맞는 approved Task가 있으면 하나만 선택해서 진행해줘.
-완료 후 개발 보고서를 작성하고 ready_for_qa로 넘겨줘.
+완료 후 작업 보고서를 작성하고 ready_for_qa로 넘겨줘.
 ```
 
 QA Agent에게:
@@ -352,6 +352,7 @@ AI Ops Agent에게:
 | `.ai/`에 프로젝트 진행 기록을 남김 | 프로젝트별 기록은 `.ai_project/`에 둔다 |
 | `proposed` Task를 Development Agent가 실행함 | `approved_by`가 비어 있으면 실행하지 않는다 |
 | QA 통과를 바로 `done`으로 처리함 | QA는 `qa_passed`, PM이 `done` 확정 |
+| 다음 담당 Agent 단계까지 이어서 처리함 | 기본 workflow에서는 한 Agent가 한 번에 한 단계만 전이하고, workflow가 명시적으로 허용한 경우에만 연속 전이를 수행한다 |
 | `task_board.md`만 보고 작업함 | 실행 기준은 항상 `.ai_project/tasks/`의 Task 파일 |
 | 여러 Task를 동시에 진행함 | 한 Agent는 한 번에 하나의 Task만 진행 |
 | 기존 프로젝트 문서를 템플릿으로 덮어씀 | 기존 문서는 source of truth로 유지 |
@@ -379,7 +380,7 @@ Task 종료 전:
 
 - Task 상태가 다음 단계로 갱신됐다.
 - lock이 비워졌다.
-- 개발 보고 또는 QA 보고가 작성됐다.
+- 작업 보고 또는 QA 보고가 작성됐다.
 - `task_board.md` 요약이 필요한 경우 갱신됐다.
 - 남은 리스크와 사용자 결정 항목이 분리됐다.
 
