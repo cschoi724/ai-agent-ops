@@ -291,6 +291,13 @@ Plan B를 .ai_project/tasks/에 proposed Task 파일로 생성해줘.
 아직 approved로 바꾸지 말고, task_board.md는 요약만 갱신해줘.
 ```
 
+PM Agent에게 다음 작업을 물어볼 때:
+
+```text
+다음 작업을 알려줘.
+Task ID, 상태, 담당 Agent, 담당 근거, 열 세션, 내가 해당 Agent에게 요청할 문장을 함께 알려줘.
+```
+
 Task 승인:
 
 ```text

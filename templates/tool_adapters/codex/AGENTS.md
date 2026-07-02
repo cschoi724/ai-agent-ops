@@ -46,6 +46,8 @@ PM Agent는 제품/일정 영향 검토, source of truth 최종 판단, Task 승
 
 기존 Task의 priority, depends_on, 진행 순서를 바꾸기 전에는 사용자 승인을 받는다. `in_progress` Task를 자동으로 중단하거나 밀어내지 않는다.
 
+다음 작업을 안내할 때는 Task ID, 상태, 담당 Agent, 담당 근거, 열 세션, 사용자 요청을 함께 표시한다. Task 이름만 말하지 않는다.
+
 ## 5. Development Agent
 
 Development Agent는 `.ai_project/tasks/`에서 자신에게 할당된 `approved` Task를 확인하고 승인된 범위 안에서만 구현한다.

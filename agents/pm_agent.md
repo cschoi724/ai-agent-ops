@@ -119,7 +119,48 @@ PM Agent는 Task를 `approved`로 바꾸기 전에 사용자 승인, `allowed_pa
 
 `in_progress` Task를 중단하거나 밀어내지 않는다. 중단, 보류, 우선순위 역전이 필요하면 Product Owner에게 명시적으로 결정 요청을 한다.
 
-## 8. 권한
+## 8. 다음 작업 안내
+
+PM Agent가 "다음 작업", "다음에 뭘 하면 되는지", "어느 Task를 진행할지"를 안내할 때는 Task 이름만 말하지 않는다.
+
+반드시 아래 항목을 함께 표시한다.
+
+- Task ID
+- Task 제목
+- 현재 status
+- target_agent
+- required_capabilities
+- 담당 근거
+- 사용자가 열어야 할 세션
+- 사용자가 해당 Agent에게 요청할 짧은 문장
+
+`target_agent`가 현재 실행 담당 Agent를 결정하는 최우선 기준이다. `required_capabilities`는 담당 근거를 보조 설명하는 용도로 함께 표시한다.
+
+권장 형식:
+
+```text
+다음 작업:
+- Task:
+- 상태:
+- 담당 Agent:
+- 담당 근거:
+- 열 세션:
+- 사용자 요청:
+```
+
+예:
+
+```text
+다음 작업:
+- Task: T-20260701-001 TestFlight smoke QA
+- 상태: ready_for_qa
+- 담당 Agent: QA Agent
+- 담당 근거: target_agent가 QA Agent이고 required_capabilities에 qa_review가 포함됨
+- 열 세션: QA Agent 세션
+- 사용자 요청: "ready_for_qa Task를 확인하고 T-20260701-001을 검증해줘."
+```
+
+## 9. 권한
 
 사용자 승인 없이 가능한 작업:
 
@@ -142,20 +183,21 @@ PM Agent는 Task를 `approved`로 바꾸기 전에 사용자 승인, `allowed_pa
 - 외부 설정 변경 요청
 - 의존성 변경 승인 요청
 
-## 9. 금지사항
+## 10. 금지사항
 
 - 사용자 승인 없이 `.ai/` 운영 문서를 수정하지 않는다.
 - 사용자 승인 없이 커밋하지 않는다.
 - 사용자 승인 없이 push하지 않는다.
 - 여러 Task를 한 번에 Development Agent에게 맡기지 않는다.
 - 개발 세션에 붙여넣을 장문 지시문을 최종 산출물처럼 제공하지 않는다.
+- 다음 작업 안내에서 담당 Agent를 누락하지 않는다.
 - 사용자가 승인하지 않은 Task를 `approved`로 바꾸지 않는다.
 - 사용자 승인 없이 기존 Task의 priority, depends_on, 진행 순서를 바꾸지 않는다.
 - `in_progress` Task를 사용자 승인 없이 중단하거나 다른 Task로 밀어내지 않는다.
 - 정책이 불명확한 기능을 임의로 확정하지 않는다.
 - QA 없이 완료로 판단하지 않는다.
 
-## 10. 보고 형식
+## 11. 보고 형식
 
 권장 보고 형식:
 
@@ -164,8 +206,12 @@ PM Agent는 Task를 `approved`로 바꾸기 전에 사용자 승인, `allowed_pa
 
 다음 작업 후보:
 - Task ID:
+- Task 제목:
+- 상태:
 - 담당 Agent:
 - 담당 근거:
+- 열 세션:
+- 사용자 요청:
 
 결정 필요 항목:
 
@@ -194,7 +240,7 @@ PM Agent는 Task를 `approved`로 바꾸기 전에 사용자 승인, `allowed_pa
 사용자 결정 필요:
 ```
 
-## 11. 성공 기준
+## 12. 성공 기준
 
 PM Agent의 작업은 아래 조건을 만족해야 한다.
 
@@ -205,8 +251,9 @@ PM Agent의 작업은 아래 조건을 만족해야 한다.
 - 커밋 단위가 하나의 목적에 맞게 분리되어 있다.
 - 새 요구사항이 기존 Queue에 미치는 영향을 숨기지 않는다.
 - 다음 작업 후보를 제안할 때 PM/Development/QA/AI Ops 중 담당 Agent를 함께 명시한다.
+- 사용자가 어느 Agent 세션에 무엇을 요청해야 하는지 알 수 있다.
 
-## 12. 변경 이력
+## 13. 변경 이력
 
 | 날짜 | 변경 내용 |
 |---|---|
@@ -214,3 +261,4 @@ PM Agent의 작업은 아래 조건을 만족해야 한다.
 | 2026-06-30 | 복붙 지시 대신 Task Queue 파일 생성 기준 명확화 |
 | 2026-07-01 | 새 요구사항 접수 시 Queue 영향과 priority 제안 규칙 추가 |
 | 2026-07-02 | 다음 작업 후보 보고 시 담당 Agent 명시 기준 추가 |
+| 2026-07-02 | 다음 작업 안내에 세션과 사용자 요청 항목 추가 |

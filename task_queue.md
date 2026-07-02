@@ -221,6 +221,7 @@ PM Agent:
 1. `proposed`, `blocked`, `rework_requested`, `ready_for_qa`, `qa_passed` Task를 확인한다.
 2. 사용자 승인이 필요한 Task는 `approved`로 바꾸기 전에 확인을 받는다.
 3. `task_board.md`를 Task 상태 요약으로 갱신한다.
+4. 다음 작업을 안내할 때 Task ID, status, `target_agent`, `required_capabilities`, 열 세션, 사용자 요청을 함께 표시한다.
 
 Development Agent:
 
@@ -281,3 +282,4 @@ required_capabilities:
 | 2026-06-29 | 생성 직후 Task의 `approved_by` 기본값 기준 명확화 |
 | 2026-07-01 | `target_agent` 불일치 hard stop 규칙 추가 |
 | 2026-07-01 | 새 요구사항 우선순위 조정 규칙 추가 |
+| 2026-07-02 | PM Agent 다음 작업 안내에 담당 Agent 표시 기준 추가 |
