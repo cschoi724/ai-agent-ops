@@ -48,6 +48,8 @@ qa_to: .ai_project/qa/T-{{DATE_COMPACT}}-001_qa-report.md
 
 기본 workflow에서는 한 Agent가 한 번의 완료 처리에서 한 단계의 상태 전이만 수행한다. 상태 전이 후 `target_agent`가 다른 Agent가 되면 인계한다. workflow가 명시적으로 연속 전이를 허용하지 않는 한 다음 Agent 단계를 이어서 처리하지 않으며, 다른 Agent 명의의 상태 전이 기록을 대신 작성하지 않는다.
 
+기본 workflow에서 `rework_requested`는 PM Agent가 재개 여부와 범위를 확인하는 상태다. 특정 workflow가 직접 재작업 전이를 명시하면 해당 workflow를 따른다.
+
 1. 
 2. 
 3. 

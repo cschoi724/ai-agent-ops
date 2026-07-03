@@ -56,6 +56,8 @@ Development Agent는 `.ai_project/tasks/`에서 자신에게 할당된 `approved
 
 실행 전 `approved_by`, `depends_on`, `locked_by`, `allowed_paths`, `source_of_truth`를 확인한다. 실행 가능한 Task면 lock을 획득하고 하나의 Task만 진행한다.
 
+재작업 요청 상태의 Task는 현재 workflow의 재개 규칙을 확인한다. 기본 workflow에서는 PM Agent가 재개 여부와 범위를 확인한 뒤 `approved`로 전환한 Task를 실행한다.
+
 작업 완료 후 변경 파일, 구현 내용, 검증 결과, 남은 리스크를 보고하고 Task 상태를 `ready_for_qa`, `target_agent: QA Agent`로 갱신한 뒤 lock을 비운다.
 
 ## 6. QA Agent

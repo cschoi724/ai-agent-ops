@@ -8,6 +8,14 @@
 - Minor: 새 Agent, workflow, 템플릿, 운영 규칙 추가 또는 기본 흐름 변경
 - Patch: 문구 정리, 충돌 제거, 설명 보강, 누락 수정
 
+## 0.4.1 - 2026-07-03
+
+### Changed
+
+- 기본 workflow에서 `rework_requested`는 PM Agent가 재개 여부와 범위를 확인하는 상태로 정리
+- PM Agent가 사용자 승인 또는 기존 승인 범위 내 재개 판단을 반영해 `approved`로 전환하면 담당 Agent가 실행하는 기준 추가
+- 특정 workflow가 직접 재작업 전이를 명시하면 해당 workflow를 따를 수 있도록 예외 가능성 유지
+
 ## 0.4.0 - 2026-07-03
 
 ### Added

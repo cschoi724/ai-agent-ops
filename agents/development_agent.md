@@ -102,6 +102,7 @@ QA Agent 확인 필요 항목:
 - `locked_by`가 비어 있지 않은 Task를 실행하지 않는다.
 - `depends_on`에 완료되지 않은 Task가 있으면 실행하지 않는다.
 - `approved_by`가 비어 있는 Task를 실행하지 않는다.
+- 재작업 요청 상태의 Task는 현재 workflow의 재개 규칙을 확인하고, 기본 workflow에서는 PM Agent의 재개 판단 이후 진행한다.
 - 정책 결정을 임의로 하지 않는다.
 - 사용자 승인 없이 `.ai/` 운영 문서를 수정하지 않는다.
 - 사용자 승인 없이 커밋하지 않는다.
@@ -138,3 +139,4 @@ Development Agent의 작업은 아래 조건을 만족해야 한다.
 | 2026-07-01 | `target_agent` 불일치 실행 금지 규칙 추가 |
 | 2026-07-02 | workflow/status/target_agent 기준 실행 조건 추가 |
 | 2026-07-02 | 작업 완료 보고를 공통 Task Report 기준으로 일반화 |
+| 2026-07-03 | 재작업 요청 상태의 workflow 기반 재개 기준 추가 |
