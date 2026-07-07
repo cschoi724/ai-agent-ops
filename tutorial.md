@@ -92,6 +92,8 @@ PM Agent는 프로젝트 진행관리 세션이다.
 - 새 요구사항과 기존 Task Queue의 우선순위 비교
 - 사용자 승인 필요 항목 정리
 - Task 파일 생성
+  - 실행/판단 대상은 `.ai_project/tasks/active/`
+  - 승인 전 후보와 보류 후보는 `.ai_project/tasks/backlog/`
 - Task 상태를 `proposed`에서 `approved`로 변경
 - 작업 / QA 보고 확인
 - `qa_passed` Task를 `done`으로 확정할지 판단
@@ -121,6 +123,12 @@ Development Agent는 실제 구현 세션이다.
 - `allowed_paths`가 명시됨
 - `depends_on`이 모두 `done`
 - `locked_by`가 비어 있음
+
+Task 확인 위치:
+
+- 기본 실행 후보는 `.ai_project/tasks/active/`에서 찾는다.
+- 기존 프로젝트 호환을 위해 `.ai_project/tasks/` 루트의 legacy Task도 확인할 수 있다.
+- `.ai_project/tasks/backlog/`와 `.ai_project/tasks/archive/`는 실행 후보로 보지 않는다.
 
 작업 흐름:
 
@@ -154,6 +162,12 @@ QA Agent는 검증 세션이다.
 - `report_to` 경로의 작업 보고서가 존재함
 - `depends_on`이 모두 `done`
 - `locked_by`가 비어 있음
+
+Task 확인 위치:
+
+- 기본 QA 후보는 `.ai_project/tasks/active/`에서 찾는다.
+- 기존 프로젝트 호환을 위해 `.ai_project/tasks/` 루트의 legacy Task도 확인할 수 있다.
+- `.ai_project/tasks/backlog/`와 `.ai_project/tasks/archive/`는 검증 후보로 보지 않는다.
 
 작업 흐름:
 
@@ -223,7 +237,28 @@ blocked -> approved
 - `qa_passed`는 QA가 통과했지만 PM 확정 전 상태다.
 - `done`은 PM Agent가 최종 완료로 확정한 상태다.
 
-## 8. Task 작성 예시
+## 8. Task 보관 구조
+
+권장 구조:
+
+```text
+.ai_project/tasks/
+  active/
+  backlog/
+  archive/
+    YYYY-MM/
+```
+
+기준:
+
+- `active/`: 실행 중이거나 실행, 검증, 완료 판단이 필요한 Task
+- `backlog/`: 아직 승인되지 않은 후보, 보류 후보, 가까운 실행 후보
+- `archive/YYYY-MM/`: 완료, 취소, 오래된 후보 Task 보관
+- `.ai_project/tasks/` 루트 파일: 기존 프로젝트 호환을 위한 legacy Task
+
+새 Task는 기본적으로 `active/` 또는 `backlog/`에 만든다. 기존 루트 Task를 즉시 이동할 필요는 없고, 별도 정리 작업에서 필요할 때만 보관 위치를 바꾼다.
+
+## 9. Task 작성 예시
 
 PM Agent는 `.ai/templates/tasks/task.md`를 기준으로 Task를 만든다.
 
@@ -269,7 +304,7 @@ target_agent: Development Agent
 
 Development Agent는 승인 전 Task를 실행하지 않는다.
 
-## 9. 사람이 Agent에게 말하는 방식
+## 10. 사람이 Agent에게 말하는 방식
 
 PM Agent에게:
 
@@ -334,7 +369,7 @@ AI Ops Agent에게:
 제품 Task 상태는 변경하지 말고, 운영 이슈와 마이그레이션 계획만 문서화해줘.
 ```
 
-## 10. 커밋과 Push
+## 11. 커밋과 Push
 
 기본 기준:
 
@@ -345,7 +380,7 @@ AI Ops Agent에게:
 
 초기 마이그레이션 또는 운영 실험 단계에서는 `.ai_project/`를 로컬 전용으로 둘 수 있다. 이 경우 사유와 재검토 조건을 migration 문서 또는 `.ai_project/ops_decisions.md`에 기록한다.
 
-## 11. 자주 생기는 실수
+## 12. 자주 생기는 실수
 
 | 실수 | 방지 기준 |
 |---|---|
@@ -354,10 +389,11 @@ AI Ops Agent에게:
 | QA 통과를 바로 `done`으로 처리함 | QA는 `qa_passed`, PM이 `done` 확정 |
 | 다음 담당 Agent 단계까지 이어서 처리함 | 기본 workflow에서는 한 Agent가 한 번에 한 단계만 전이하고, workflow가 명시적으로 허용한 경우에만 연속 전이를 수행한다 |
 | `task_board.md`만 보고 작업함 | 실행 기준은 항상 `.ai_project/tasks/`의 Task 파일 |
+| archive에서 실행 후보를 찾음 | 실행 후보는 기본적으로 `tasks/active/`와 legacy 루트 Task에서 찾는다 |
 | 여러 Task를 동시에 진행함 | 한 Agent는 한 번에 하나의 Task만 진행 |
 | 기존 프로젝트 문서를 템플릿으로 덮어씀 | 기존 문서는 source of truth로 유지 |
 
-## 12. 최소 운영 체크리스트
+## 13. 최소 운영 체크리스트
 
 프로젝트 초기화 전:
 
@@ -369,7 +405,7 @@ AI Ops Agent에게:
 
 Task 시작 전:
 
-- Task가 `.ai_project/tasks/`에 있다.
+- Task가 `.ai_project/tasks/active/` 또는 legacy 루트 Task 위치에 있다.
 - `status`와 `approved_by`가 실행 가능 상태다.
 - `allowed_paths`가 명확하다.
 - `source_of_truth`가 명확하다.
@@ -384,9 +420,10 @@ Task 종료 전:
 - `task_board.md` 요약이 필요한 경우 갱신됐다.
 - 남은 리스크와 사용자 결정 항목이 분리됐다.
 
-## 13. 변경 이력
+## 14. 변경 이력
 
 | 날짜 | 변경 내용 |
 |---|---|
+| 2026-07-07 | Task active/backlog/archive 보관 구조 추가 |
 | 2026-06-29 | AI Agent Ops 튜토리얼 v1 작성 |
 | 2026-07-01 | AI Ops Agent와 운영 마이그레이션 흐름 추가 |

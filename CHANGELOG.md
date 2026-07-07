@@ -8,6 +8,17 @@
 - Minor: 새 Agent, workflow, 템플릿, 운영 규칙 추가 또는 기본 흐름 변경
 - Patch: 문구 정리, 충돌 제거, 설명 보강, 누락 수정
 
+## 0.5.0 - 2026-07-07
+
+### Added
+
+- `.ai_project/tasks/active/`, `backlog/`, `archive/YYYY-MM/` Task 보관 구조 기준 추가
+- 기존 `.ai_project/tasks/` 루트 Task를 legacy Task로 인정하는 호환 규칙 추가
+
+### Changed
+
+- PM/Development/QA Agent의 Task 탐색 기준을 active 우선, legacy 호환, backlog/archive 제한 탐색으로 정리
+
 ## 0.4.1 - 2026-07-03
 
 ### Changed

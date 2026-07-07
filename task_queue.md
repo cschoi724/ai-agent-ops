@@ -180,19 +180,40 @@ depends_on:
 - PM Agent는 우선순위 변경 이유와 기존 Queue 영향을 함께 보고한다.
 - Development Agent와 QA Agent는 PM Agent가 승인한 상태와 priority 기준으로만 실행한다.
 
-## 9. Task 파일 위치
+## 9. Task 파일 위치와 보관 구조
 
-Task 파일은 아래 형식을 권장한다.
-
-```text
-.ai_project/tasks/T-YYYYMMDD-001_task-slug.md
-```
-
-예:
+새 프로젝트의 Task 파일은 아래 구조를 권장한다.
 
 ```text
-.ai_project/tasks/T-20260629-001_ai-agent-ops-migration.md
+.ai_project/tasks/
+  active/
+  backlog/
+  archive/
+    YYYY-MM/
 ```
+
+역할:
+
+| 경로 | 용도 |
+|---|---|
+| `.ai_project/tasks/active/` | 실행 중이거나 실행/검증/완료 판단이 필요한 Task |
+| `.ai_project/tasks/backlog/` | 아직 승인되지 않은 후보, 보류 후보, 가까운 실행 후보 |
+| `.ai_project/tasks/archive/YYYY-MM/` | 완료, 취소, 오래된 후보 Task 보관 |
+| `.ai_project/tasks/` 루트 | 기존 프로젝트 호환용 legacy 위치 |
+
+파일명은 아래 형식을 권장한다.
+
+```text
+T-YYYYMMDD-001_task-slug.md
+```
+
+새 Task 생성 위치:
+
+- `approved`, `in_progress`, `ready_for_qa`, `qa_in_progress`, `qa_passed`, `rework_requested`, `blocked`처럼 실행 또는 판단 대상이면 `active/`에 둔다.
+- `proposed` 또는 보류 후보는 `backlog/`에 둔다.
+- `done`, `cancelled`, 오래된 `proposed`는 별도 정리 작업에서 `archive/YYYY-MM/`로 이동할 수 있다.
+- 기존 프로젝트에 이미 `.ai_project/tasks/` 루트 파일이 있으면 바로 이동하지 않고 legacy Task로 인정한다.
+- archive 이동은 상태 변경이 아니라 보관 위치 변경이다. 이동 전후에도 Task ID는 유지한다.
 
 ## 10. Task 메타데이터
 
@@ -236,29 +257,36 @@ qa_to: .ai_project/qa/T-YYYYMMDD-001_qa-report.md
 
 PM Agent:
 
-1. `proposed`, `blocked`, `rework_requested`, `ready_for_qa`, `qa_passed` Task를 확인한다.
-2. 사용자 승인이 필요한 Task는 `approved`로 바꾸기 전에 확인을 받는다.
-3. `task_board.md`를 Task 상태 요약으로 갱신한다.
-4. 다음 작업을 안내할 때 Task ID, workflow, status, `target_agent`, `required_capabilities`, 열 세션, 사용자 요청을 함께 표시한다.
+1. `active/`를 먼저 확인하고, 후보 정리가 필요하면 `backlog/`를 확인한다.
+2. 기존 프로젝트 호환을 위해 `.ai_project/tasks/` 루트의 legacy Task도 함께 확인할 수 있다.
+3. `archive/`는 히스토리, `depends_on`, 감사 목적이 있을 때만 확인한다.
+4. `proposed`, `blocked`, `rework_requested`, `ready_for_qa`, `qa_passed` Task를 확인한다.
+5. 사용자 승인이 필요한 Task는 `approved`로 바꾸기 전에 확인을 받는다.
+6. `task_board.md`를 Task 상태 요약으로 갱신한다.
+7. 다음 작업을 안내할 때 Task ID, workflow, status, `target_agent`, `required_capabilities`, 열 세션, 사용자 요청을 함께 표시한다.
 
 Development Agent:
 
-1. `workflow`가 Development Agent 전이를 허용하고 `target_agent: Development Agent`인 Task를 찾는다.
+1. `active/`에서 `workflow`가 Development Agent 전이를 허용하고 `target_agent: Development Agent`인 Task를 찾는다.
 2. `target_agent`가 다른 Agent면 실행하지 않는다.
-3. 우선순위와 의존성 기준으로 하나만 선택한다.
-4. 작업 시작 전 lock을 획득하고 Task 상태를 `in_progress`로 바꾼다.
-5. 완료 후 작업 보고서를 `reports/`에 작성하고 Task 상태를 `ready_for_qa`, `target_agent: QA Agent`로 바꾸며 lock을 비운다.
+3. 기존 프로젝트 호환을 위해 `.ai_project/tasks/` 루트의 legacy Task도 함께 확인할 수 있다.
+4. `backlog/`와 `archive/`는 실행 후보로 보지 않는다.
+5. 우선순위와 의존성 기준으로 하나만 선택한다.
+6. 작업 시작 전 lock을 획득하고 Task 상태를 `in_progress`로 바꾼다.
+7. 완료 후 작업 보고서를 `reports/`에 작성하고 Task 상태를 `ready_for_qa`, `target_agent: QA Agent`로 바꾸며 lock을 비운다.
 
 QA Agent:
 
-1. `workflow`가 QA Agent 전이를 허용하고 `target_agent: QA Agent`인 Task를 찾는다.
+1. `active/`에서 `workflow`가 QA Agent 전이를 허용하고 `target_agent: QA Agent`인 Task를 찾는다.
 2. `target_agent`가 다른 Agent면 실행하지 않는다.
-3. 우선순위와 의존성 기준으로 하나만 선택한다.
-4. 검증 시작 전 lock을 획득하고 Task 상태를 `qa_in_progress`로 바꾼다.
-5. 검증 결과에 따라 QA 보고서를 `qa/`에 작성한다.
-6. 기본 workflow에서 결과가 `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`, `target_agent: PM Agent`로 바꾸고 PM Agent에게 인계한다. 다른 workflow가 명시적으로 다른 전이를 정하면 해당 workflow를 따른다.
-7. 결과가 `FAIL`이면 `rework_requested`, `BLOCKED`면 `blocked`로 갱신한다.
-8. 완료 또는 차단 처리 시 lock을 비운다.
+3. 기존 프로젝트 호환을 위해 `.ai_project/tasks/` 루트의 legacy Task도 함께 확인할 수 있다.
+4. `backlog/`와 `archive/`는 검증 후보로 보지 않는다.
+5. 우선순위와 의존성 기준으로 하나만 선택한다.
+6. 검증 시작 전 lock을 획득하고 Task 상태를 `qa_in_progress`로 바꾼다.
+7. 검증 결과에 따라 QA 보고서를 `qa/`에 작성한다.
+8. 기본 workflow에서 결과가 `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`, `target_agent: PM Agent`로 바꾸고 PM Agent에게 인계한다. 다른 workflow가 명시적으로 다른 전이를 정하면 해당 workflow를 따른다.
+9. 결과가 `FAIL`이면 `rework_requested`, `BLOCKED`면 `blocked`로 갱신한다.
+10. 완료 또는 차단 처리 시 lock을 비운다.
 
 ## 12. Workflow Routing
 
@@ -310,3 +338,4 @@ required_capabilities:
 | 2026-07-02 | `report_to` 기본값을 공통 Task Report로 일반화 |
 | 2026-07-02 | 기본 workflow의 단일 상태 전이와 workflow별 예외 가능성 추가 |
 | 2026-07-03 | 기본 workflow의 `rework_requested` 재개 판단 기준 추가 |
+| 2026-07-07 | Task active/backlog/archive 보관 구조 기준 추가 |

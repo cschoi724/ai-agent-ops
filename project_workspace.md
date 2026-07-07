@@ -77,6 +77,10 @@ git clone https://github.com/cschoi724/ai-agent-ops.git .ai
   agent_registry.md
   current_context.md
   tasks/
+    active/
+    backlog/
+    archive/
+      YYYY-MM/
   task_board.md
   source_of_truth.md
   ops_decisions.md
@@ -106,6 +110,9 @@ AI Ops Agent가 생성할 수 있는 기본 파일:
 .ai_project/agent_registry.md
 .ai_project/current_context.md
 .ai_project/tasks/
+.ai_project/tasks/active/
+.ai_project/tasks/backlog/
+.ai_project/tasks/archive/
 .ai_project/task_board.md
 .ai_project/source_of_truth.md
 .ai_project/ops_decisions.md
@@ -116,6 +123,13 @@ AI Ops Agent가 생성할 수 있는 기본 파일:
 .ai_project/qa/
 .ai_project/release/
 ```
+
+Task 보관 기준:
+
+- `active/`: 실행 중이거나 실행/검증/완료 판단이 필요한 Task
+- `backlog/`: 아직 승인되지 않은 후보, 보류 후보, 가까운 실행 후보
+- `archive/YYYY-MM/`: 완료, 취소, 오래된 후보 Task 보관
+- 기존 프로젝트의 `.ai_project/tasks/` 루트 파일은 legacy Task로 인정하고, 실제 이동은 별도 정리 작업으로 수행한다.
 
 기본 파일 내용은 `.ai/templates/ai_project/`를 기준으로 만든다.
 
@@ -173,3 +187,4 @@ Agent는 아래 순서로 문서를 해석한다.
 | 2026-06-29 | `.ai_project/` 저장소 포함 기본값과 초기 예외 기준 정리 |
 | 2026-07-01 | `.ai_project/` 초기화와 운영 마이그레이션 주체를 AI Ops Agent로 정리 |
 | 2026-07-02 | `.ai_project/reports/`를 공통 작업 보고 영역으로 일반화 |
+| 2026-07-07 | Task active/backlog/archive 보관 구조 기준 추가 |

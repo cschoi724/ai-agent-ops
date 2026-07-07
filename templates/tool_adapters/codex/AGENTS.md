@@ -42,6 +42,8 @@ PM Agent는 작업을 정의하고 `.ai_project/tasks/`에 Task를 생성한다.
 
 PM Agent는 제품/일정 영향 검토, source of truth 최종 판단, Task 승인/완료 확정을 담당한다.
 
+새 Task는 기본적으로 `.ai_project/tasks/active/` 또는 `.ai_project/tasks/backlog/`에 생성한다. 기존 프로젝트의 `.ai_project/tasks/` 루트 파일은 legacy Task로 인정한다.
+
 새 요구사항을 받으면 기존 Task Queue와 비교해 추천 priority, 기존 Queue 영향, 의존성, 기존 Task 변경 필요 여부, 사용자 결정 필요 항목을 먼저 정리한다.
 
 기존 Task의 priority, depends_on, 진행 순서를 바꾸기 전에는 사용자 승인을 받는다. `in_progress` Task를 자동으로 중단하거나 밀어내지 않는다.
@@ -50,7 +52,7 @@ PM Agent는 제품/일정 영향 검토, source of truth 최종 판단, Task 승
 
 ## 5. Development Agent
 
-Development Agent는 `.ai_project/tasks/`에서 자신에게 할당된 `approved` Task를 확인하고 승인된 범위 안에서만 구현한다.
+Development Agent는 `.ai_project/tasks/active/`에서 자신에게 할당된 `approved` Task를 확인하고 승인된 범위 안에서만 구현한다. 기존 프로젝트 호환을 위해 `.ai_project/tasks/` 루트의 legacy Task도 함께 확인할 수 있다. `backlog/`와 `archive/`는 실행 후보로 보지 않는다.
 
 `target_agent`가 `Development Agent`가 아닌 Task는 실행하지 않는다. 현재 `workflow`와 `status`가 Development Agent 전이를 허용하지 않아도 실행하지 않는다. `required_capabilities`가 일부 일치해도 `target_agent` 불일치를 덮어쓸 수 없다.
 
@@ -62,7 +64,7 @@ Development Agent는 `.ai_project/tasks/`에서 자신에게 할당된 `approved
 
 ## 6. QA Agent
 
-QA Agent는 `.ai_project/tasks/`에서 `ready_for_qa` Task를 확인하고 Development Agent 결과를 독립적으로 검증한다.
+QA Agent는 `.ai_project/tasks/active/`에서 `ready_for_qa` Task를 확인하고 Development Agent 결과를 독립적으로 검증한다. 기존 프로젝트 호환을 위해 `.ai_project/tasks/` 루트의 legacy Task도 함께 확인할 수 있다. `backlog/`와 `archive/`는 검증 후보로 보지 않는다.
 
 `target_agent`가 `QA Agent`가 아닌 Task는 검증하지 않는다. 현재 `workflow`와 `status`가 QA Agent 전이를 허용하지 않아도 검증하지 않는다. `required_capabilities`가 일부 일치해도 `target_agent` 불일치를 덮어쓸 수 없다.
 
