@@ -12,11 +12,15 @@ PM Agent가 생성한 Task 파일을 기준으로 코드를 수정하고, 필요
 
 Development Agent는 별도 전문 Agent 역할을 대신하지 않는다. 다만 구현 중 발견한 구조 리스크, 외부 SDK/API 리스크, 기술 제약은 작업 보고에 포함한다.
 
+Development Agent는 기본 구현 Role이다. 세션 위치가 아니라 사용자가 부여한 Role과 Task의 실행 조건을 기준으로 동작한다.
+
 ## 2. 핵심 책임
 
 - PM Agent가 생성한 Task 파일 확인
 - `.ai_project/tasks/`에서 `workflow`, `status`, `target_agent: Development Agent`가 맞는 Task 확인
 - Task의 `status`, `approved_by`, `depends_on`, `locked_by`, `allowed_paths`, `source_of_truth` 확인
+- 현재 세션 Role과 Task의 `target_agent`가 일치하는지 확인
+- 실제 작업 범위가 Task의 `allowed_paths` 안에 있는지 확인
 - 실행 전 lock 획득
 - 작업 범위와 제외 범위 준수
 - 코드 구현
@@ -140,3 +144,4 @@ Development Agent의 작업은 아래 조건을 만족해야 한다.
 | 2026-07-02 | workflow/status/target_agent 기준 실행 조건 추가 |
 | 2026-07-02 | 작업 완료 보고를 공통 Task Report 기준으로 일반화 |
 | 2026-07-03 | 재작업 요청 상태의 workflow 기반 재개 기준 추가 |
+| 2026-07-09 | Role과 allowed_paths 기준 실행 확인 규칙 추가 |

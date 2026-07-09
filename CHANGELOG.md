@@ -8,6 +8,14 @@
 - Minor: 새 Agent, workflow, 템플릿, 운영 규칙 추가 또는 기본 흐름 변경
 - Patch: 문구 정리, 충돌 제거, 설명 보강, 누락 수정
 
+## 0.5.1 - 2026-07-09
+
+### Changed
+
+- Agent Role은 세션 시작 시 부여하고, Task 실행 가능 여부는 Role, workflow, status, target_agent 조합으로 확인하도록 기준 정리
+- 프로젝트 디렉토리 구조는 고정하지 않고, 실제 작업 범위는 `allowed_paths`, 기준 문서는 `source_of_truth`가 결정하도록 문구 보강
+- PM/Development/QA는 기본 Role 예시이며 프로젝트별 workflow에 따라 Role을 추가/삭제할 수 있음을 명시
+
 ## 0.5.0 - 2026-07-07
 
 ### Added

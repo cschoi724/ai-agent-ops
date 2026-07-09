@@ -10,15 +10,16 @@
 
 `.ai_project/tasks/`의 Task 파일은 Agent 실행 지시의 source of truth다. `.ai_project/task_board.md`는 현황 요약판이며, `reports/`, `qa/`는 Task 진행 과정의 보조 기록이다.
 
-Task 실행 흐름은 Agent별 고정 권한보다 Task의 `workflow`, `status`, `target_agent` 조합을 우선한다.
+Task 실행 흐름은 Agent별 고정 권한보다 세션 Role과 Task의 `workflow`, `status`, `target_agent` 조합을 우선한다.
 
 ## 2. 기본 원칙
 
-- PM Agent는 사용자 승인 없이 실행 가능한 Task를 만들지 않는다.
-- Development Agent와 QA Agent는 세션 시작 또는 재개 시 `.ai_project/current_context.md`와 `.ai_project/tasks/`를 확인한다.
+- Agent Role은 세션 시작 시 사용자가 부여한다.
+- PM/Development/QA Agent는 기본 운영 Role 예시이며, 프로젝트별 workflow에 따라 Role은 추가, 삭제, 분리될 수 있다.
+- Agent는 세션 시작 또는 재개 시 `.ai_project/current_context.md`와 `.ai_project/tasks/`를 확인한다.
 - `workflow`는 Task의 상태 전이 규칙을 정한다.
 - 기존 Task에 `workflow`가 없으면 `type` 값을 같은 이름의 workflow로 해석한다.
-- `target_agent`는 현재 `status`에서 이 Task를 처리할 Agent를 뜻한다.
+- `target_agent`는 현재 `status`에서 이 Task를 처리할 Role 또는 Agent 이름을 뜻한다.
 - Agent는 Task의 `workflow`에 정의된 현재 `status`의 허용 전이만 수행한다.
 - Agent는 작업 완료 시 `status`와 `target_agent`를 workflow에 정의된 다음 처리 상태로 갱신한다.
 - 기본 workflow에서는 Agent가 한 번의 완료 처리에서 한 단계의 상태 전이만 수행한다.
@@ -31,8 +32,8 @@ Task 실행 흐름은 Agent별 고정 권한보다 Task의 `workflow`, `status`,
 - `required_capabilities`는 `target_agent`가 현재 Agent와 일치한 뒤 추가 조건으로 확인한다. `target_agent`가 비어 있거나 `any`인 경우에만 capability 기준으로 라우팅한다.
 - 실행 가능한 Task는 `status: approved` 또는 `status: ready_for_qa`처럼 명확한 상태를 가져야 한다.
 - 실행 가능한 Task는 `approved_by`가 비어 있지 않아야 한다.
-- 기본 workflow에서 `rework_requested`는 PM Agent가 재개 여부와 범위를 확인하는 상태다.
-- PM Agent가 사용자 승인 또는 기존 승인 범위 내 재개 판단을 반영해 `approved`로 전환하면 담당 Agent가 실행한다.
+- 기본 workflow에서 `rework_requested`는 검토 Role이 재개 여부와 범위를 확인하는 상태다. 기본 검토 Role은 PM Agent다.
+- 검토 Role이 사용자 승인 또는 기존 승인 범위 내 재개 판단을 반영해 `approved`로 전환하면 담당 Role이 실행한다.
 - 특정 workflow가 `rework_requested`에서 담당 Agent의 직접 재작업을 명시적으로 허용하면 해당 workflow를 따른다.
 - Task는 `depends_on`이 모두 완료된 경우에만 실행한다.
 - Agent는 잠금 필드가 비어 있는 Task만 시작할 수 있다.
@@ -41,7 +42,7 @@ Task 실행 흐름은 Agent별 고정 권한보다 Task의 `workflow`, `status`,
 
 ## 3. Task 상태값
 
-| 상태 | 의미 | 주 담당 |
+| 상태 | 의미 | 기본 담당 Role 예시 |
 |---|---|---|
 | `proposed` | PM Agent가 후보로 제안 | PM Agent |
 | `approved` | 사용자가 진행 승인 | PM Agent |
@@ -56,54 +57,55 @@ Task 실행 흐름은 Agent별 고정 권한보다 Task의 `workflow`, `status`,
 
 ## 4. 허용 상태 전이
 
-Agent는 아래 상태 전이만 수행한다. 이 표에 없는 전이는 PM Agent가 사용자 확인 후 처리한다.
+Agent는 아래 상태 전이만 수행한다. 이 표에 없는 전이는 검토 Role이 사용자 확인 후 처리한다. 기본 검토 Role은 PM Agent다.
 
 | 현재 상태 | 다음 상태 | 수행 주체 | 조건 |
 |---|---|---|---|
-| `proposed` | `approved` | PM Agent | 사용자 승인 완료, workflow에 맞는 첫 `target_agent` 지정 |
+| `proposed` | `approved` | 검토 Role | 사용자 승인 완료, workflow에 맞는 첫 `target_agent` 지정 |
 | `approved` | `in_progress` | 현재 `target_agent` | 실행 가능 조건 충족, lock 획득 |
 | `in_progress` | `ready_for_qa` | 현재 `target_agent` | 작업 보고 작성 완료, workflow에 맞는 QA 단계 `target_agent`로 인계 |
 | `ready_for_qa` | `qa_in_progress` | QA Agent 또는 workflow 지정 Agent | QA 가능 조건 충족, lock 획득 |
 | `qa_in_progress` | `qa_passed` | QA Agent 또는 workflow 지정 Agent | `PASS` 또는 `PASS_WITH_RISK` QA 보고 작성 완료, lock 해제, `target_agent: PM Agent`로 인계 |
-| `qa_passed` | `done` | PM Agent | QA 통과 결과 검토 후 PM 확정 |
-| `qa_in_progress` | `rework_requested` | QA Agent / PM Agent | 수정 필요 |
-| `qa_passed` | `rework_requested` | PM Agent | PM 검토 중 수정 필요 확인 |
-| `rework_requested` | `approved` | PM Agent | 재작업 범위 확정 및 사용자 승인 |
-| `blocked` | `approved` | PM Agent | 차단 해소 및 사용자 승인 |
+| `qa_passed` | `done` | 완료 확정 Role | QA 통과 결과 검토 후 완료 확정 |
+| `qa_in_progress` | `rework_requested` | 검증 Role / 검토 Role | 수정 필요 |
+| `qa_passed` | `rework_requested` | 검토 Role | 검토 중 수정 필요 확인 |
+| `rework_requested` | `approved` | 검토 Role | 재작업 범위 확정 및 사용자 승인 |
+| `blocked` | `approved` | 검토 Role | 차단 해소 및 사용자 승인 |
 | `approved` | `blocked` | 담당 Agent | 외부 차단 발견 |
 | `in_progress` | `blocked` | 담당 Agent | 외부 차단 발견 |
-| `ready_for_qa` | `blocked` | QA Agent | QA 차단 발견 |
-| `proposed` | `cancelled` | PM Agent | 사용자 또는 PM 취소 |
-| `approved` | `cancelled` | PM Agent | 사용자 또는 PM 취소 |
-| `blocked` | `cancelled` | PM Agent | 사용자 또는 PM 취소 |
+| `ready_for_qa` | `blocked` | 검증 Role | QA 차단 발견 |
+| `proposed` | `cancelled` | 검토 Role | 사용자 또는 검토 Role 취소 |
+| `approved` | `cancelled` | 검토 Role | 사용자 또는 검토 Role 취소 |
+| `blocked` | `cancelled` | 검토 Role | 사용자 또는 검토 Role 취소 |
 
 ## 5. 실행 가능 조건
 
-Development Agent가 Task를 실행하려면 아래 조건을 모두 만족해야 한다.
+Agent가 Task를 실행하려면 아래 공통 조건을 모두 만족해야 한다.
 
-- `workflow`가 현재 `status`에서 Development Agent의 전이를 허용함
-- 기본 구현 workflow에서는 `status: approved`
-- 기본 workflow의 재작업인 경우 PM Agent가 사용자 승인 또는 기존 승인 범위 내 재개 판단을 반영해 `approved`로 전환한 기록이 있음
+- 현재 세션 Role이 사용자에 의해 부여됨
+- `workflow`가 현재 `status`에서 현재 Role의 전이를 허용함
 - `approved_by`가 비어 있지 않음
-- `target_agent: Development Agent`
-- `required_capabilities`가 Development Agent의 capability와 일치
+- `target_agent`가 현재 Role과 일치함
+- `required_capabilities`가 현재 Role의 capability와 일치함
 - `allowed_paths`가 명시됨
 - `depends_on`에 있는 Task가 모두 `done`
 - `locked_by`가 비어 있음
 
-QA Agent가 Task를 실행하려면 아래 조건을 모두 만족해야 한다.
+검증 Role이 Task를 실행하려면 아래 조건을 추가로 확인한다.
 
-- `workflow`가 현재 `status`에서 QA Agent의 전이를 허용함
-- 기본 구현 workflow에서는 `status: ready_for_qa`
-- `target_agent: QA Agent`
-- `required_capabilities`가 QA Agent의 capability와 일치
+- `workflow`가 현재 `status`에서 검증 전이를 허용함
 - 작업 보고서가 `report_to` 경로에 존재함
-- `depends_on`에 있는 Task가 모두 `done`
-- `locked_by`가 비어 있음
 
-`target_agent`가 비어 있거나 `any`인 Task는 예외적으로 `required_capabilities` 기준으로 담당 Agent를 판단할 수 있다. 이 경우에도 담당 Agent가 애매하면 실행하지 않고 PM Agent에게 라우팅 확인을 요청한다.
+기본 구현 workflow 예시:
 
-PM Agent가 `approved` 상태로 변경하려면 아래 조건을 확인한다.
+- 구현 Role은 보통 `status: approved` Task를 `in_progress`로 전환한다.
+- 검증 Role은 보통 `status: ready_for_qa` Task를 `qa_in_progress`로 전환한다.
+- 완료 확정 Role은 보통 `qa_passed` Task를 `done`으로 확정한다.
+- 기본 PM/Development/QA 구성에서는 PM Agent가 검토/완료 확정 Role, Development Agent가 구현 Role, QA Agent가 검증 Role이다.
+
+`target_agent`가 비어 있거나 `any`인 Task는 예외적으로 `required_capabilities` 기준으로 담당 Role을 판단할 수 있다. 이 경우에도 담당 Role이 애매하면 실행하지 않고 검토 Role에게 라우팅 확인을 요청한다.
+
+검토 Role이 `approved` 상태로 변경하려면 아래 조건을 확인한다.
 
 - 사용자 승인 또는 Product Owner 승인 기록이 있음
 - 작업 범위와 제외 범위가 명확함
@@ -115,9 +117,9 @@ PM Agent가 `approved` 상태로 변경하려면 아래 조건을 확인한다.
 Agent는 Task를 시작하기 전에 아래 필드를 갱신한다.
 
 ```yaml
-locked_by: Development Agent
+locked_by: <Current Role>
 locked_at: YYYY-MM-DDTHH:mm:ss+09:00
-lock_session: ios-dev-session
+lock_session: session-id
 ```
 
 잠금 규칙:
@@ -125,7 +127,7 @@ lock_session: ios-dev-session
 - `locked_by`가 비어 있지 않으면 다른 Agent는 실행하지 않는다.
 - 같은 Agent라도 이미 `in_progress` 또는 `qa_in_progress` Task가 있으면 새 Task를 시작하지 않는다.
 - 작업을 정상 완료하면 다음 상태로 넘기면서 lock을 비운다.
-- Agent 세션이 중단되어 lock이 오래 남으면 PM Agent가 사용자 확인 후 lock을 해제한다.
+- Agent 세션이 중단되어 lock이 오래 남으면 검토 Role이 사용자 확인 후 lock을 해제한다.
 - lock 해제 사유는 Task 변경 이력에 기록한다.
 
 권장 stale lock 기준:
@@ -235,9 +237,9 @@ required_capabilities:
   - implementation
 depends_on: []
 allowed_paths:
-  - ios/ippeo/
+  - path/to/project-area/
 source_of_truth:
-  - ios/ippeo/Docs/CURRENT_STATUS.md
+  - docs/current_status.md
 created_by: PM Agent
 approved_by:
 locked_by:
@@ -251,9 +253,22 @@ qa_to: .ai_project/qa/T-YYYYMMDD-001_qa-report.md
 ---
 ```
 
-생성 직후 `proposed` Task의 `target_agent`는 PM Agent로 둔다. PM Agent가 사용자 또는 Product Owner 승인을 확인하면 `status: approved`, `approved_by: Product Owner`, `target_agent: <첫 실행 Agent>`를 함께 갱신한다. Development Agent는 `approved_by`가 비어 있는 Task를 실행하지 않는다.
+생성 직후 `proposed` Task의 `target_agent`는 현재 Task를 검토할 Role로 둔다. PM Agent가 기본 검토 Role이면 `target_agent: PM Agent`로 둘 수 있다.
 
-## 11. Agent별 Queue 확인 규칙
+승인을 확인하면 `status: approved`, `approved_by: Product Owner`, `target_agent: <첫 실행 Role>`를 함께 갱신한다. 실행 Role은 `workflow`, `status`, `target_agent`, `approved_by`, `depends_on`, `locked_by`를 확인하고, `allowed_paths` 안에서만 작업한다.
+
+## 11. Role별 Queue 확인 규칙
+
+아래 PM/Development/QA는 기본 운영 Role 예시다. 프로젝트별 workflow에 따라 Role은 추가, 삭제, 분리될 수 있다.
+
+공통 기준:
+
+1. Agent는 현재 세션에 부여된 Role을 먼저 확인한다.
+2. `active/`에서 현재 Role이 `workflow`와 `status`상 처리 가능한 Task를 찾는다.
+3. Task의 `target_agent` 또는 프로젝트별 동등 필드가 현재 Role과 맞는지 확인한다.
+4. `approved_by`, `depends_on`, `locked_by`, `allowed_paths`, `source_of_truth`를 확인한다.
+5. 프로젝트 디렉토리 구조는 고정하지 않는다. 실제 파일 수정, 빌드, 테스트 범위는 `allowed_paths`가 결정한다.
+6. `backlog/`와 `archive/`는 workflow가 별도로 허용하지 않는 한 실행 후보로 보지 않는다.
 
 PM Agent:
 
@@ -267,7 +282,7 @@ PM Agent:
 
 Development Agent:
 
-1. `active/`에서 `workflow`가 Development Agent 전이를 허용하고 `target_agent: Development Agent`인 Task를 찾는다.
+1. 기본 구현 Role로서 `active/`에서 `workflow`가 현재 Role의 전이를 허용하고 `target_agent`가 현재 Role인 Task를 찾는다.
 2. `target_agent`가 다른 Agent면 실행하지 않는다.
 3. 기존 프로젝트 호환을 위해 `.ai_project/tasks/` 루트의 legacy Task도 함께 확인할 수 있다.
 4. `backlog/`와 `archive/`는 실행 후보로 보지 않는다.
@@ -277,32 +292,32 @@ Development Agent:
 
 QA Agent:
 
-1. `active/`에서 `workflow`가 QA Agent 전이를 허용하고 `target_agent: QA Agent`인 Task를 찾는다.
+1. 기본 검증 Role로서 `active/`에서 `workflow`가 현재 Role의 전이를 허용하고 `target_agent`가 현재 Role인 Task를 찾는다.
 2. `target_agent`가 다른 Agent면 실행하지 않는다.
 3. 기존 프로젝트 호환을 위해 `.ai_project/tasks/` 루트의 legacy Task도 함께 확인할 수 있다.
 4. `backlog/`와 `archive/`는 검증 후보로 보지 않는다.
 5. 우선순위와 의존성 기준으로 하나만 선택한다.
 6. 검증 시작 전 lock을 획득하고 Task 상태를 `qa_in_progress`로 바꾼다.
 7. 검증 결과에 따라 QA 보고서를 `qa/`에 작성한다.
-8. 기본 workflow에서 결과가 `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`, `target_agent: PM Agent`로 바꾸고 PM Agent에게 인계한다. 다른 workflow가 명시적으로 다른 전이를 정하면 해당 workflow를 따른다.
+8. 기본 workflow에서 결과가 `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `qa_passed`, `target_agent: <완료 확정 Role>`로 바꾸고 완료 확정 Role에게 인계한다. 기본 PM/Development/QA 구성에서는 PM Agent가 완료 확정 Role이다. 다른 workflow가 명시적으로 다른 전이를 정하면 해당 workflow를 따른다.
 9. 결과가 `FAIL`이면 `rework_requested`, `BLOCKED`면 `blocked`로 갱신한다.
 10. 완료 또는 차단 처리 시 lock을 비운다.
 
 ## 12. Workflow Routing
 
-`target_agent`는 현재 `status`에서 Task 실행 권한의 최우선 라우팅 필드다.
+`target_agent`는 현재 `status`에서 Task 실행 권한의 최우선 라우팅 필드다. 필드명은 호환성을 위해 유지하지만, 값은 현재 Task를 처리할 Role 또는 Agent 이름으로 해석한다.
 
 `workflow`는 `status`와 `target_agent`가 어떻게 다음 처리 상태로 갱신되는지 정한다. 새 Agent를 추가할 때는 Agent 문서에 고정 권한표를 크게 늘리기보다, 필요한 workflow에 해당 Agent가 맡을 상태 전이와 전이 후 `target_agent`를 추가한다.
 
 규칙:
 
-- `target_agent`가 현재 Agent와 다르면 실행하지 않는다.
+- `target_agent`가 현재 세션 Role과 다르면 실행하지 않는다.
 - `status: approved`여도 `target_agent`가 다르면 실행하지 않는다.
 - `status`와 `target_agent`가 맞아도 현재 Task의 `workflow`가 허용하지 않는 다음 전이는 수행하지 않는다.
 - `required_capabilities`가 일부 일치해도 `target_agent` 불일치를 덮어쓸 수 없다.
-- `target_agent`가 비어 있거나 `any`인 경우에만 `required_capabilities`로 담당 Agent를 판단한다.
-- 담당 Agent가 애매하면 실행하지 않고 PM Agent에게 라우팅 확인을 요청한다.
-- 다음 전이 후 `target_agent`가 다른 Agent로 바뀌면, workflow가 명시적으로 연속 전이를 허용하지 않는 한 그 Agent의 단계까지 이어서 처리하지 않는다.
+- `target_agent`가 비어 있거나 `any`인 경우에만 `required_capabilities`로 담당 Role을 판단한다.
+- 담당 Role이 애매하면 실행하지 않고 검토 Role에게 라우팅 확인을 요청한다.
+- 다음 전이 후 `target_agent`가 다른 Role로 바뀌면, workflow가 명시적으로 연속 전이를 허용하지 않는 한 그 Role의 단계까지 이어서 처리하지 않는다.
 - 상태 전이 기록의 `Agent` 값은 실제로 현재 세션에 부여된 역할만 사용한다.
 
 예:

@@ -6,7 +6,7 @@
 
 ## 1. 목적
 
-이 문서는 AI Agent가 PM, Development, QA 역할을 나누어 협업하는 기본 실행 흐름을 정의한다. AI Ops Agent는 이 실행 흐름 밖에서 운영 프로세스를 독립 점검한다.
+이 문서는 AI Agent가 Role을 나누어 협업하는 기본 실행 흐름을 정의한다. PM, Development, QA는 기본 Role 예시이며, AI Ops Agent는 이 실행 흐름 밖에서 운영 프로세스를 독립 점검한다.
 
 `.ai/`는 운영 가이드북과 템플릿 프레임워크이고, 실제 프로젝트별 Task Queue와 협업 기록은 `.ai_project/`에 둔다.
 
@@ -17,15 +17,15 @@
 - `.ai/` 운영 문서는 사용자 승인 없이 수정하지 않는다.
 - 프로젝트별 실행 지시는 `.ai_project/tasks/`에 기록한다.
 - `task_board.md`는 현황 요약판이며 Task 파일을 대체하지 않는다.
-- Task 실행은 Agent별 고정 권한보다 Task의 `workflow`, `status`, `target_agent` 조합을 우선한다.
-- `target_agent`는 현재 `status`에서 Task를 처리할 Agent를 뜻한다.
+- Task 실행은 Agent별 고정 권한보다 세션 Role과 Task의 `workflow`, `status`, `target_agent` 조합을 우선한다.
+- `target_agent`는 현재 `status`에서 Task를 처리할 Role 또는 Agent 이름을 뜻한다.
 - report/QA 문서는 Task 진행 과정의 보조 기록이다.
 - 커밋, push, 배포, 외부 설정 변경은 사용자 승인 후 진행한다.
 - 민감정보를 로그, 문서, 보고서에 남기지 않는다.
 
 ## 3. 기본 Agent 구성
 
-기본 실행 Agent는 아래 3개다. 이 구성은 고정 상한이 아니라 기본 시작점이다.
+기본 실행 Role은 아래 3개다. 이 구성은 고정 상한이 아니라 기본 시작점이다.
 
 | Agent | 역할 문서 | 핵심 책임 |
 |---|---|---|
@@ -41,7 +41,7 @@
 
 AI Ops Agent는 제품 Task 실행 라인에 참여하지 않고 Task 상태를 변경하지 않는다. 운영 이슈는 프로젝트의 `.ai_project/ops_issues.md`에 기록한다.
 
-보안, 문서, 릴리즈, 구조 검토는 초기에는 별도 Agent로 분리하지 않고 PM/Development/QA 책임 안에 포함한다. 운영 중 반복 부담이 생기면 PM Agent가 새 Agent 분리와 capability 위임을 제안한다.
+보안, 문서, 릴리즈, 구조 검토는 초기에는 별도 Agent로 분리하지 않고 PM/Development/QA 책임 안에 포함한다. 운영 중 반복 부담이 생기면 PM Agent가 새 Role 분리와 capability 위임을 제안한다.
 
 ## 4. 기본 흐름
 
@@ -51,10 +51,10 @@ PM creates Task -> Development reads Task Queue -> QA reads ready Task -> PM clo
 
 1. PM Agent가 `.ai_project/tasks/`에 Task를 생성하고 `workflow`를 선택한다.
 2. Product Owner가 진행을 승인하면 PM Agent가 Task 상태를 `approved`로 바꾸고 첫 `target_agent`를 지정한다.
-3. `target_agent`인 Agent가 세션 시작 시 Task Queue에서 자기에게 넘어온 Task를 찾는다.
+3. `target_agent`와 일치하는 Role의 Agent가 세션 시작 시 Task Queue에서 자기에게 넘어온 Task를 찾는다.
 4. Agent는 Task의 `workflow`에 정의된 현재 `status`의 허용 전이만 수행한다.
 5. Agent는 자기 단계가 끝나면 `status`와 `target_agent`를 workflow에 정의된 다음 처리 상태로 갱신한다.
-6. 기본 workflow에서는 Agent가 한 번에 한 단계만 전이하고, 전이 후 `target_agent`가 자신이 아니면 다음 Agent에게 인계한다.
+6. 기본 workflow에서는 Agent가 한 번에 한 단계만 전이하고, 전이 후 `target_agent`가 현재 Role과 다르면 다음 Role에게 인계한다.
 7. QA Agent가 통과 결과를 `qa_passed`와 `target_agent: PM Agent`로 넘기거나 `rework_requested`, `blocked`로 분류한다.
 8. PM Agent가 `done`, 재작업, 차단, 보류 여부를 최종 판단한다.
 9. 특정 workflow가 연속 전이 또는 다른 완료 주체를 명시하면 해당 workflow를 따른다.
@@ -71,7 +71,7 @@ Task Queue 운영 기준은 `.ai/task_queue.md`를 따른다.
 
 ## 6. Workflow 선택
 
-Task 유형별 흐름은 `.ai/workflows/`를 따른다. 새 Agent가 추가되면 Agent별 권한표를 크게 늘리기보다 필요한 workflow에 상태 전이와 전이 후 `target_agent`를 추가한다.
+Task 유형별 흐름은 `.ai/workflows/`를 따른다. 새 Role이나 Agent가 추가되면 Agent별 권한표를 크게 늘리기보다 필요한 workflow에 상태 전이와 전이 후 `target_agent`를 추가한다.
 
 | Task 유형 | Workflow |
 |---|---|

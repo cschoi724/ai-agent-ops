@@ -22,6 +22,12 @@
 | QA Agent | `.ai/agents/qa_agent.md` |
 | AI Ops Agent | `.ai/agents/ai_ops_agent.md` |
 
+Agent Role은 사용자가 세션에 부여한다. PM/Development/QA/AI Ops는 기본 구성 예시이며, 프로젝트별 workflow에 따라 Role은 추가되거나 줄어들 수 있다.
+
+프로젝트 디렉토리 구조는 고정하지 않는다. Agent는 `.ai_project/tasks/`에서 현재 세션 Role이 `workflow`와 `status`상 처리 가능한 Task를 찾고, Task의 `target_agent` 또는 프로젝트별 동등 필드가 현재 Role과 맞는지 확인한다.
+
+실제 파일 수정, 빌드, 테스트 범위는 Task의 `allowed_paths`가 결정하고, 기준 문서는 `source_of_truth`가 결정한다. 현재 작업 디렉토리와 `allowed_paths`가 다르면 작업 전에 기준 경로를 명확히 보고하고 `allowed_paths` 안에서만 작업한다.
+
 ## 3. 프로젝트 상태 확인
 
 프로젝트가 초기화되어 있으면 아래 문서를 확인한다.
@@ -52,7 +58,7 @@ PM Agent는 제품/일정 영향 검토, source of truth 최종 판단, Task 승
 
 ## 5. Development Agent
 
-Development Agent는 `.ai_project/tasks/active/`에서 자신에게 할당된 `approved` Task를 확인하고 승인된 범위 안에서만 구현한다. 기존 프로젝트 호환을 위해 `.ai_project/tasks/` 루트의 legacy Task도 함께 확인할 수 있다. `backlog/`와 `archive/`는 실행 후보로 보지 않는다.
+Development Agent는 기본 구현 Role 예시다. `.ai_project/tasks/active/`에서 현재 Role에 할당된 `approved` Task를 확인하고 승인된 범위 안에서만 구현한다. 기존 프로젝트 호환을 위해 `.ai_project/tasks/` 루트의 legacy Task도 함께 확인할 수 있다. `backlog/`와 `archive/`는 실행 후보로 보지 않는다.
 
 `target_agent`가 `Development Agent`가 아닌 Task는 실행하지 않는다. 현재 `workflow`와 `status`가 Development Agent 전이를 허용하지 않아도 실행하지 않는다. `required_capabilities`가 일부 일치해도 `target_agent` 불일치를 덮어쓸 수 없다.
 
@@ -64,7 +70,7 @@ Development Agent는 `.ai_project/tasks/active/`에서 자신에게 할당된 `a
 
 ## 6. QA Agent
 
-QA Agent는 `.ai_project/tasks/active/`에서 `ready_for_qa` Task를 확인하고 Development Agent 결과를 독립적으로 검증한다. 기존 프로젝트 호환을 위해 `.ai_project/tasks/` 루트의 legacy Task도 함께 확인할 수 있다. `backlog/`와 `archive/`는 검증 후보로 보지 않는다.
+QA Agent는 기본 검증 Role 예시다. `.ai_project/tasks/active/`에서 현재 Role에 할당된 검증 Task를 확인하고 이전 처리 결과를 독립적으로 검증한다. 기존 프로젝트 호환을 위해 `.ai_project/tasks/` 루트의 legacy Task도 함께 확인할 수 있다. `backlog/`와 `archive/`는 검증 후보로 보지 않는다.
 
 `target_agent`가 `QA Agent`가 아닌 Task는 검증하지 않는다. 현재 `workflow`와 `status`가 QA Agent 전이를 허용하지 않아도 검증하지 않는다. `required_capabilities`가 일부 일치해도 `target_agent` 불일치를 덮어쓸 수 없다.
 

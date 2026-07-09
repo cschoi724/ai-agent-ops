@@ -72,6 +72,12 @@ AI Ops Agent는 제품 Task 생성, 승인, 상태 변경, 코드 수정, QA 판
 
 ## 6. 세션별 운영 방식
 
+세션 시작 시 사용자가 Agent Role을 부여한다. PM/Development/QA는 기본 예시 Role이며, 프로젝트별 workflow에 따라 Role은 추가되거나 줄어들 수 있다.
+
+고정 구조는 `.ai/`와 `.ai_project/`뿐이다. 프로젝트 코드와 문서 디렉토리는 프로젝트마다 다를 수 있으므로, 실제 작업 범위는 Task의 `allowed_paths`, 기준 문서는 `source_of_truth`가 결정한다.
+
+Agent는 자신의 Role에 맞는 Task만 처리한다. 실행 가능 여부는 세션 Role, Task의 `workflow`, `status`, `target_agent`, `approved_by`, `depends_on`, `locked_by` 조합으로 판단한다.
+
 ### PM Agent 세션
 
 PM Agent는 프로젝트 진행관리 세션이다.
@@ -266,8 +272,8 @@ PM Agent는 `.ai/templates/tasks/task.md`를 기준으로 Task를 만든다.
 
 ```yaml
 ---
-id: T-20260629-001
-title: Social Login callback payload 계약 정리
+id: T-YYYYMMDD-001
+title: Example feature contract 정리
 status: proposed
 type: docs
 priority: P1
@@ -277,10 +283,10 @@ required_capabilities:
   - implementation
 depends_on: []
 allowed_paths:
-  - ios/ippeo/Docs/
+  - path/to/project-area/
 source_of_truth:
-  - ios/ippeo/Docs/IMPLEMENTATION_PLAN.md
-  - ios/ippeo/Docs/BRIDGE_SPEC.md
+  - docs/implementation_plan.md
+  - docs/feature_spec.md
 created_by: PM Agent
 approved_by:
 locked_by:
@@ -424,6 +430,7 @@ Task 종료 전:
 
 | 날짜 | 변경 내용 |
 |---|---|
+| 2026-07-09 | Role과 allowed_paths 기준 실행 판단 방식 추가 |
 | 2026-07-07 | Task active/backlog/archive 보관 구조 추가 |
 | 2026-06-29 | AI Agent Ops 튜토리얼 v1 작성 |
 | 2026-07-01 | AI Ops Agent와 운영 마이그레이션 흐름 추가 |
