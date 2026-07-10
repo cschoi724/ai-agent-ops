@@ -35,6 +35,7 @@
 ### Changed
 
 - README를 vNext 조직형 운영체계 진입점으로 개정
+- README를 프로젝트 소개, Quick Start, 안전 규칙, 사용 트리거 중심으로 개편
 - 문서 읽기 순서에서 `constitution.md`를 최우선 기준으로 추가
 - `org_model.md`를 Division과 조직 책임 중심으로 정리하고 Team 상세 구성은 `team_model.md`로 분리
 - `project_bootstrap_policy.md`에 단계별 질문 형식, 선택값 기록 규칙, bootstrap 완료 기준 추가
