@@ -50,6 +50,8 @@ write_permission: no
 goal: 단계별 질문 -> Decision Stack 누적 -> 최종 Operating Model Draft 제안
 ```
 
+Bootstrap 시작 후 Claude는 먼저 `빠른 시작`과 `세부 설정` 중 어떤 방식으로 진행할지 묻는다. 파일 생성/수정은 일반 Bootstrap과 동일하게 Apply 승인 후에만 진행한다.
+
 Discovery Phase에서는 파일을 생성하거나 수정하지 않는다. Apply Phase는 사용자가 Operating Model Draft를 승인한 뒤에만 진행한다.
 
 Bootstrap Discovery는 일괄 제안 방식이 아니다. Claude는 한 번에 전체 운영모델을 작성하지 않고, Start Context, Readiness, Product Direction, Operating Mode, Team, Role, Workflow, Ownership, Board, Branch / PR, Source of Truth를 단계별 질문으로 확인한다. 각 답변은 Decision Stack에 누적하고, 필수 결정값이 충분해진 뒤에만 최종 Operating Model Draft와 Apply 승인 질문을 제시한다.

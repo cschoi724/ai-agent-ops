@@ -101,6 +101,25 @@ bootstrap 시작해줘.
 AI 운영체계 초기 구성 시작해줘.
 ```
 
+Fast Track은 bootstrap 진행 중 선택할 수 있는 최소 질문 모드다. 비개발자 또는 처음 사용하는 사용자를 위해 고급 선택지를 한꺼번에 설명하지 않고, 쉬운 질문으로 안전 기본값을 제안한다. 단, Discovery Phase와 Apply 승인 원칙은 동일하게 유지한다.
+
+Fast Track 기본값:
+
+```text
+operating_mode: solo_light
+team_pattern: single_team
+roles: Direction Role, Lead Role, Ops Governance Role
+workflow: skip_scoped_for_simple_tasks
+ownership: path_plus_domain
+coordination: single_active_task
+board: project_board_only
+branch_pr: pending_decision
+release_role: inactive
+source_of_truth: discovered_only_else_unresolved
+```
+
+Fast Track에서 구현 준비가 명확하면 Execution Role과 Verification Role을 활성 후보로 제안한다. 코드 저장소와 Git 전략이 확인되기 전에는 branch/PR 전략을 확정하지 않고 보류한다.
+
 Trigger를 받으면 AI Ops Agent는 아래 기본 계약으로 시작한다.
 
 ```text
@@ -110,6 +129,15 @@ write_permission: no
 goal: 단계별 질문 -> Decision Stack 누적 -> 최종 Operating Model Draft 제안
 ```
 
+Fast Track을 선택하면 아래 계약으로 전환한다.
+
+```text
+role: AI Ops Agent
+mode: Fast Track Discovery Phase
+write_permission: no
+goal: 쉬운 질문 3~5개 -> 안전 기본값 제안 -> Decision Stack Review -> 최종 Operating Model Draft 제안
+```
+
 첫 응답은 짧게 시작한다.
 
 ```text
@@ -117,7 +145,12 @@ AI Ops bootstrap을 Discovery Phase로 시작합니다.
 기준 문서는 `.ai/bootstrap/bootstrap_runbook.md`입니다.
 현재 단계는 자동화 스크립트 실행이 아니라 문서 기반 Discovery입니다.
 먼저 파일은 수정하지 않고 `.ai/`, `AGENTS.md`, `.ai_project/` 존재 여부를 확인한 뒤 단계별 질문으로 운영 구성을 결정하겠습니다.
-각 답변은 Decision Stack에 쌓고, 필수 결정이 모이면 최종 Operating Model Draft를 제안하겠습니다.
+먼저 시작 방식을 고르겠습니다.
+
+1. 빠른 시작: 쉬운 질문 3~5개만으로 안전 기본값을 제안합니다.
+2. 세부 설정: Team, Role, Workflow, Ownership, Board, Branch/PR 등을 단계별로 비교하며 정합니다.
+
+어떤 방식으로 진행할까요?
 ```
 
 첫 스캔 결과에는 아래 항목을 포함한다.
@@ -169,9 +202,18 @@ write_permission:
 AI Ops bootstrap을 시작합니다.
 먼저 Discovery Phase에서는 파일을 수정하지 않고 프로젝트 구조와 운영 후보만 정리합니다.
 
-대상 프로젝트는 현재 저장소인가요, 아니면 다른 경로인가요?
-이번 bootstrap의 목표는 신규 운영체계 구성, 기존 운영 마이그레이션, 복구, 조직 확장 중 어디에 가깝나요?
-프로젝트 구조를 스캔해도 될까요?
+먼저 시작 방식을 선택해주세요.
+
+1. 빠른 시작
+   - 처음 쓰는 사용자에게 적합합니다.
+   - 쉬운 질문 3~5개로 안전 기본값을 제안합니다.
+   - Git/PR, Team 분리, Release Role 같은 고급 설정은 필요할 때 켭니다.
+
+2. 세부 설정
+   - 각 설정을 직접 비교하면서 고릅니다.
+   - Team, Role, Workflow, Ownership, Board, Branch/PR, Source of Truth를 단계별로 정합니다.
+
+어떤 방식으로 진행할까요?
 ```
 
 ## 5. 대화형 진행 원칙
@@ -269,23 +311,24 @@ assumptions:
 
 ```text
 0. Session Contract
-1. Start Context Classification
-2. Project Scan
-3. Readiness Judgment
-4. Operating Mode Recommendation
-5. Team Configuration
-6. Role / Agent Mapping
-7. Workflow / State Configuration
-8. Ownership / Coordination Configuration
-9. Board Configuration
-10. Branch / PR Configuration
-11. Source of Truth Mapping
-12. Decision Stack Review
-13. Operating Model Draft
-14. Approval Gate
-15. Apply
-16. Post-Apply Validation
-17. Next Action Proposal
+1. Bootstrap Mode Selection
+2. Start Context Classification
+3. Project Scan
+4. Readiness Judgment
+5. Operating Mode Recommendation
+6. Team Configuration
+7. Role / Agent Mapping
+8. Workflow / State Configuration
+9. Ownership / Coordination Configuration
+10. Board Configuration
+11. Branch / PR Configuration
+12. Source of Truth Mapping
+13. Decision Stack Review
+14. Operating Model Draft
+15. Approval Gate
+16. Apply
+17. Post-Apply Validation
+18. Next Action Proposal
 ```
 
 각 단계는 아래 패턴을 따른다.
@@ -314,6 +357,58 @@ bootstrap_scope:
 target_project_path:
 discovery_only_until_approval: yes
 expected_outputs:
+```
+
+### 7.1 Bootstrap Mode Selection
+
+Session Contract 이후 가장 먼저 시작 방식을 선택한다.
+
+선택지:
+
+| Mode | 의미 | 권장 사용자 |
+|---|---|---|
+| `fast_track` | 쉬운 질문 3~5개와 안전 기본값으로 빠르게 구성 | 처음 사용하는 사람, 비개발자, 작은 프로젝트 |
+| `guided_full` | 모든 주요 설정을 단계별로 비교하며 구성 | 운영 방식을 직접 정하고 싶은 사용자 |
+
+### 7.2 Fast Track Session Contract
+
+Fast Track은 아래 순서로 진행한다.
+
+```text
+0. Session Contract
+1. Easy Start Question
+2. Minimal Project Scan
+3. Safe Defaults Proposal
+4. Decision Stack Review
+5. Operating Model Draft
+6. Approval Gate
+7. Apply
+8. Post-Apply Validation
+```
+
+Fast Track에서 묻는 기본 질문:
+
+```text
+1. 이 프로젝트는 새로 시작하는 건가요, 기존 프로젝트인가요?
+2. 지금 단계는 아이디어, 기획, 구현 준비, 운영만 도입 중 어디에 가까운가요?
+3. 당장 코드를 만들 계획이 있나요, 아니면 운영/기획부터 정리할까요?
+4. 혼자 쓰는 작은 프로젝트인가요, 여러 Agent가 역할을 나눠야 하나요?
+5. Git/PR 규칙까지 지금 정할까요, 나중에 정할까요?
+```
+
+Fast Track 출력은 고급 설정명을 숨기지 않되, 먼저 쉬운 설명을 보여준다.
+
+```text
+쉬운 요약:
+- 한 개의 기본 Team으로 시작합니다.
+- 작업은 하나씩 진행합니다.
+- 배포 역할은 아직 끕니다.
+- Git/PR은 코드 작업이 시작될 때 정합니다.
+
+기록될 설정:
+- operating_mode: solo_light
+- team_pattern: single_team
+- ...
 ```
 
 ## 8. Phase 1: Start Context Classification
@@ -1113,6 +1208,28 @@ Decision Stack 업데이트:
 - pending:
 
 다음으로 정할 항목:
+```
+
+### 26.0 Fast Track
+
+```text
+Fast Track으로 시작하겠습니다.
+복잡한 설정은 숨기고, 먼저 안전한 기본값으로 운영 구성을 잡겠습니다.
+파일은 아직 수정하지 않습니다.
+
+먼저 세 가지만 확인할게요.
+
+1. 이 프로젝트는 새로 시작하는 건가요, 기존 프로젝트인가요?
+2. 지금 단계는 아이디어, 기획, 구현 준비, 운영만 도입 중 어디에 가까운가요?
+3. 당장 코드를 만들 계획이 있나요, 아니면 운영/기획부터 정리할까요?
+
+기본 추천은 아래입니다.
+- 작은 프로젝트/처음 사용: 한 개 Team, 단일 작업 흐름, 배포 Role 비활성
+- 구현 준비 전: Direction / Lead / Ops Governance 중심
+- 구현 준비 후: Execution / Verification Role 추가
+- Git/PR: 저장소와 코드 작업이 명확해질 때 결정
+
+답변을 받으면 제가 쉬운 요약과 실제 기록될 설정값을 함께 보여드리겠습니다.
 ```
 
 ### 26.1 Start Context

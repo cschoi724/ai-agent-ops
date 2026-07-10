@@ -77,6 +77,8 @@ write_permission: no
 goal: 단계별 질문 -> Decision Stack 누적 -> 최종 Operating Model Draft 제안
 ```
 
+Bootstrap 시작 후 Codex는 먼저 `빠른 시작`과 `세부 설정` 중 어떤 방식으로 진행할지 묻는다. 파일 생성/수정은 일반 Bootstrap과 동일하게 Apply 승인 후에만 진행한다.
+
 Discovery Phase에서는 파일을 생성하거나 수정하지 않는다. Apply Phase는 사용자가 Operating Model Draft를 승인한 뒤에만 진행한다.
 
 Bootstrap 첫 응답에는 기준 문서 `.ai/bootstrap/bootstrap_runbook.md`, `.ai/` 존재 여부, `AGENTS.md` 존재 여부, `.ai_project/` 존재 여부를 함께 보고한다.

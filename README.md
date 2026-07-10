@@ -89,6 +89,12 @@ AGENTS.md or CLAUDE.md
 AI Ops bootstrap 시작해줘.
 ```
 
+Agent가 먼저 시작 방식을 물어본다.
+
+처음 쓰거나 쉽게 시작하고 싶으면 `빠른 시작`을 선택한다. Fast Track은 한 개 Team, 단일 작업 흐름, Release Role 비활성, Git/PR 보류 같은 안전 기본값으로 시작한다. 필요한 경우 나중에 Team, Role, Workflow, Branch 전략을 확장한다.
+
+세부 설정을 직접 비교하면서 고르고 싶으면 `세부 설정`을 선택한다.
+
 Bootstrap은 바로 전체 결과를 만들지 않는다. Codex는 질문을 하나씩 하고, 사용자의 답변을 Decision Stack에 쌓은 뒤, 충분한 결정값이 모이면 최종 Operating Model Draft를 제안한다.
 
 승인 후 생성되는 것:
@@ -150,7 +156,7 @@ AI Agent Ops는 아래 기본 안전 규칙을 가진다.
 | `aiops seed --adapter codex` | 프로젝트에 `.ai`와 `AGENTS.md`를 구성 |
 | `aiops seed --adapter claude` | 프로젝트에 `.ai`와 `CLAUDE.md`를 구성 |
 | `aiops doctor` | 프로젝트의 AI Ops 구성 상태를 점검 |
-| `AI Ops bootstrap 시작해줘.` | `.ai_project/` 운영 구성을 대화형으로 생성 |
+| `AI Ops bootstrap 시작해줘.` | `.ai_project/` 운영 구성을 대화형으로 시작하고 빠른 시작/세부 설정을 선택 |
 | `AI Ops bootstrap 재검토해줘.` | 기존 `.ai_project/` 결정을 Decision Stack 기준으로 재검토 |
 
 `AI Ops install`이라는 표현은 Codex의 skill installer와 혼동될 수 있어 사용하지 않는다.

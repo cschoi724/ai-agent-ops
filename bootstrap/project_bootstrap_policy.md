@@ -83,6 +83,36 @@ Apply Phase
   - .ai_project/ 문서를 생성하거나 갱신한다.
 ```
 
+### 4.1 Bootstrap Mode 선택
+
+Bootstrap은 시작 후 먼저 진행 방식을 선택한다.
+
+| Mode | 의미 | 권장 사용자 |
+|---|---|---|
+| `fast_track` | 쉬운 질문과 안전 기본값으로 구성 | 처음 사용하는 사용자, 비개발자, 작은 프로젝트 |
+| `guided_full` | 모든 주요 설정을 단계별로 비교하며 구성 | 운영 방식을 직접 정하고 싶은 사용자 |
+
+처음 사용하는 사용자나 비개발자는 `fast_track`을 선택할 수 있다.
+
+Fast Track은 모든 선택지를 한 번에 비교하지 않는다. AI Ops Agent가 쉬운 질문으로 상황을 파악한 뒤 안전 기본값을 제안하고, 사용자가 원하면 고급 설정으로 전환한다.
+
+Fast Track 기본값:
+
+| 항목 | 기본값 | 이유 |
+|---|---|---|
+| Operating Mode | `solo_light` | 가장 단순하게 시작 |
+| Team | `single_team` | Team 분리 부담 제거 |
+| Active Roles | Direction / Lead / Ops Governance | 기획과 운영 구성 중심 |
+| Execution / Verification | 구현 준비 시 활성 | 구현 전 과도한 Role 분리 방지 |
+| Workflow | `skip_scoped_for_simple_tasks` | 단순 작업은 빠르게, 복잡한 작업은 표준 흐름 사용 |
+| Ownership | `path_plus_domain` | 단순 path 기준에 기능 도메인 안전장치 추가 |
+| Coordination | `single_active_task` | 충돌을 줄이는 쉬운 시작 |
+| Board | `project_board_only` | 한 개 현황판으로 시작 |
+| Branch / PR | `pending_decision` | 코드/Git 준비 전 확정하지 않음 |
+| Release Role | inactive | 실제 배포 전까지 비활성 |
+
+Fast Track도 Discovery Phase와 Apply Phase를 분리한다. 사용자 승인 없이 `.ai_project/`를 생성하지 않는다.
+
 ## 5. Step 0: Start Context 선택
 
 AI Ops Agent는 프로젝트 운영 구성을 고르기 전에 먼저 프로젝트의 출발점을 분류한다.
