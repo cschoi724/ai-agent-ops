@@ -1,0 +1,337 @@
+#!/usr/bin/env sh
+set -eu
+
+usage() {
+  cat <<'EOF'
+aiops - AI Agent Ops project helper
+
+Usage:
+  aiops seed [--adapter codex|claude|both] [--mode link|copy] [--target DIR] [--core DIR] [--force]
+  aiops doctor [--target DIR]
+  aiops version [--core DIR]
+  aiops help
+
+Defaults:
+  adapter: codex
+  mode: link
+  target: current directory
+  core: AIOPS_CORE_HOME, or ai-agent-ops directory that contains this bin/aiops
+
+Examples:
+  aiops seed --adapter codex
+  aiops seed --adapter claude
+  aiops seed --adapter both --mode copy
+  aiops doctor
+EOF
+}
+
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+info() {
+  printf '%s\n' "$*"
+}
+
+script_dir() {
+  cd "$(dirname "$0")" && pwd
+}
+
+default_core_dir() {
+  if [ "${AIOPS_CORE_HOME:-}" ]; then
+    cd "$AIOPS_CORE_HOME" && pwd
+    return
+  fi
+  cd "$(script_dir)/.." && pwd
+}
+
+abs_path() {
+  if [ -d "$1" ]; then
+    cd "$1" && pwd
+  else
+    case "$1" in
+      /*) printf '%s\n' "$1" ;;
+      *) printf '%s\n' "$(pwd)/$1" ;;
+    esac
+  fi
+}
+
+require_core() {
+  core="$1"
+  [ -d "$core" ] || die "core directory not found: $core"
+  [ -f "$core/core/constitution.md" ] || die "invalid core: missing core/constitution.md"
+  [ -f "$core/bootstrap/bootstrap_runbook.md" ] || die "invalid core: missing bootstrap/bootstrap_runbook.md"
+  [ -f "$core/templates/tool_adapters/codex/AGENTS.md" ] || die "invalid core: missing codex adapter"
+}
+
+copy_core() {
+  core="$1"
+  target_ai="$2"
+  mkdir "$target_ai"
+  (
+    cd "$core"
+    tar \
+      --exclude '.git' \
+      --exclude '.DS_Store' \
+      --exclude '.ai_project' \
+      -cf - .
+  ) | (
+    cd "$target_ai"
+    tar -xf -
+  )
+}
+
+seed_adapter() {
+  core="$1"
+  target="$2"
+  adapter="$3"
+  force="$4"
+
+  case "$adapter" in
+    codex)
+      src="$core/templates/tool_adapters/codex/AGENTS.md"
+      dest="$target/AGENTS.md"
+      ;;
+    claude)
+      src="$core/templates/tool_adapters/claude/CLAUDE.md"
+      dest="$target/CLAUDE.md"
+      ;;
+    *)
+      die "unknown adapter: $adapter"
+      ;;
+  esac
+
+  [ -f "$src" ] || die "adapter template not found: $src"
+
+  if [ -e "$dest" ] && [ "$force" != "yes" ]; then
+    info "skip: $(basename "$dest") already exists"
+    return 0
+  fi
+
+  cp "$src" "$dest"
+  info "created: $dest"
+}
+
+cmd_seed() {
+  adapter="codex"
+  mode="link"
+  target="$(pwd)"
+  core="$(default_core_dir)"
+  force="no"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --adapter)
+        shift
+        [ "$#" -gt 0 ] || die "--adapter requires a value"
+        adapter="$1"
+        ;;
+      --mode)
+        shift
+        [ "$#" -gt 0 ] || die "--mode requires a value"
+        mode="$1"
+        ;;
+      --target)
+        shift
+        [ "$#" -gt 0 ] || die "--target requires a value"
+        target="$1"
+        ;;
+      --core)
+        shift
+        [ "$#" -gt 0 ] || die "--core requires a value"
+        core="$1"
+        ;;
+      --force)
+        force="yes"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "unknown seed option: $1"
+        ;;
+    esac
+    shift
+  done
+
+  target="$(abs_path "$target")"
+  core="$(abs_path "$core")"
+  require_core "$core"
+
+  [ -d "$target" ] || die "target directory not found: $target"
+  [ "$target" != "$core" ] || die "target cannot be the ai-agent-ops core directory"
+
+  target_ai="$target/.ai"
+
+  if [ -e "$target_ai" ] || [ -L "$target_ai" ]; then
+    if [ "$force" = "yes" ]; then
+      rm -rf "$target_ai"
+    else
+      info "skip: .ai already exists"
+    fi
+  fi
+
+  if [ ! -e "$target_ai" ] && [ ! -L "$target_ai" ]; then
+    case "$mode" in
+      link)
+        ln -s "$core" "$target_ai"
+        info "created: $target_ai -> $core"
+        ;;
+      copy)
+        copy_core "$core" "$target_ai"
+        info "created: $target_ai"
+        ;;
+      *)
+        die "unknown mode: $mode"
+        ;;
+    esac
+  fi
+
+  case "$adapter" in
+    codex)
+      seed_adapter "$core" "$target" codex "$force"
+      ;;
+    claude)
+      seed_adapter "$core" "$target" claude "$force"
+      ;;
+    both)
+      seed_adapter "$core" "$target" codex "$force"
+      seed_adapter "$core" "$target" claude "$force"
+      ;;
+    *)
+      die "unknown adapter: $adapter"
+      ;;
+  esac
+
+  info ""
+  info "AI Ops seed complete."
+  info "Next: open an agent session in $target and say:"
+  info "  AI Ops bootstrap 시작해줘."
+}
+
+cmd_doctor() {
+  target="$(pwd)"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --target)
+        shift
+        [ "$#" -gt 0 ] || die "--target requires a value"
+        target="$1"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "unknown doctor option: $1"
+        ;;
+    esac
+    shift
+  done
+
+  target="$(abs_path "$target")"
+  ai="$target/.ai"
+  failed=0
+
+  info "AI Ops doctor"
+  info "target: $target"
+
+  if [ -L "$ai" ]; then
+    link_target="$(readlink "$ai")"
+    info "ok: .ai symlink -> $link_target"
+  elif [ -d "$ai" ]; then
+    info "ok: .ai directory"
+  else
+    info "missing: .ai"
+    failed=1
+  fi
+
+  for required in \
+    "$ai/core/constitution.md" \
+    "$ai/bootstrap/bootstrap_runbook.md" \
+    "$ai/bootstrap/install_runbook.md" \
+    "$ai/models/role_model.md" \
+    "$ai/runtime/workflow.md"
+  do
+    if [ -f "$required" ]; then
+      info "ok: ${required#$target/}"
+    else
+      info "missing: ${required#$target/}"
+      failed=1
+    fi
+  done
+
+  if [ -f "$target/AGENTS.md" ]; then
+    info "ok: AGENTS.md"
+  else
+    info "note: AGENTS.md missing"
+  fi
+
+  if [ -f "$target/CLAUDE.md" ]; then
+    info "ok: CLAUDE.md"
+  else
+    info "note: CLAUDE.md missing"
+  fi
+
+  if [ -d "$target/.ai_project" ]; then
+    info "ok: .ai_project"
+  else
+    info "note: .ai_project missing; run bootstrap when ready"
+  fi
+
+  if [ -f "$ai/VERSION" ]; then
+    info "version: $(cat "$ai/VERSION")"
+  fi
+
+  [ "$failed" -eq 0 ] || exit 1
+}
+
+cmd_version() {
+  core="$(default_core_dir)"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --core)
+        shift
+        [ "$#" -gt 0 ] || die "--core requires a value"
+        core="$1"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "unknown version option: $1"
+        ;;
+    esac
+    shift
+  done
+
+  core="$(abs_path "$core")"
+  require_core "$core"
+  if [ -f "$core/VERSION" ]; then
+    cat "$core/VERSION"
+  else
+    die "VERSION not found"
+  fi
+}
+
+main() {
+  cmd="${1:-help}"
+  if [ "$#" -gt 0 ]; then
+    shift
+  fi
+
+  case "$cmd" in
+    seed) cmd_seed "$@" ;;
+    doctor) cmd_doctor "$@" ;;
+    version) cmd_version "$@" ;;
+    help|-h|--help) usage ;;
+    *) die "unknown command: $cmd" ;;
+  esac
+}
+
+main "$@"

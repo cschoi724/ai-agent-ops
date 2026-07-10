@@ -12,6 +12,10 @@
 
 ### Added
 
+- 로컬 CLI `bin/aiops` 추가
+- Claude 호환 어댑터 `templates/tool_adapters/claude/CLAUDE.md` 추가
+- 초보자용 `QUICKSTART.md` 추가
+- 설치 구조 문서 `docs/installation.md` 추가
 - 조직형 AI Agent 운영체계의 최상위 원칙 문서 `constitution.md` 추가
 - Organization / Division / Team 기준 문서 `org_model.md` 추가
 - Role / Agent / Capability 책임 기준 문서 `role_model.md` 추가
@@ -36,6 +40,7 @@
 
 - README를 vNext 조직형 운영체계 진입점으로 개정
 - README를 프로젝트 소개, Quick Start, 안전 규칙, 사용 트리거 중심으로 개편
+- README를 CLI 기반 seed / doctor / bootstrap 흐름으로 개편
 - 문서 읽기 순서에서 `constitution.md`를 최우선 기준으로 추가
 - `org_model.md`를 Division과 조직 책임 중심으로 정리하고 Team 상세 구성은 `team_model.md`로 분리
 - `project_bootstrap_policy.md`에 단계별 질문 형식, 선택값 기록 규칙, bootstrap 완료 기준 추가

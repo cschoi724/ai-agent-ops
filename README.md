@@ -40,25 +40,40 @@ YourProject/
 
 ### 1. 프로젝트에 AI Ops 시드 구성
 
-대상 프로젝트 루트에서 Codex 세션을 열고 시작한다.
+대상 프로젝트 루트에서 CLI를 실행한다.
 
-처음 한 번은 `ai-agent-ops` 원본 경로를 알려준다.
+Codex:
 
-```text
-AI Ops 시드 구성해줘.
-ai-agent-ops 원본 경로는 ../ai-agent-ops-org 이야.
-먼저 그 경로의 bootstrap/install_runbook.md를 읽고 Install Discovery만 진행해줘.
-아직 파일은 만들거나 수정하지 말고, .ai/ 설치 방식과 적용 범위만 제안해줘.
+```bash
+/path/to/ai-agent-ops/bin/aiops seed --adapter codex
+```
+
+Claude:
+
+```bash
+/path/to/ai-agent-ops/bin/aiops seed --adapter claude
+```
+
+Codex와 Claude:
+
+```bash
+/path/to/ai-agent-ops/bin/aiops seed --adapter both
 ```
 
 승인 후 생성되는 것:
 
 ```text
-.ai/
-AGENTS.md
+.ai -> /path/to/ai-agent-ops
+AGENTS.md or CLAUDE.md
 ```
 
 이 단계에서는 `.ai_project/`를 만들지 않는다.
+
+구성을 확인한다.
+
+```bash
+/path/to/ai-agent-ops/bin/aiops doctor
+```
 
 ### 2. 프로젝트 운영체계 Bootstrap
 
@@ -126,7 +141,9 @@ AI Agent Ops는 아래 기본 안전 규칙을 가진다.
 
 | Trigger | 의미 |
 |---|---|
-| `AI Ops 시드 구성해줘.` | 프로젝트에 `.ai/`와 `AGENTS.md`를 구성 |
+| `aiops seed --adapter codex` | 프로젝트에 `.ai`와 `AGENTS.md`를 구성 |
+| `aiops seed --adapter claude` | 프로젝트에 `.ai`와 `CLAUDE.md`를 구성 |
+| `aiops doctor` | 프로젝트의 AI Ops 구성 상태를 점검 |
 | `AI Ops bootstrap 시작해줘.` | `.ai_project/` 운영 구성을 대화형으로 생성 |
 | `AI Ops bootstrap 재검토해줘.` | 기존 `.ai_project/` 결정을 Decision Stack 기준으로 재검토 |
 
@@ -162,14 +179,17 @@ AI Agent Ops Organization
 처음 이해할 때는 아래 순서로 읽는다.
 
 1. `core/constitution.md`
-2. `bootstrap/install_runbook.md`
-3. `bootstrap/bootstrap_runbook.md`
-4. `models/role_model.md`
-5. `models/team_model.md`
-6. `runtime/workflow.md`
-7. `runtime/task_queue.md`
-8. `policies/branch_pr_policy.md`
-9. `templates/tool_adapters/codex/AGENTS.md`
+2. `QUICKSTART.md`
+3. `docs/installation.md`
+4. `bootstrap/install_runbook.md`
+5. `bootstrap/bootstrap_runbook.md`
+6. `models/role_model.md`
+7. `models/team_model.md`
+8. `runtime/workflow.md`
+9. `runtime/task_queue.md`
+10. `policies/branch_pr_policy.md`
+11. `templates/tool_adapters/codex/AGENTS.md`
+12. `templates/tool_adapters/claude/CLAUDE.md`
 
 ## Directory Structure
 
@@ -183,6 +203,8 @@ AI Agent Ops Organization
 | `agents/` | 기본 bootstrap Agent 참고 문서 |
 | `workflows/` | Task 유형별 workflow |
 | `templates/` | `.ai_project`와 프로젝트 문서 템플릿 |
+| `bin/` | 로컬 CLI |
+| `docs/` | 설치와 사용 문서 |
 
 ## Current Status
 

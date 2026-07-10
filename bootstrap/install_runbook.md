@@ -10,6 +10,16 @@
 
 Install은 `.ai/`를 준비하는 단계다. Bootstrap은 `.ai_project/`에 프로젝트별 운영 구성을 만드는 단계다. 두 단계는 연결될 수 있지만 같은 단계가 아니다.
 
+현재 권장 방식은 CLI 기반 seed다.
+
+```bash
+aiops seed --adapter codex
+aiops seed --adapter claude
+aiops seed --adapter both
+```
+
+Agent가 직접 파일을 복사하는 방식은 CLI를 사용할 수 없을 때의 fallback으로만 사용한다.
+
 ```text
 Install
   - 공통 운영체계 템플릿을 프로젝트에 배치한다.
@@ -68,7 +78,7 @@ goal: .ai/ 설치 가능 여부 확인 -> 설치 방식 제안 -> 승인 후 .ai
 
 ```text
 AI Ops 시드 구성을 시작합니다.
-먼저 파일은 수정하지 않고 현재 프로젝트와 ai-agent-ops 원본 위치를 확인한 뒤 `.ai/` 설치 방식을 제안하겠습니다.
+먼저 파일은 수정하지 않고 현재 프로젝트와 ai-agent-ops 원본 위치, 사용 가능한 `aiops` CLI 여부를 확인한 뒤 `.ai/` 구성 방식을 제안하겠습니다.
 ```
 
 ## 3. 핵심 원칙
@@ -93,6 +103,7 @@ git_repository:
 existing_ai_dir:
 existing_ai_project_dir:
 source_template_path:
+aiops_cli_available:
 install_method_candidates:
 ```
 
@@ -121,15 +132,17 @@ install_method_candidates:
 
 | 방식 | 설명 | 권장 상황 |
 |---|---|---|
-| `copy` | 원본 템플릿을 프로젝트의 `.ai/`로 복사 | 기본값, 가장 단순 |
-| `symlink` | `.ai/`를 원본 경로에 링크 | 로컬 실험, 원본 변경 즉시 반영 필요 |
+| `cli_link` | `aiops seed --mode link`로 `.ai` symlink와 adapter 파일 생성 | 기본값, Homebrew/로컬 CLI 준비 단계 |
+| `cli_copy` | `aiops seed --mode copy`로 `.ai/` 복사와 adapter 파일 생성 | symlink를 쓸 수 없는 환경 |
+| `copy` | 원본 템플릿을 프로젝트의 `.ai/`로 복사 | CLI를 사용할 수 없는 fallback |
+| `symlink` | `.ai/`를 원본 경로에 링크 | CLI를 사용할 수 없는 로컬 fallback |
 | `git_submodule` | 원본 저장소를 submodule로 연결 | 장기 프로젝트, 버전 고정 필요 |
 | `local_reference_only` | 설치하지 않고 원본 경로만 참조 | Discovery만 해볼 때 |
 
 초기 기본값:
 
 ```text
-copy
+cli_link
 ```
 
 ## 6. Install Discovery 출력
@@ -148,8 +161,9 @@ Recommended Install Method:
 Reason:
 
 Files or directories to create:
-- .ai/
-- AGENTS.md
+- .ai
+- AGENTS.md, when adapter is `codex` or `both`
+- CLAUDE.md, when adapter is `claude` or `both`
 
 Files not touched:
 - .ai_project/
@@ -167,13 +181,13 @@ Apply 전에 명시 승인을 받는다.
 
 ```text
 위 기준으로 이 프로젝트에 `.ai/`를 설치해도 될까요?
-이번 시드 구성은 `.ai/`와 `AGENTS.md`만 생성하고 `.ai_project/`는 만들지 않습니다.
+이번 시드 구성은 `.ai`와 선택한 adapter 진입 지침만 생성하고 `.ai_project/`는 만들지 않습니다.
 ```
 
 승인 전 금지:
 
 - `.ai/` 생성
-- `AGENTS.md` 생성
+- `AGENTS.md` 또는 `CLAUDE.md` 생성
 - `.ai_project/` 생성
 - 프로젝트 코드 수정
 - 기존 문서 수정
@@ -212,14 +226,19 @@ design_notes/
 개발 중 임시 파일
 ```
 
-그리고 Codex 진입 지침을 프로젝트 루트에 생성한다.
+그리고 선택한 adapter의 진입 지침을 프로젝트 루트에 생성한다.
 
 ```text
-source: .ai/templates/tool_adapters/codex/AGENTS.md
-target: AGENTS.md
+codex:
+  source: .ai/templates/tool_adapters/codex/AGENTS.md
+  target: AGENTS.md
+
+claude:
+  source: .ai/templates/tool_adapters/claude/CLAUDE.md
+  target: CLAUDE.md
 ```
 
-기존 `AGENTS.md`가 있으면 덮어쓰지 않는다. 이 경우 AI Ops Agent는 병합안을 제안하고 사용자 승인을 받은 뒤에만 수정한다.
+기존 `AGENTS.md` 또는 `CLAUDE.md`가 있으면 덮어쓰지 않는다. 이 경우 AI Ops Agent는 병합안을 제안하고 사용자 승인을 받은 뒤에만 수정한다.
 
 ### 8.2 `symlink`
 
@@ -260,6 +279,7 @@ target: AGENTS.md
 .ai/bootstrap/install_runbook.md
 .ai/templates/ai_project/
 AGENTS.md
+CLAUDE.md, if Claude adapter is selected
 ```
 
 출력:
@@ -316,7 +336,7 @@ Install은 아래 조건을 만족하면 완료로 본다.
 - 원본 템플릿 경로가 확인되어 있다.
 - 설치 방식이 선택되어 있다.
 - 사용자 승인을 받은 뒤 `.ai/`가 생성되어 있다.
-- 사용자 승인을 받은 뒤 `AGENTS.md`가 생성되어 있거나, 기존 `AGENTS.md` 병합안이 제안되어 있다.
+- 사용자 승인을 받은 뒤 선택한 adapter 진입 지침이 생성되어 있거나, 기존 진입 지침 병합안이 제안되어 있다.
 - `.ai/bootstrap/bootstrap_runbook.md`와 `.ai/bootstrap/install_runbook.md`가 존재한다.
 - `.ai_project/`는 별도 bootstrap 승인 전까지 생성하지 않았다.
 - 다음 명령으로 `AI Ops bootstrap 시작해줘.`를 제안했다.
