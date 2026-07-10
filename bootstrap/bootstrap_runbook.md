@@ -46,6 +46,11 @@ Team별 구성이 필요한 경우:
 
 - Discovery Phase에서는 파일을 수정하지 않는다.
 - Apply Phase는 사용자가 적용 범위를 승인한 뒤에만 시작한다.
+- Bootstrap Discovery는 일괄 제안이 아니라 대화형 의사결정으로 진행한다.
+- AI Ops Agent는 한 번에 전체 Operating Model Draft를 만들지 않는다.
+- 각 단계는 질문, 사용자 답변, Agent 의견, 결정값, 보류값을 `Decision Stack`에 쌓는다.
+- 최종 Draft는 필수 결정값이 충분히 쌓인 뒤에만 제안한다.
+- `.ai/`가 없는 프로젝트에서 운영체계 템플릿 설치가 필요하면 `install_runbook.md`를 먼저 따른다.
 - 운영 구성 확정 전에는 제품 Task를 만들지 않는다.
 - 사용자가 선택하지 않은 값은 최종 구성으로 기록하지 않는다.
 - 불명확한 값은 `pending_decision` 또는 `open_question`으로 남긴다.
@@ -56,6 +61,97 @@ Team별 구성이 필요한 경우:
 - Git commit, push, PR, merge 정책은 프로젝트별 `branch_pr_strategy.md`가 정해진 뒤에 따른다.
 
 ## 4. 시작 입력
+
+### 4.0 Install과 Bootstrap 구분
+
+AI Ops Agent는 install과 bootstrap을 구분한다.
+
+```text
+Install
+  - `.ai/` 운영체계 템플릿을 프로젝트에 설치한다.
+  - 기준 문서: .ai/bootstrap/install_runbook.md
+
+Bootstrap
+  - `.ai_project/`에 프로젝트별 운영 구성을 만든다.
+  - 기준 문서: .ai/bootstrap/bootstrap_runbook.md
+```
+
+사용자가 `AI Ops 시드 구성해줘`라고 말하면 이 문서가 아니라 `install_runbook.md`를 따른다.
+
+사용자가 `AI Ops bootstrap 시작해줘`라고 말했는데 대상 프로젝트에 `.ai/`가 없으면, 바로 `.ai_project/` 생성을 제안하지 않고 먼저 아래처럼 확인한다.
+
+```text
+현재 프로젝트에 `.ai/`가 없습니다.
+먼저 `AI Ops 시드 구성해줘.`로 `.ai/` 운영체계 템플릿을 구성해주세요.
+```
+
+### 4.1 Bootstrap Trigger
+
+사용자가 아래 문장을 말하면 AI Ops Agent는 bootstrap 요청으로 해석한다.
+
+```text
+AI Ops bootstrap 시작해줘.
+```
+
+동등한 표현:
+
+```text
+이 프로젝트 AI Ops bootstrap 해줘.
+bootstrap 시작해줘.
+AI 운영체계 초기 구성 시작해줘.
+```
+
+Trigger를 받으면 AI Ops Agent는 아래 기본 계약으로 시작한다.
+
+```text
+role: AI Ops Agent
+mode: Discovery Phase
+write_permission: no
+goal: 단계별 질문 -> Decision Stack 누적 -> 최종 Operating Model Draft 제안
+```
+
+첫 응답은 짧게 시작한다.
+
+```text
+AI Ops bootstrap을 Discovery Phase로 시작합니다.
+기준 문서는 `.ai/bootstrap/bootstrap_runbook.md`입니다.
+현재 단계는 자동화 스크립트 실행이 아니라 문서 기반 Discovery입니다.
+먼저 파일은 수정하지 않고 `.ai/`, `AGENTS.md`, `.ai_project/` 존재 여부를 확인한 뒤 단계별 질문으로 운영 구성을 결정하겠습니다.
+각 답변은 Decision Stack에 쌓고, 필수 결정이 모이면 최종 Operating Model Draft를 제안하겠습니다.
+```
+
+첫 스캔 결과에는 아래 항목을 포함한다.
+
+```text
+AI Ops Source:
+Runbook:
+AGENTS.md:
+.ai/:
+.ai_project/:
+Automation Script:
+```
+
+`Automation Script`는 실제 실행 스크립트가 없으면 `none`으로 기록한다.
+
+현재 작업 디렉토리가 `ai-agent-ops` 템플릿 저장소인지, 실제 적용 대상 프로젝트인지 먼저 구분한다.
+
+템플릿 저장소로 판단되는 신호:
+
+- `core/`, `models/`, `policies/`, `runtime/`, `bootstrap/`, `templates/`가 루트에 있다.
+- `bootstrap/project_bootstrap_policy.md`와 `bootstrap/bootstrap_runbook.md`가 루트에 있다.
+- `.ai_project/`가 없다.
+- 저장소 이름이나 branch가 `ai-agent-ops`, `ai-agent-ops-org`, `org-ops-model`에 가깝다.
+
+템플릿 저장소로 판단되면 바로 `.ai_project/` 생성을 제안하지 않고 아래처럼 확인한다.
+
+```text
+현재 디렉토리는 ai-agent-ops 템플릿 저장소로 보입니다.
+이 저장소 자체의 운영 구성을 점검할까요, 아니면 다른 대상 프로젝트 경로를 지정할까요?
+```
+
+실제 적용 대상 프로젝트로 판단되는 경우에만 해당 프로젝트 루트에 `.ai_project/` 생성을 후보로 제안한다.
+
+### 4.2 시작 입력
 
 AI Ops Agent는 bootstrap 시작 시 아래 정보를 확인한다.
 
@@ -78,7 +174,66 @@ AI Ops bootstrap을 시작합니다.
 프로젝트 구조를 스캔해도 될까요?
 ```
 
-## 5. 전체 실행 흐름
+## 5. 대화형 진행 원칙
+
+AI Ops Agent는 bootstrap을 질의응답 방식으로 진행한다.
+
+금지되는 진행:
+
+- Project Scan 직후 전체 Operating Model Draft를 한 번에 제안한다.
+- 사용자가 답하지 않은 제품 목표, MVP, Role, Git 전략을 확정값처럼 작성한다.
+- 추천안을 길게 작성한 뒤 바로 Apply 승인 여부를 묻는다.
+- 사용자의 의견 수렴 없이 `.ai_project/` 생성 파일 목록을 확정한다.
+
+허용되는 진행:
+
+- 현재 단계의 질문 1개 또는 밀접한 질문 2개만 묻는다.
+- Agent 추천은 질문 뒤에 짧은 근거로 제시한다.
+- 사용자의 답변을 `Decision Stack`에 누적한다.
+- 결정되지 않은 항목은 `pending_decision`으로 둔다.
+- 충분한 결정값이 모였는지 확인한 뒤 최종 Draft를 만든다.
+
+Decision Stack 형식:
+
+```text
+Decision Stack
+
+confirmed:
+  - key:
+    value:
+    reason:
+
+pending:
+  - key:
+    question:
+    options:
+
+open_questions:
+  - question:
+    why_it_matters:
+
+assumptions:
+  - assumption:
+    confidence:
+    needs_confirmation:
+```
+
+각 단계가 끝날 때 Agent는 짧게 현재 stack을 요약한다.
+
+```text
+지금까지 확정된 결정:
+- Start Context: ...
+- Readiness: ...
+
+아직 결정할 것:
+- Operating Mode
+- Team 구성
+
+다음 질문:
+...
+```
+
+## 6. 전체 실행 흐름
 
 ```text
 0. Session Contract
@@ -93,14 +248,26 @@ AI Ops bootstrap을 시작합니다.
 9. Board Configuration
 10. Branch / PR Configuration
 11. Source of Truth Mapping
-12. Operating Model Draft
-13. Approval Gate
-14. Apply
-15. Post-Apply Validation
-16. Next Action Proposal
+12. Decision Stack Review
+13. Operating Model Draft
+14. Approval Gate
+15. Apply
+16. Post-Apply Validation
+17. Next Action Proposal
 ```
 
-## 6. Phase 0: Session Contract
+각 단계는 아래 패턴을 따른다.
+
+```text
+1. 이전 결정 요약
+2. 현재 단계 질문
+3. 선택지와 추천값 제시
+4. 사용자 답변 대기
+5. Decision Stack 업데이트
+6. 다음 단계로 진행할지 확인
+```
+
+## 7. Phase 0: Session Contract
 
 목적:
 
@@ -117,7 +284,7 @@ discovery_only_until_approval: yes
 expected_outputs:
 ```
 
-## 7. Phase 1: Start Context Classification
+## 8. Phase 1: Start Context Classification
 
 AI Ops Agent는 운영 모드보다 먼저 프로젝트 출발점을 분류한다.
 
@@ -152,7 +319,7 @@ start_context_summary:
 initial_role_focus:
 ```
 
-## 8. Phase 2: Project Scan
+## 9. Phase 2: Project Scan
 
 AI Ops Agent는 대상 프로젝트를 읽고 운영 구성 후보를 만든다.
 
@@ -191,7 +358,7 @@ project_scan_summary:
   risks:
 ```
 
-## 9. Phase 3: Readiness Judgment
+## 10. Phase 3: Readiness Judgment
 
 Project Scan 이후 실행 준비 수준을 판단한다.
 
@@ -215,7 +382,7 @@ branch_pr_ready: yes / no
 required_decisions:
 ```
 
-## 10. Phase 4: Operating Mode Recommendation
+## 11. Phase 4: Operating Mode Recommendation
 
 AI Ops Agent는 하나의 추천값과 대안을 함께 제시한다.
 
@@ -247,7 +414,7 @@ alternatives:
 user_selection_required: yes
 ```
 
-## 11. Phase 5: Team Configuration
+## 12. Phase 5: Team Configuration
 
 선택 후보:
 
@@ -277,7 +444,7 @@ branch_pr_override:
 
 Team 구성은 특정 프로젝트에 종속된다. `.ai/`에는 일반 모델과 선택지를 두고, 실제 선택값은 `.ai_project/`에 기록한다.
 
-## 12. Phase 6: Role / Agent Mapping
+## 13. Phase 6: Role / Agent Mapping
 
 기본 Role 후보:
 
@@ -308,7 +475,7 @@ required_capabilities:
 handoff_target:
 ```
 
-## 13. Phase 7: Workflow / State Configuration
+## 14. Phase 7: Workflow / State Configuration
 
 선택 후보:
 
@@ -345,7 +512,7 @@ superseded
 
 결정값은 `.ai_project/workflow_overrides.md` 또는 `.ai_project/operating_model.md`에 기록한다.
 
-## 14. Phase 8: Ownership / Coordination Configuration
+## 15. Phase 8: Ownership / Coordination Configuration
 
 Ownership 선택 후보:
 
@@ -377,7 +544,7 @@ conflict_resolution_owner:
 blocked_resolution_owner:
 ```
 
-## 15. Phase 9: Board Configuration
+## 16. Phase 9: Board Configuration
 
 선택 후보:
 
@@ -404,7 +571,7 @@ required_views:
 review_cadence:
 ```
 
-## 16. Phase 10: Branch / PR Configuration
+## 17. Phase 10: Branch / PR Configuration
 
 선택 후보:
 
@@ -444,7 +611,7 @@ delete_branch_after_merge:
 - Lead Role이 최종 merge 여부를 확인한다.
 - 자동 merge는 프로젝트별로 명시 승인된 경우에만 허용한다.
 
-## 17. Phase 11: Source of Truth Mapping
+## 18. Phase 11: Source of Truth Mapping
 
 AI Ops Agent는 프로젝트의 기준 문서를 확정하거나 누락을 기록한다.
 
@@ -477,9 +644,66 @@ source_of_truth:
 
 누락된 기준 문서는 임의로 생성하지 않고, 생성 후보로 제안한다.
 
-## 18. Phase 12: Operating Model Draft
+## 19. Phase 12: Decision Stack Review
 
-파일을 쓰기 전 사용자에게 아래 초안을 보여준다.
+AI Ops Agent는 최종 Draft를 만들기 전에 지금까지 누적된 결정값을 검토한다.
+
+이 단계의 목적:
+
+- 사용자가 실제로 결정한 값과 Agent가 추정한 값을 분리한다.
+- 최종 Draft에 들어갈 수 있는 항목과 보류해야 할 항목을 구분한다.
+- 빠진 필수 결정이 있으면 Draft를 만들기 전에 질문한다.
+
+Review 출력:
+
+```text
+Decision Stack Review
+
+Confirmed Decisions:
+- Start Context:
+- Readiness Level:
+- Product Direction:
+- Operating Mode:
+- Team:
+- Active Roles:
+- Workflow:
+- Ownership:
+- Board:
+- Branch / PR:
+- Source of Truth:
+
+Pending Decisions:
+- ...
+
+Assumptions:
+- ...
+
+Open Questions:
+- ...
+```
+
+필수 결정이 부족하면 아래처럼 묻고 멈춘다.
+
+```text
+아직 최종 Operating Model Draft를 만들기에는 아래 결정이 부족합니다.
+
+1. ...
+2. ...
+
+먼저 1번부터 정하겠습니다.
+...
+```
+
+필수 결정이 충분하면 아래처럼 확인한다.
+
+```text
+필수 결정값이 충분히 모였습니다.
+지금까지의 Decision Stack을 기준으로 최종 Operating Model Draft를 작성해도 될까요?
+```
+
+## 20. Phase 13: Operating Model Draft
+
+파일을 쓰기 전 사용자에게 아래 초안을 보여준다. 이 Draft에는 `Decision Stack`에서 확정된 값만 확정값으로 작성한다. 추정값은 `assumptions`, 미결정값은 `pending_decision` 또는 `unresolved`로 남긴다.
 
 ```text
 Operating Model Draft
@@ -506,7 +730,7 @@ Open Questions:
 Risks:
 ```
 
-## 19. Phase 13: Approval Gate
+## 21. Phase 14: Approval Gate
 
 AI Ops Agent는 Apply Phase 전에 명시 승인을 받아야 한다.
 
@@ -526,7 +750,7 @@ AI Ops Agent는 Apply Phase 전에 명시 승인을 받아야 한다.
 - commit 생성
 - push / PR / merge
 
-## 20. Phase 14: Apply
+## 22. Phase 15: Apply
 
 승인 후 실행한다.
 
@@ -563,7 +787,7 @@ deferred_files:
 open_questions:
 ```
 
-## 21. Phase 15: Post-Apply Validation
+## 23. Phase 16: Post-Apply Validation
 
 AI Ops Agent는 생성/수정 후 정합성을 확인한다.
 
@@ -590,7 +814,7 @@ post_apply_report:
   recommended_next_action:
 ```
 
-## 22. Phase 16: Next Action Proposal
+## 24. Phase 17: Next Action Proposal
 
 bootstrap 완료 후 다음 작업을 제안한다.
 
@@ -607,53 +831,75 @@ Readiness별 기본 제안:
 | `recovery_required` | 빌드/테스트/문서 상태 복구 Task 구성 |
 | `ops_only` | 운영 문서 검토와 Agent 세션 시작 가이드 작성 |
 
-## 23. Start Context별 실행 차이
+## 25. Start Context별 실행 차이
 
-### 23.1 `new_project_with_requirement`
+### 25.1 `new_project_with_requirement`
 
 - readiness level을 반드시 확인한다.
 - `idea_only`에서는 Execution Role을 즉시 활성화하지 않는다.
 - `implementation_ready`에서는 `team_pr` 또는 `team_basic`을 우선 검토한다.
 
-### 23.2 `assigned_or_existing_project`
+### 25.2 `assigned_or_existing_project`
 
 - Project Scan을 충분히 수행한다.
 - 기존 문서와 실제 코드가 충돌하면 source of truth를 바로 확정하지 않는다.
 - 첫 작업은 보통 운영 마이그레이션 또는 현황 정리 Task다.
 
-### 23.3 `blank_slate_discovery`
+### 25.3 `blank_slate_discovery`
 
 - 제품 Task를 만들지 않는다.
 - Direction Role 중심으로 문제 정의와 탐색 질문을 구성한다.
 - source of truth는 discovery 결과 이후 확정한다.
 
-### 23.4 `rescue_or_recovery`
+### 25.4 `rescue_or_recovery`
 
 - 빌드, 테스트, CI, 최근 변경 이력을 우선 확인한다.
 - Verification Role을 초기에 활성화한다.
 - feature 개발보다 복구 Task를 먼저 제안한다.
 
-### 23.5 `migration_or_modernization`
+### 25.5 `migration_or_modernization`
 
 - migration scope와 rollback 기준을 먼저 정한다.
 - 기존 운영 문서 삭제나 대체는 별도 승인으로 처리한다.
 - ownership과 coordination 정책을 초기에 확정한다.
 
-### 23.6 `ops_setup_only`
+### 25.6 `ops_setup_only`
 
 - 제품 코드 변경을 하지 않는다.
 - `.ai_project/` 운영 문서 생성에 집중한다.
 - 첫 제품 Task를 만들지 않는다.
 
-### 23.7 `scale_up_existing_ops`
+### 25.7 `scale_up_existing_ops`
 
 - Team 분리 기준과 ownership 충돌 가능성을 먼저 확인한다.
 - project board와 team board의 관계를 정한다.
 - coordination policy를 명시적으로 선택한다.
 
-## 24. 질문 팩
+## 26. 질문 팩
 
-### 24.1 Start Context
+질문 팩은 한 번에 모두 출력하지 않는다. 현재 단계에 필요한 질문만 제시하고, 사용자 답변을 받은 뒤 Decision Stack을 갱신한다.
+
+질문 형식:
+
+```text
+현재 결정할 항목:
+추천:
+이유:
+선택지:
+내 질문:
+```
+
+답변을 받은 뒤:
+
+```text
+Decision Stack 업데이트:
+- confirmed:
+- pending:
+
+다음으로 정할 항목:
+```
+
+### 26.1 Start Context
 
 ```text
 이 프로젝트의 시작 유형은 무엇인가요?
@@ -667,7 +913,7 @@ Readiness별 기본 제안:
 - custom
 ```
 
-### 24.2 Readiness
+### 26.2 Readiness
 
 ```text
 현재 요구사항 수준은 어디에 가깝나요?
@@ -677,7 +923,7 @@ Readiness별 기본 제안:
 - implementation_ready
 ```
 
-### 24.3 Operating / Team
+### 26.3 Operating / Team
 
 ```text
 추천 운영 모드는 `<mode>`입니다.
@@ -685,7 +931,7 @@ Readiness별 기본 제안:
 이 모드로 진행할까요, 아니면 다른 구성을 선택할까요?
 ```
 
-### 24.4 Role / Workflow
+### 26.4 Role / Workflow
 
 ```text
 초기 활성 Role은 Lead / Execution / Verification / Ops Governance로 제안합니다.
@@ -693,7 +939,7 @@ Release Role은 현재 비활성으로 두는 구성이 적절해 보입니다.
 이 Role 구성으로 진행할까요?
 ```
 
-### 24.5 Git
+### 26.5 Git
 
 ```text
 Git 전략은 feature branch + PR 기반을 기본값으로 제안합니다.
@@ -701,15 +947,35 @@ Execution Role은 task branch에서 커밋하고, Verification Role이 검증한
 이 전략을 프로젝트 기본값으로 기록할까요?
 ```
 
-### 24.6 Apply Approval
+### 26.6 Decision Stack Review
+
+```text
+지금까지의 Decision Stack을 검토하겠습니다.
+
+확정된 항목:
+- ...
+
+보류된 항목:
+- ...
+
+가정:
+- ...
+
+이 상태로 최종 Operating Model Draft를 작성해도 될까요?
+아니면 먼저 보류 항목 중 하나를 더 결정할까요?
+```
+
+### 26.7 Apply Approval
 
 ```text
 아래 파일만 생성/수정하는 Apply Phase를 진행해도 될까요?
 ```
 
-## 25. 금지사항
+## 27. 금지사항
 
 - Discovery Phase에서 파일을 수정하지 않는다.
+- Project Scan 직후 전체 Operating Model Draft를 한 번에 제안하지 않는다.
+- Decision Stack Review 없이 Apply 승인을 묻지 않는다.
 - 승인 없이 `.ai_project/`를 생성하지 않는다.
 - 승인 없이 기존 프로젝트 문서를 삭제하거나 이동하지 않는다.
 - 운영 구성이 확정되기 전 제품 Task를 생성하지 않는다.
@@ -718,7 +984,7 @@ Execution Role은 task branch에서 커밋하고, Verification Role이 검증한
 - Release Role이 필요하지 않은 프로젝트에 release workflow를 활성화하지 않는다.
 - source of truth가 불명확한 문서를 최종 기준으로 단정하지 않는다.
 
-## 26. 완료 기준
+## 28. 완료 기준
 
 bootstrap은 아래 조건을 만족하면 완료로 본다.
 
@@ -732,10 +998,11 @@ bootstrap은 아래 조건을 만족하면 완료로 본다.
 - Board 기준이 선택되어 있다.
 - Branch / PR 전략이 선택되어 있다.
 - Source of truth 후보와 미해결 항목이 기록되어 있다.
+- Decision Stack Review를 거쳐 확정값, 보류값, 가정이 분리되어 있다.
 - `.ai_project/operating_model.md`가 실제 프로젝트 운영 구성의 인덱스 역할을 한다.
 - 다음 action이 discovery, planning, implementation, recovery, ops validation 중 하나로 제안되어 있다.
 
-## 27. 변경 이력
+## 29. 변경 이력
 
 | 날짜 | 변경 내용 |
 |---|---|

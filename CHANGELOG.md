@@ -21,6 +21,8 @@
 - Git branch / commit / PR / merge 일반 정책 문서 `branch_pr_policy.md` 추가
 - 프로젝트별 운영체계 구성 선택 정책 문서 `project_bootstrap_policy.md` 추가
 - 프로젝트 bootstrap 실행 절차 문서 `bootstrap_runbook.md` 추가
+- 실제 프로젝트에 `.ai/` 운영체계 템플릿을 설치하는 `install_runbook.md` 추가
+- `.ai/`가 없는 프로젝트 최초 1회용 `cold_start_prompt.md` 추가
 - Team 구성 패턴과 최소 계약 문서 `team_model.md` 추가
 - 프로젝트별 실제 운영 구성 템플릿 `templates/ai_project/operating_model.md` 추가
 - 프로젝트별 branch / PR 전략 템플릿 `templates/ai_project/branch_pr_strategy.md` 추가
@@ -36,6 +38,15 @@
 - 문서 읽기 순서에서 `constitution.md`를 최우선 기준으로 추가
 - `org_model.md`를 Division과 조직 책임 중심으로 정리하고 Team 상세 구성은 `team_model.md`로 분리
 - `project_bootstrap_policy.md`에 단계별 질문 형식, 선택값 기록 규칙, bootstrap 완료 기준 추가
+- `bootstrap_runbook.md`에 짧은 bootstrap trigger와 템플릿 저장소/대상 프로젝트 구분 기준 추가
+- `install_runbook.md`와 `bootstrap_runbook.md`를 별도 실행 단계로 분리
+- 시드 구성 단계의 산출물에 루트 `AGENTS.md` 생성을 명시
+- bootstrap 첫 응답에 기준 runbook, `.ai/`, `AGENTS.md`, `.ai_project/`, 자동화 스크립트 여부를 보고하도록 보강
+- bootstrap Discovery를 일괄 Draft 제안 방식에서 단계별 질문과 Decision Stack 누적 방식으로 변경
+- 최종 Operating Model Draft 전에 Decision Stack Review 단계를 추가
+- 빈 프로젝트 첫 세션에서 ai-agent-ops 원본 경로를 알려주는 cold start 기준 추가
+- Codex skill-installer 오인을 피하기 위해 사용자 입력 트리거를 `AI Ops 시드 구성해줘`로 변경
+- Codex용 `AGENTS.md` 템플릿에서 install trigger와 bootstrap trigger를 분리
 - PM/Development/QA Agent를 고정 조직 구조가 아니라 bootstrap Role로 재정의
 - `workflow.md`를 PM -> Development -> QA 흐름에서 책임 단계 기반 흐름으로 개정
 - `task_queue.md`, `workflows/`, Task 템플릿, Task Board 템플릿을 vNext 상태 체계로 개정
