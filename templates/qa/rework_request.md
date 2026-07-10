@@ -1,11 +1,11 @@
 # Rework Request
 
 작성일: {{DATE}}  
-작성 Agent: QA Agent  
+작성 Agent: {{REQUESTED_BY}}  
+작성 Role: {{REQUESTED_ROLE}}  
 대상 Task ID: {{TASK_ID}}  
 대상 Task: {{TASK_NAME}}  
 Workflow: {{WORKFLOW}}  
-Active Agents: PM Agent, Development Agent, QA Agent  
 Active Capabilities: {{ACTIVE_CAPABILITIES}}  
 상태: rework_requested
 
@@ -39,3 +39,9 @@ Active Capabilities: {{ACTIVE_CAPABILITIES}}
 - 수정 내용
 - 재검증 결과
 - 남은 리스크
+
+## Next Handoff
+
+- 다음 status:
+- 다음 target_agent:
+- 다음 target_role:

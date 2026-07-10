@@ -19,4 +19,4 @@
 
 - override는 프로젝트 특수성이 명확할 때만 추가한다.
 - override가 `.ai/` 운영 원칙과 충돌하면 `.ai/`를 우선한다.
-- 반복되는 override는 템플릿 개선 후보로 PM Agent가 제안한다.
+- 반복되는 override는 템플릿 개선 후보로 Lead Role 또는 Ops Governance Role이 제안한다.

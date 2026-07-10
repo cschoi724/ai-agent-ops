@@ -1,7 +1,7 @@
 # Task Templates
 
 작성일: 2026-06-29  
-상태: Draft v1
+상태: Draft vNext
 
 ## 1. 목적
 
@@ -9,7 +9,9 @@
 
 Task 파일은 Agent 실행 지시의 source of truth다. `task_board.md`, report, QA 문서는 Task 파일을 보조한다.
 
-`status: proposed` 상태의 Task는 아직 승인되지 않은 후보이므로 `approved_by`를 비워둔다. 사용자 또는 Product Owner가 진행을 승인하면 PM Agent가 `status: approved`와 `approved_by`를 함께 갱신한다.
+`status: proposed` 상태의 Task는 아직 승인되지 않은 후보이므로 `approved_by`를 비워둔다. Lead Role이 실행 범위, ownership, `allowed_paths`, `source_of_truth`를 정리하면 `status: scoped`로 전환한다. 사용자 또는 Product Owner가 진행을 승인하면 Direction Role이 `status: approved`와 `approved_by`를 함께 갱신한다.
+
+프로젝트별 실제 Team / Role / branch 전략은 `.ai_project/operating_model.md`, `.ai_project/agent_registry.md`, `.ai_project/branch_pr_strategy.md`를 따른다.
 
 ## 2. 템플릿
 
@@ -46,3 +48,5 @@ T-YYYYMMDD-001_task-slug.md
 | 2026-06-29 | Task 템플릿 v1 작성 |
 | 2026-06-29 | 승인 전 Task의 `approved_by` 기본값 기준 추가 |
 | 2026-07-07 | active/backlog/archive 생성 위치 기준 추가 |
+| 2026-07-09 | vNext 상태 체계와 조직형 Task metadata 반영 |
+| {{DATE}} | ownership, branch, PR metadata와 Role 기반 보고 기준 추가 |

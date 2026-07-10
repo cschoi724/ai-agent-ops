@@ -1,7 +1,7 @@
 # Report Templates
 
-작성일: 2026-06-29  
-상태: Draft v1
+작성일: {{DATE}}  
+상태: Draft vNext
 
 ## 1. 목적
 
@@ -13,8 +13,7 @@
 
 | 파일 | 용도 |
 |---|---|
-| `task_report.md` | PM, Development, AI Ops 등 Task를 처리한 Agent가 공통으로 작성하는 기본 작업 보고 |
-| `dev_report.md` | Development Agent 전용 상세 보고가 필요할 때 참고하는 선택 양식 |
+| `task_report.md` | Role과 Agent에 관계없이 Task를 처리한 실행자가 작성하는 기본 작업 보고 |
 
 ## 3. 파일명 규칙
 
@@ -24,15 +23,10 @@
 T-YYYYMMDD-001_task-report.md
 ```
 
-Agent별 상세 보고가 필요한 경우:
-
-```text
-T-YYYYMMDD-001_dev-report.md
-```
-
 ## 4. 변경 이력
 
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-06-29 | Development 보고 템플릿 분리 |
 | 2026-07-02 | 공통 Task Report 템플릿 추가 |
+| {{DATE}} | Development Agent 전용 보고 템플릿 제거, Role 기반 task_report로 통합 |

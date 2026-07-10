@@ -8,6 +8,47 @@
 - Minor: 새 Agent, workflow, 템플릿, 운영 규칙 추가 또는 기본 흐름 변경
 - Patch: 문구 정리, 충돌 제거, 설명 보강, 누락 수정
 
+## 0.6.0 - 2026-07-09
+
+### Added
+
+- 조직형 AI Agent 운영체계의 최상위 원칙 문서 `constitution.md` 추가
+- Organization / Division / Team 기준 문서 `org_model.md` 추가
+- Role / Agent / Capability 책임 기준 문서 `role_model.md` 추가
+- path / domain / document ownership 기준 문서 `ownership_model.md` 추가
+- 병렬 작업, dependency, rework, blocked 조율 문서 `coordination_policy.md` 추가
+- project board / team board 기준 문서 `board_model.md` 추가
+- Git branch / commit / PR / merge 일반 정책 문서 `branch_pr_policy.md` 추가
+- 프로젝트별 운영체계 구성 선택 정책 문서 `project_bootstrap_policy.md` 추가
+- 프로젝트 bootstrap 실행 절차 문서 `bootstrap_runbook.md` 추가
+- Team 구성 패턴과 최소 계약 문서 `team_model.md` 추가
+- 프로젝트별 실제 운영 구성 템플릿 `templates/ai_project/operating_model.md` 추가
+- 프로젝트별 branch / PR 전략 템플릿 `templates/ai_project/branch_pr_strategy.md` 추가
+- Organization, Division, Team, Role, Capability, Workflow, Task 분리 원칙 추가
+- 초기 운영 후보를 Development Division / 선택 Team / AI Ops Division으로 정의
+- Task metadata 확장 방향으로 `org_unit`, `team`, `team_lead`, `target_role`, `blocks`, `parallel_group` 초안 추가
+- vNext 중심 흐름을 Need -> Direction -> Coordination -> Execution -> Verification -> Completion -> Learning / Ops Improvement로 정의
+- `scoped`, `verification_ready`, `verification_in_progress`, `verification_passed`, `completion_review` 상태 체계 추가
+
+### Changed
+
+- README를 vNext 조직형 운영체계 진입점으로 개정
+- 문서 읽기 순서에서 `constitution.md`를 최우선 기준으로 추가
+- `org_model.md`를 Division과 조직 책임 중심으로 정리하고 Team 상세 구성은 `team_model.md`로 분리
+- `project_bootstrap_policy.md`에 단계별 질문 형식, 선택값 기록 규칙, bootstrap 완료 기준 추가
+- PM/Development/QA Agent를 고정 조직 구조가 아니라 bootstrap Role로 재정의
+- `workflow.md`를 PM -> Development -> QA 흐름에서 책임 단계 기반 흐름으로 개정
+- `task_queue.md`, `workflows/`, Task 템플릿, Task Board 템플릿을 vNext 상태 체계로 개정
+- `capabilities.md`를 Role 기반 capability 체계로 개정
+- `agent_registry.md`와 프로젝트 agent registry 템플릿의 capability 매핑을 vNext 기준으로 정리
+- project task board 템플릿에 Team Summary, Role Summary, Ownership / Coordination 섹션 추가
+- 기존 Development 전용 보고 템플릿을 제거하고 공통 `task_report.md`를 Role 기반 보고로 개편
+- QA 템플릿을 QA Agent 고정에서 Verification Role 기준으로 개편
+- Team별 운영 구성을 위한 `templates/ai_project/team_context.md` 추가
+- `.ai_project` 템플릿을 프로젝트별 선택값과 Team/Role placeholder 중심으로 개편
+- 루트 운영 문서를 `core/`, `models/`, `policies/`, `runtime/`, `bootstrap/`으로 재분류
+- 프로젝트 bootstrap 앞단에 Start Context와 Readiness Level 분류 흐름 추가
+
 ## 0.5.1 - 2026-07-09
 
 ### Changed

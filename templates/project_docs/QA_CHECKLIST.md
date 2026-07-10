@@ -6,7 +6,7 @@
 
 ## 1. 목적
 
-이 문서는 QA Agent와 Development Agent가 공통으로 확인해야 할 검증 기준을 정의한다.
+이 문서는 Execution Role과 Verification Role이 공통으로 확인해야 할 검증 기준을 정의한다.
 
 ## 2. 기본 검증
 

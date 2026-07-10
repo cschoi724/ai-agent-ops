@@ -12,7 +12,7 @@
 
 | ID | 질문 | 필요한 이유 | 영향 | 담당 | 상태 | 결정 문서 반영 |
 |---|---|---|---|---|---|---|
-| Q-001 |  |  |  | PM Agent | Open |  |
+| Q-001 |  |  |  | {{OWNER_ROLE_OR_AGENT}} | Open |  |
 
 상태 값은 `Open`, `Answered`, `Deferred`, `Closed` 중 하나를 사용한다.
 

@@ -1,7 +1,7 @@
 # Project Workspace Policy
 
 작성일: 2026-06-29  
-상태: Draft v1  
+상태: Draft vNext  
 범위: `.ai/`와 `.ai_project/` 분리 운영 기준
 
 ## 1. 목적
@@ -46,7 +46,7 @@ git clone https://github.com/cschoi724/ai-agent-ops.git .ai
 
 - `.ai/`는 템플릿 저장소이므로 프로젝트 진행 중 Agent가 임의로 수정하지 않는다.
 - `.ai/` 변경은 `ai-agent-ops` 저장소의 변경으로 취급한다.
-- `.ai/` 변경은 `.ai/document_governance.md` 기준으로 사용자 승인 후 진행한다.
+- `.ai/` 변경은 `.ai/policies/document_governance.md` 기준으로 사용자 승인 후 진행한다.
 
 ## 4. `.ai_project/` 운영 기준
 
@@ -74,6 +74,7 @@ git clone https://github.com/cschoi724/ai-agent-ops.git .ai
 ```text
 .ai_project/
   README.md
+  operating_model.md
   agent_registry.md
   current_context.md
   tasks/
@@ -82,6 +83,12 @@ git clone https://github.com/cschoi724/ai-agent-ops.git .ai
     archive/
       YYYY-MM/
   task_board.md
+  teams/
+    {team_id}/
+      team_context.md
+      task_board.md
+      branch_pr_strategy.md
+  branch_pr_strategy.md
   source_of_truth.md
   ops_decisions.md
   ops_issues.md
@@ -107,6 +114,7 @@ AI Ops Agent가 생성할 수 있는 기본 파일:
 
 ```text
 .ai_project/README.md
+.ai_project/operating_model.md
 .ai_project/agent_registry.md
 .ai_project/current_context.md
 .ai_project/tasks/
@@ -114,6 +122,7 @@ AI Ops Agent가 생성할 수 있는 기본 파일:
 .ai_project/tasks/backlog/
 .ai_project/tasks/archive/
 .ai_project/task_board.md
+.ai_project/branch_pr_strategy.md
 .ai_project/source_of_truth.md
 .ai_project/ops_decisions.md
 .ai_project/ops_issues.md
@@ -135,24 +144,27 @@ Task 보관 기준:
 
 AI Ops Agent는 `.ai_project/`를 생성하더라도 사용자 승인 없이 `.ai/` 운영 문서를 수정하지 않는다.
 
-PM Agent는 운영 마이그레이션 이후 제품/일정 영향 검토, source of truth 최종 판단, 첫 제품 Task 등록을 담당한다.
+Lead Role 또는 Direction Role은 운영 마이그레이션 이후 제품/일정 영향 검토, source of truth 최종 판단, 첫 제품 Task 등록을 담당한다.
 
 ## 6. `.ai_project/` 수정 권한
 
 | 영역 | 기본 수정 주체 | 승인 필요 여부 |
 |---|---|---|
-| `.ai_project/current_context.md` | PM Agent | 일반 상태 갱신은 가능, 운영 모드 변경은 사용자 확인 |
-| `.ai_project/tasks/` | PM/Dev/QA Agent | 생성과 승인 상태 변경은 PM Agent, 실행 상태 갱신은 담당 Agent |
-| `.ai_project/task_board.md` | PM Agent | Task Queue 요약 갱신은 가능, 우선순위 변경은 사용자 확인 권장 |
-| `.ai_project/source_of_truth.md` | PM Agent | 프로젝트 기준 변경 전 사용자 승인 |
-| `.ai_project/ops_decisions.md` | PM Agent | 사용자 결정 후 갱신 |
+| `.ai_project/operating_model.md` | AI Ops Agent / Lead Role | 초기 구성과 운영 모델 변경 전 사용자 승인 |
+| `.ai_project/current_context.md` | Lead Role / Ops Governance Role | 일반 상태 갱신은 가능, 운영 모드 변경은 사용자 확인 |
+| `.ai_project/tasks/` | 담당 Role | 생성과 승인 상태 변경은 Lead/Direction Role, 실행 상태 갱신은 담당 Role |
+| `.ai_project/task_board.md` | Lead Role | Task Queue 요약 갱신은 가능, 우선순위 변경은 사용자 확인 권장 |
+| `.ai_project/teams/{team_id}/team_context.md` | Lead Role / AI Ops Agent | Team 구성 또는 ownership 변경 전 사용자 승인 |
+| `.ai_project/branch_pr_strategy.md` | Lead Role | 프로젝트별 branch/PR 전략 변경 전 사용자 승인 |
+| `.ai_project/source_of_truth.md` | Lead Role / Direction Role | 프로젝트 기준 변경 전 사용자 승인 |
+| `.ai_project/ops_decisions.md` | Lead Role / Ops Governance Role | 사용자 결정 후 갱신 |
 | `.ai_project/ops_issues.md` | AI Ops Agent | 운영 이슈 기록 가능, 실행 Task 상태 변경 금지 |
 | `.ai_project/ops_migration_plan.md` | AI Ops Agent | 운영 마이그레이션 계획 작성 가능, 적용 전 사용자 승인 |
-| `.ai_project/agent_registry.md` | PM Agent | Agent 활성/비활성 변경 전 사용자 승인 |
-| `.ai_project/workflow_overrides.md` | PM Agent | workflow 변경 전 사용자 승인 |
-| `.ai_project/reports/` | PM/Dev/AI Ops Agent | 작업 완료 보고 작성 가능 |
-| `.ai_project/qa/` | QA Agent | QA 보고 작성 가능 |
-| `.ai_project/release/` | PM Agent / QA Agent | 배포 관련 작업은 사용자 승인 필요 |
+| `.ai_project/agent_registry.md` | Lead Role / AI Ops Agent | Agent 활성/비활성 변경 전 사용자 승인 |
+| `.ai_project/workflow_overrides.md` | Lead Role / AI Ops Agent | workflow 변경 전 사용자 승인 |
+| `.ai_project/reports/` | 담당 Role | 작업 완료 보고 작성 가능 |
+| `.ai_project/qa/` | Verification Role | 검증 보고 작성 가능 |
+| `.ai_project/release/` | Release Role / Completion Role | 배포 관련 작업은 사용자 승인 필요 |
 
 ## 7. 문서 참조 우선순위
 
@@ -176,7 +188,7 @@ Agent는 아래 순서로 문서를 해석한다.
 - Task 요약 충돌: `.ai_project/tasks/`가 `.ai_project/task_board.md`보다 우선
 - 제품/기술 문서 충돌: `.ai_project/source_of_truth.md`에 지정된 프로젝트 문서 우선
 - 제품 정책 충돌: 사용자 결정 우선
-- 코드 실제 동작 충돌: 코드와 검증 결과를 확인한 뒤 PM Agent가 정리
+- 코드 실제 동작 충돌: 코드와 검증 결과를 확인한 뒤 Lead Role 또는 Verification Role이 정리
 
 ## 9. 변경 이력
 
@@ -188,3 +200,5 @@ Agent는 아래 순서로 문서를 해석한다.
 | 2026-07-01 | `.ai_project/` 초기화와 운영 마이그레이션 주체를 AI Ops Agent로 정리 |
 | 2026-07-02 | `.ai_project/reports/`를 공통 작업 보고 영역으로 일반화 |
 | 2026-07-07 | Task active/backlog/archive 보관 구조 기준 추가 |
+| 2026-07-09 | 프로젝트별 operating_model 문서 기준 추가 |
+| 2026-07-09 | Team별 context/board/branch strategy 구조와 Role 기반 수정 권한 추가 |

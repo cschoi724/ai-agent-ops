@@ -1,13 +1,13 @@
 # QA Report
 
 작성일: {{DATE}}  
-작성 Agent: QA Agent  
+작성 Agent: {{VERIFICATION_AGENT}}  
+작성 Role: Verification Role  
 대상 Task ID: {{TASK_ID}}  
 대상 Task: {{TASK_NAME}}  
 Workflow: {{WORKFLOW}}  
-Active Agents: PM Agent, Development Agent, QA Agent  
 Active Capabilities: {{ACTIVE_CAPABILITIES}}  
-QA 결과: PASS / PASS_WITH_RISK / FAIL / BLOCKED
+검증 결과: PASS / PASS_WITH_RISK / FAIL / BLOCKED
 
 ## Source Task
 
@@ -43,8 +43,11 @@ QA 결과: PASS / PASS_WITH_RISK / FAIL / BLOCKED
 
 - 
 
-## PM Agent 권장 조치
+## Next Handoff
 
-- 커밋 가능 여부:
+- 다음 status:
+- 다음 target_agent:
+- 다음 target_role:
+- merge 준비 여부:
 - 재작업 필요 여부:
 - 사용자 결정 필요 여부:

@@ -1,7 +1,7 @@
 # AI Agent Commit Policy
 
 작성일: 2026-06-29  
-상태: Draft v1  
+상태: Draft vNext  
 범위: AI Agent 운영 문서와 적용 대상 프로젝트 변경의 커밋 분리 기준
 
 ## 1. 목적
@@ -25,6 +25,8 @@
 - `.ai_project/`를 로컬 전용으로 둘 경우 사유, 재검토 조건, 향후 저장소 포함 시점을 migration 문서 또는 `.ai_project/ops_decisions.md`에 기록한다.
 - 프로젝트 코드/문서 변경과 `.ai/` 템플릿 변경은 항상 별도 커밋으로 분리한다.
 - 커밋, push, 배포, 외부 설정 변경은 사용자 승인 후 진행한다.
+- 프로젝트가 `.ai/policies/branch_pr_policy.md` 기준으로 branch/PR 전략을 명시한 경우, task branch 안의 commit/push/PR 권한은 해당 프로젝트 설정을 따른다.
+- 어떤 설정에서도 default branch 직접 push는 금지한다.
 
 ## 4. 커밋 분리 기준
 
@@ -38,7 +40,7 @@
 
 ## 5. 적용 대상 프로젝트 정책
 
-새 프로젝트에 AI Agent 운영을 적용할 때 PM Agent는 아래를 먼저 확인한다.
+새 프로젝트에 AI Agent 운영을 적용할 때 Lead Role 또는 Ops Governance Role은 아래를 먼저 확인한다.
 
 1. `.ai/`가 별도 저장소로 관리되는지 확인한다.
 2. 적용 대상 프로젝트 `.gitignore`에서 `.ai/`가 제외되는지 확인한다.
@@ -52,3 +54,5 @@
 |---|---|
 | 2026-06-29 | AI Agent 커밋 분리 정책 v1 작성 |
 | 2026-06-29 | `.ai_project/` Git 포함 기본값과 로컬 전용 예외 기록 기준 명확화 |
+| 2026-07-09 | branch/PR 정책과 프로젝트별 권한 설정 참조 추가 |
+| 2026-07-09 | vNext Role 기반 적용 주체로 개정 |

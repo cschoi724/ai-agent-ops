@@ -15,24 +15,26 @@
 | 항목 | 값 |
 |---|---|
 | 현재 운영 모드 | {{OPS_MODE}} |
-| 활성 Agent | PM Agent, Development Agent, QA Agent, AI Ops Agent |
+| 활성 Team | {{ACTIVE_TEAMS}} |
+| 활성 Agent | {{ACTIVE_AGENTS}} |
 | 현재 우선 Task | {{CURRENT_TASK_ID}} |
-| 다음 확인 위치 | `.ai_project/tasks/`, `.ai_project/ops_migration_plan.md` |
+| 다음 확인 위치 | `.ai_project/operating_model.md`, `.ai_project/tasks/`, `.ai_project/ops_migration_plan.md` |
 | Lock timeout | 240분 |
 
 ## 3. 현재 주의사항
 
-- AI Ops Agent는 제품 Task 실행 라인에 참여하지 않고, 운영 프로세스 문제를 `.ai_project/ops_issues.md`에 기록한다.
-- AI 운영 체계 도입 또는 마이그레이션은 AI Ops Agent가 `.ai/workflows/ops_migration.md` 기준으로 주도한다.
+- Ops Governance Role은 제품 Task 실행 라인에 참여하지 않고, 운영 프로세스 문제를 `.ai_project/ops_issues.md`에 기록한다.
+- AI 운영 체계 도입 또는 마이그레이션은 AI Ops Agent 또는 Ops Governance Role이 `.ai/workflows/ops_migration.md` 기준으로 주도한다.
 
 ## 4. 세션 시작 체크
 
-1. `.ai/workflow.md`를 확인한다.
-2. `.ai/task_queue.md`를 확인한다.
-3. 이 문서를 확인한다.
-4. `.ai_project/tasks/`에서 자신의 역할 또는 capability와 맞는 Task를 확인한다.
-5. Task의 `status`, `approved_by`, `depends_on`, `locked_by`, `allowed_paths`, `source_of_truth`를 확인한 뒤 진행한다.
-6. 실행 전 lock을 획득하고 하나의 Task만 진행한다.
+1. `.ai_project/operating_model.md`를 확인한다.
+2. `.ai_project/agent_registry.md`에서 현재 Agent의 Role을 확인한다.
+3. `.ai/runtime/workflow.md`와 `.ai/runtime/task_queue.md`를 확인한다.
+4. 이 문서를 확인한다.
+5. `.ai_project/tasks/`에서 자신의 `target_role` 또는 `target_agent`와 맞는 Task를 확인한다.
+6. Task의 `status`, `approved_by`, `depends_on`, `locked_by`, `allowed_paths`, `source_of_truth`를 확인한 뒤 진행한다.
+7. 실행 전 lock을 획득하고 하나의 Task만 진행한다.
 
 ## 5. 변경 이력
 
@@ -41,3 +43,5 @@
 | {{DATE}} | 현재 Agent 컨텍스트 문서 초기화 |
 | {{DATE}} | AI Ops Agent 독립 운영 기준 추가 |
 | {{DATE}} | AI Ops Agent 운영 마이그레이션 기준 추가 |
+| {{DATE}} | 프로젝트 operating_model 확인 기준 추가 |
+| {{DATE}} | 활성 Team/Agent와 Role 기반 세션 시작 기준 추가 |
