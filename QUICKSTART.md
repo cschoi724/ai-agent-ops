@@ -54,6 +54,12 @@ Seed 단계에서는 `.ai_project/`를 만들지 않는다.
 /path/to/ai-agent-ops/bin/aiops doctor
 ```
 
+경고까지 실패로 처리하려면:
+
+```bash
+/path/to/ai-agent-ops/bin/aiops doctor --strict
+```
+
 ## 4. Bootstrap
 
 Agent 세션을 열고 말한다.

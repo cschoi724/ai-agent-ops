@@ -7,7 +7,7 @@ aiops - AI Agent Ops project helper
 
 Usage:
   aiops seed [--adapter codex|claude|both] [--mode link|copy] [--target DIR] [--core DIR] [--force]
-  aiops doctor [--target DIR]
+  aiops doctor [--target DIR] [--strict]
   aiops version [--core DIR]
   aiops help
 
@@ -32,6 +32,32 @@ die() {
 
 info() {
   printf '%s\n' "$*"
+}
+
+same_file_content() {
+  [ -f "$1" ] && [ -f "$2" ] && cmp -s "$1" "$2"
+}
+
+check_required_file() {
+  file="$1"
+  label="$2"
+  if [ -f "$file" ]; then
+    info "ok: $label"
+  else
+    info "missing: $label"
+    return 1
+  fi
+}
+
+check_required_dir() {
+  dir="$1"
+  label="$2"
+  if [ -d "$dir" ]; then
+    info "ok: $label"
+  else
+    info "missing: $label"
+    return 1
+  fi
 }
 
 script_dir() {
@@ -213,6 +239,7 @@ cmd_seed() {
 
 cmd_doctor() {
   target="$(pwd)"
+  strict="no"
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -220,6 +247,9 @@ cmd_doctor() {
         shift
         [ "$#" -gt 0 ] || die "--target requires a value"
         target="$1"
+        ;;
+      --strict)
+        strict="yes"
         ;;
       -h|--help)
         usage
@@ -235,15 +265,19 @@ cmd_doctor() {
   target="$(abs_path "$target")"
   ai="$target/.ai"
   failed=0
+  warnings=0
 
   info "AI Ops doctor"
   info "target: $target"
+  info "strict: $strict"
 
   if [ -L "$ai" ]; then
     link_target="$(readlink "$ai")"
     info "ok: .ai symlink -> $link_target"
   elif [ -d "$ai" ]; then
     info "ok: .ai directory"
+    info "warn: .ai is a writable project-local directory; symlink mode is recommended for vendor core"
+    warnings=$((warnings + 1))
   else
     info "missing: .ai"
     failed=1
@@ -256,28 +290,86 @@ cmd_doctor() {
     "$ai/models/role_model.md" \
     "$ai/runtime/workflow.md"
   do
-    if [ -f "$required" ]; then
-      info "ok: ${required#$target/}"
-    else
-      info "missing: ${required#$target/}"
-      failed=1
-    fi
+    check_required_file "$required" "${required#$target/}" || failed=1
   done
 
   if [ -f "$target/AGENTS.md" ]; then
     info "ok: AGENTS.md"
+    if [ -f "$ai/templates/tool_adapters/codex/AGENTS.md" ]; then
+      if same_file_content "$target/AGENTS.md" "$ai/templates/tool_adapters/codex/AGENTS.md"; then
+        info "ok: AGENTS.md matches codex adapter template"
+      else
+        info "warn: AGENTS.md differs from codex adapter template"
+        warnings=$((warnings + 1))
+      fi
+    fi
   else
     info "note: AGENTS.md missing"
   fi
 
   if [ -f "$target/CLAUDE.md" ]; then
     info "ok: CLAUDE.md"
+    if [ -f "$ai/templates/tool_adapters/claude/CLAUDE.md" ]; then
+      if same_file_content "$target/CLAUDE.md" "$ai/templates/tool_adapters/claude/CLAUDE.md"; then
+        info "ok: CLAUDE.md matches claude adapter template"
+      else
+        info "warn: CLAUDE.md differs from claude adapter template"
+        warnings=$((warnings + 1))
+      fi
+    fi
   else
     info "note: CLAUDE.md missing"
   fi
 
   if [ -d "$target/.ai_project" ]; then
     info "ok: .ai_project"
+    for required in \
+      "$target/.ai_project/operating_model.md" \
+      "$target/.ai_project/agent_registry.md" \
+      "$target/.ai_project/source_of_truth.md" \
+      "$target/.ai_project/task_board.md" \
+      "$target/.ai_project/branch_pr_strategy.md" \
+      "$target/.ai_project/workflow_overrides.md" \
+      "$target/.ai_project/ops_decisions.md" \
+      "$target/.ai_project/ops_issues.md" \
+      "$target/.ai_project/tasks"
+    do
+      if [ -d "$required" ]; then
+        check_required_dir "$required" "${required#$target/}" || failed=1
+      else
+        check_required_file "$required" "${required#$target/}" || failed=1
+      fi
+    done
+
+    for task_dir in "$target/.ai_project/tasks/active" "$target/.ai_project/tasks/backlog" "$target/.ai_project/tasks/archive"; do
+      if [ -d "$task_dir" ]; then
+        info "ok: ${task_dir#$target/}"
+      else
+        info "warn: missing ${task_dir#$target/}"
+        warnings=$((warnings + 1))
+      fi
+    done
+
+    if [ -d "$target/.ai_project/tasks" ]; then
+      find "$target/.ai_project/tasks" -type f -name '*.md' | while IFS= read -r task; do
+        if ! grep -q '^status:' "$task"; then
+          printf 'warn: task missing status: %s\n' "${task#$target/}"
+        fi
+        if ! grep -q '^target_role:' "$task"; then
+          printf 'warn: task missing target_role: %s\n' "${task#$target/}"
+        fi
+        if grep -q '^status: verification_ready' "$task"; then
+          qa_to="$(awk -F': ' '/^qa_to:/{print $2; exit}' "$task")"
+          if [ -z "$qa_to" ]; then
+            printf 'warn: verification_ready task missing qa_to: %s\n' "${task#$target/}"
+          elif [ -f "$target/$qa_to" ]; then
+            printf 'ok: qa report exists for %s\n' "${task#$target/}"
+          else
+            printf 'note: qa report pending for %s -> %s\n' "${task#$target/}" "$qa_to"
+          fi
+        fi
+      done
+    fi
   else
     info "note: .ai_project missing; run bootstrap when ready"
   fi
@@ -286,6 +378,11 @@ cmd_doctor() {
     info "version: $(cat "$ai/VERSION")"
   fi
 
+  if [ "$strict" = "yes" ] && [ "$warnings" -gt 0 ]; then
+    failed=1
+  fi
+
+  info "warnings: $warnings"
   [ "$failed" -eq 0 ] || exit 1
 }
 

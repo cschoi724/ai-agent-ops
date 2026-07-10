@@ -78,10 +78,20 @@ aiops doctor
 확인 항목:
 
 - `.ai` 존재 여부
+- `.ai`가 symlink인지 또는 프로젝트 로컬 복사본인지
 - 핵심 runbook 존재 여부
 - `AGENTS.md` 또는 `CLAUDE.md` 존재 여부
 - `.ai_project/` 존재 여부
+- `.ai_project` 필수 문서 존재 여부
+- Adapter 진입 지침이 템플릿과 다른지 여부
+- verification 대기 Task의 QA 보고서 상태
 - core version
+
+경고까지 실패로 처리하려면 strict 모드를 사용한다.
+
+```bash
+aiops doctor --strict
+```
 
 ## 5. Homebrew 목표 구조
 

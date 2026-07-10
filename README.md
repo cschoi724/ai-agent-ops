@@ -75,6 +75,12 @@ AGENTS.md or CLAUDE.md
 /path/to/ai-agent-ops/bin/aiops doctor
 ```
 
+경고까지 실패로 보고 싶으면 strict 모드를 사용한다.
+
+```bash
+/path/to/ai-agent-ops/bin/aiops doctor --strict
+```
+
 ### 2. 프로젝트 운영체계 Bootstrap
 
 시드 구성이 끝난 뒤 새 Codex 세션을 열고 말한다.
