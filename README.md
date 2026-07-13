@@ -173,6 +173,7 @@ AI Agent Ops는 아래 기본 안전 규칙을 가진다.
 | `aiops bootstrap-guide` | 현재 AI Ops 구성 상태별 다음 단계 안내 |
 | `aiops update --check` | 현재 core 업데이트 방식과 버전 확인 |
 | `aiops update` | git checkout 기반 core를 fast-forward 업데이트 |
+| `aiops release-check --strict` | 초기 배포 전 VERSION, Formula, 문서, license 상태 점검 |
 | `AI Ops bootstrap 시작해줘.` | `.ai_project/` 운영 구성을 대화형으로 시작하고 빠른 시작/세부 설정을 선택 |
 | `AI Ops bootstrap 재검토해줘.` | 기존 `.ai_project/` 결정을 Decision Stack 기준으로 재검토 |
 

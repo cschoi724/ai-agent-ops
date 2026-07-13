@@ -18,6 +18,7 @@
 - `.ai_project` 생성 템플릿을 `fast_track/` 최소 세트와 `guided_full/` 상세 세트로 분리
 - Role 전환 시 사용할 표준 handoff 문서와 `다음 Agent에게 전달할 말` 템플릿 추가
 - `aiops update` 명령과 Homebrew Formula 초안, 배포 준비 문서 추가
+- 초기 배포 전 VERSION, Formula, license, 필수 문서 상태를 확인하는 `aiops release-check` 명령 추가
 
 ### Changed
 

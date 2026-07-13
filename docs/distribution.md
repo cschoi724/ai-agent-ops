@@ -57,13 +57,15 @@ aiops update --check
 
 1. `VERSION` 값 갱신
 2. `CHANGELOG.md` 갱신
-3. `bin/aiops version` 확인
+3. `bin/aiops release-check --strict` 확인
 4. `bin/aiops doctor --target <seeded test project> --strict` 확인
 5. `bin/aiops update --check` 확인
-6. git tag 생성: `vX.Y.Z`
-7. GitHub release tarball SHA256 계산
-8. `Formula/ai-agent-ops.rb`의 `url`, `sha256` 갱신
-9. Homebrew tap 저장소에 Formula 반영
+6. license 결정과 `LICENSE` 파일 확인
+7. git tag 생성: `vX.Y.Z`
+8. GitHub release tarball SHA256 계산
+9. `Formula/ai-agent-ops.rb`의 `url`, `sha256` 갱신
+10. `bin/aiops release-check --strict` 재확인
+11. Homebrew tap 저장소에 Formula 반영
 
 권장 tag:
 
@@ -117,3 +119,25 @@ aiops doctor --target ./YourProject --strict
 ```
 
 업데이트 후에도 `.ai_project/`는 덮어쓰지 않는다. 프로젝트별 반영은 Ops Governance Role이 `.ai/policies/update_policy.md` 기준으로 점검한다.
+
+## 7. Release Check
+
+릴리스 전에는 아래 명령으로 배포 차단 항목을 확인한다.
+
+```bash
+aiops release-check
+aiops release-check --strict
+```
+
+확인 항목:
+
+- `VERSION` 형식
+- `CHANGELOG.md`의 현재 버전 섹션
+- 필수 문서와 adapter 템플릿 존재 여부
+- Formula URL과 VERSION 일치 여부
+- Formula SHA256 placeholder 제거 여부
+- Formula Ruby 문법
+- `LICENSE` 존재 여부
+- git working tree clean 여부
+
+`--strict`는 경고를 실패로 처리한다. 초기 public Homebrew 배포 전에는 반드시 strict 모드를 통과해야 한다.

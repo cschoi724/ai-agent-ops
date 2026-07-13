@@ -11,6 +11,7 @@ Usage:
   aiops bootstrap-guide [--target DIR]
   aiops version [--core DIR]
   aiops update [--core DIR] [--check]
+  aiops release-check [--core DIR] [--strict]
   aiops help
 
 Defaults:
@@ -26,6 +27,7 @@ Examples:
   aiops doctor
   aiops bootstrap-guide
   aiops update --check
+  aiops release-check --strict
 EOF
 }
 
@@ -541,6 +543,141 @@ cmd_update() {
   info "If copied into a project, reseed from an updated core after reviewing migration impact."
 }
 
+cmd_release_check() {
+  core="$(default_core_dir)"
+  strict="no"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --core)
+        shift
+        [ "$#" -gt 0 ] || die "--core requires a value"
+        core="$1"
+        ;;
+      --strict)
+        strict="yes"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "unknown release-check option: $1"
+        ;;
+    esac
+    shift
+  done
+
+  core="$(abs_path "$core")"
+  require_core "$core"
+
+  failed=0
+  warnings=0
+  version="unknown"
+  if [ -f "$core/VERSION" ]; then
+    version="$(cat "$core/VERSION")"
+  fi
+
+  info "AI Ops release check"
+  info "core: $core"
+  info "version: $version"
+  info "strict: $strict"
+
+  case "$version" in
+    *[!0-9.]*|*.*.*.*|.*|*.)
+      info "warn: VERSION should be semantic numeric form like 0.6.1"
+      warnings=$((warnings + 1))
+      ;;
+    *.*.*)
+      info "ok: VERSION format"
+      ;;
+    *)
+      info "warn: VERSION should be semantic numeric form like 0.6.1"
+      warnings=$((warnings + 1))
+      ;;
+  esac
+
+  for required in \
+    "$core/README.md" \
+    "$core/QUICKSTART.md" \
+    "$core/CHANGELOG.md" \
+    "$core/docs/installation.md" \
+    "$core/docs/distribution.md" \
+    "$core/bin/aiops" \
+    "$core/Formula/ai-agent-ops.rb" \
+    "$core/core/constitution.md" \
+    "$core/runtime/workflow.md" \
+    "$core/runtime/task_queue.md" \
+    "$core/templates/tool_adapters/codex/AGENTS.md" \
+    "$core/templates/tool_adapters/claude/CLAUDE.md"
+  do
+    check_required_file "$required" "${required#$core/}" || failed=1
+  done
+
+  if [ -f "$core/CHANGELOG.md" ]; then
+    if grep -q "^## $version " "$core/CHANGELOG.md"; then
+      info "ok: CHANGELOG has version section"
+    else
+      info "warn: CHANGELOG missing section for $version"
+      warnings=$((warnings + 1))
+    fi
+  fi
+
+  formula="$core/Formula/ai-agent-ops.rb"
+  if [ -f "$formula" ]; then
+    if grep -q "refs/tags/v$version.tar.gz" "$formula"; then
+      info "ok: Formula URL matches VERSION"
+    else
+      info "warn: Formula URL does not match VERSION v$version"
+      warnings=$((warnings + 1))
+    fi
+
+    if grep -q 'REPLACE_WITH_RELEASE_SHA256' "$formula"; then
+      info "warn: Formula sha256 placeholder must be replaced before Homebrew release"
+      warnings=$((warnings + 1))
+    elif grep -Eq 'sha256 "[0-9a-f]{64}"' "$formula"; then
+      info "ok: Formula sha256 format"
+    else
+      info "warn: Formula sha256 is missing or invalid"
+      warnings=$((warnings + 1))
+    fi
+
+    if command -v ruby >/dev/null 2>&1; then
+      if ruby -c "$formula" >/dev/null 2>&1; then
+        info "ok: Formula Ruby syntax"
+      else
+        info "warn: Formula Ruby syntax failed"
+        warnings=$((warnings + 1))
+      fi
+    else
+      info "note: ruby not available; Formula syntax not checked"
+    fi
+  fi
+
+  if [ -f "$core/LICENSE" ] || [ -f "$core/LICENSE.md" ]; then
+    info "ok: LICENSE"
+  else
+    info "warn: LICENSE missing; choose a license before public Homebrew release"
+    warnings=$((warnings + 1))
+  fi
+
+  if [ -d "$core/.git" ]; then
+    if git -C "$core" diff --quiet && git -C "$core" diff --cached --quiet; then
+      info "ok: git working tree clean"
+    else
+      info "warn: git working tree has uncommitted changes"
+      warnings=$((warnings + 1))
+    fi
+  fi
+
+  if [ "$strict" = "yes" ] && [ "$warnings" -gt 0 ]; then
+    failed=1
+  fi
+
+  info "warnings: $warnings"
+  [ "$failed" -eq 0 ] || exit 1
+}
+
 cmd_bootstrap_guide() {
   target="$(pwd)"
 
@@ -655,6 +792,7 @@ main() {
     bootstrap-guide) cmd_bootstrap_guide "$@" ;;
     version) cmd_version "$@" ;;
     update) cmd_update "$@" ;;
+    release-check) cmd_release_check "$@" ;;
     help|-h|--help) usage ;;
     *) die "unknown command: $cmd" ;;
   esac
