@@ -1,64 +1,83 @@
-# AI Project Workspace
+# AI Project Templates
 
 작성일: {{DATE}}  
-프로젝트: {{PROJECT_NAME}}  
 상태: Draft
 
 ## 1. 목적
 
-이 디렉토리는 현재 프로젝트에 종속되는 AI Agent 협업 문서 영역이다.
+이 디렉토리는 `.ai_project/` 생성용 템플릿을 bootstrap mode별로 제공한다.
 
-`.ai/`는 운영 가이드북이고, `.ai_project/`는 실제 Agent Task Queue와 협업 기록을 관리한다.
+`.ai/`는 공통 운영체계이고, `.ai_project/`는 프로젝트별 실제 운영 구성과 상태를 기록한다.
 
-## 2. 문서 목록
+## 2. Template Sets
 
-| 문서/폴더 | 역할 |
-|---|---|
-| `.ai_project/operating_model.md` | 프로젝트별 실제 운영 구성 |
-| `.ai_project/agent_registry.md` | 현재 프로젝트 활성 Agent 구성 |
-| `.ai_project/current_context.md` | 세션 시작 시 확인할 현재 운영 컨텍스트 |
-| `.ai_project/tasks/` | Agent 실행 Task Queue |
-| `.ai_project/tasks/active/` | 실행/검증/완료 판단 대상 Task |
-| `.ai_project/tasks/backlog/` | 승인 전 후보와 보류 후보 Task |
-| `.ai_project/tasks/archive/` | 완료/취소/오래된 Task 보관 |
-| `.ai_project/task_board.md` | Task Queue 요약 보드 |
-| `.ai_project/teams/{team_id}/team_context.md` | Team별 운영 구성 |
-| `.ai_project/teams/{team_id}/task_board.md` | Team별 Task Board |
-| `.ai_project/teams/{team_id}/branch_pr_strategy.md` | Team별 branch / PR 예외 |
-| `.ai_project/branch_pr_strategy.md` | 프로젝트별 branch / PR / merge 전략 |
-| `.ai_project/source_of_truth.md` | 프로젝트 기준 문서와 충돌 처리 기준 |
-| `.ai_project/ops_decisions.md` | Agent 운영 결정 기록 |
-| `.ai_project/ops_issues.md` | AI Agent 운영 프로세스 이슈와 개선 제안 |
-| `.ai_project/ops_migration_plan.md` | AI Agent 운영 체계 도입 계획 |
-| `.ai_project/workflow_overrides.md` | 프로젝트별 workflow 예외 |
-| `.ai_project/reports/` | 작업 완료 보고 |
-| `.ai_project/qa/` | QA 보고 |
-| `.ai_project/release/` | 릴리즈 준비 기록 |
+| Template Set | 용도 | 권장 상황 |
+|---|---|---|
+| `fast_track/` | 최소 운영 구성 | 처음 사용하는 사용자, 비개발자, 작은 프로젝트, discovery 중심 프로젝트 |
+| `guided_full/` | 상세 운영 구성 | Team/Role/Workflow/Ownership/Branch/Source of Truth를 세부 선택한 프로젝트 |
 
-## 3. 운영 원칙
+## 3. Fast Track 생성 후보
 
-- `.ai_project/`는 기본적으로 프로젝트 저장소에 포함한다.
-- 초기 마이그레이션이나 운영 실험 단계에서 로컬 전용으로 시작하는 경우, 그 결정과 재검토 조건을 `ops_decisions.md`에 기록한다.
-- `.ai/` 운영 문서와 충돌하면 운영 원칙은 `.ai/`를 우선한다.
-- 프로젝트별 실제 운영 구성은 `.ai_project/operating_model.md`를 우선 확인한다.
-- Team별 세부 구성이 있으면 `.ai_project/teams/{team_id}/team_context.md`를 확인한다.
-- Agent 실행 지시는 `.ai_project/tasks/`를 우선한다.
-- 새 Task는 기본적으로 `active/` 또는 `backlog/`에 생성한다.
-- 기존 프로젝트의 `.ai_project/tasks/` 루트 파일은 legacy Task로 인정한다.
-- `archive/`는 히스토리 확인이 필요할 때만 참조한다.
-- Agent 작업 상태 요약은 `.ai_project/task_board.md`에 기록한다.
-- branch / PR / merge 전략은 `.ai_project/branch_pr_strategy.md`에 기록한다.
-- 제품/기술 결정은 프로젝트 문서 영역의 `DECISIONS.md`를 우선한다.
-- 사용자 결정이 필요한 항목은 Lead Role 또는 Direction Role이 별도로 정리한다.
+Fast Track은 아래 문서만 기본 생성한다.
 
-## 4. 변경 이력
+```text
+.ai_project/README.md
+.ai_project/operating_model.md
+.ai_project/agent_registry.md
+.ai_project/current_context.md
+.ai_project/task_board.md
+.ai_project/source_of_truth.md
+.ai_project/ops_decisions.md
+.ai_project/ops_issues.md
+.ai_project/tasks/active/
+.ai_project/tasks/backlog/
+.ai_project/tasks/archive/
+.ai_project/reports/
+.ai_project/qa/
+```
+
+Fast Track은 branch / PR, workflow override, team context를 기본 생성하지 않는다. 필요해지면 Guided Full 문서를 추가한다.
+
+## 4. Guided Full 생성 후보
+
+Guided Full은 아래 문서를 기본 생성한다.
+
+```text
+.ai_project/README.md
+.ai_project/operating_model.md
+.ai_project/agent_registry.md
+.ai_project/current_context.md
+.ai_project/source_of_truth.md
+.ai_project/task_board.md
+.ai_project/branch_pr_strategy.md
+.ai_project/workflow_overrides.md
+.ai_project/ops_decisions.md
+.ai_project/ops_issues.md
+.ai_project/ops_migration_plan.md
+.ai_project/tasks/active/
+.ai_project/tasks/backlog/
+.ai_project/tasks/archive/
+.ai_project/reports/
+.ai_project/qa/
+```
+
+Team별 구성이 필요하면 아래 문서를 추가한다.
+
+```text
+.ai_project/teams/{team_id}/team_context.md
+.ai_project/teams/{team_id}/task_board.md
+.ai_project/teams/{team_id}/branch_pr_strategy.md
+```
+
+## 5. 적용 원칙
+
+- 사용자가 선택한 bootstrap mode에 맞는 템플릿만 기본 적용한다.
+- Fast Track으로 시작한 프로젝트도 나중에 Guided Full 문서를 추가할 수 있다.
+- 존재하지 않는 기준 문서는 `unresolved` 또는 `to_create_candidate`로 기록한다.
+- `.ai_project/tasks/`의 Task 파일이 실행 지시의 source of truth다.
+
+## 6. 변경 이력
 
 | 날짜 | 변경 내용 |
 |---|---|
-| {{DATE}} | `.ai_project/` 초기화 |
-| {{DATE}} | AI Ops Issues 문서 항목 추가 |
-| {{DATE}} | AI Ops Migration Plan 문서 항목 추가 |
-| {{DATE}} | Task active/backlog/archive 보관 구조 항목 추가 |
-| {{DATE}} | Branch / PR Strategy 문서 항목 추가 |
-| {{DATE}} | Operating Model 문서 항목 추가 |
-| {{DATE}} | Team별 구성 문서와 Role 기반 운영 원칙 추가 |
+| {{DATE}} | Fast Track / Guided Full 템플릿 세트 분리 |

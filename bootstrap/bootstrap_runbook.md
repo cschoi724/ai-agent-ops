@@ -1063,17 +1063,43 @@ AI Ops Agent는 Apply Phase 전에 명시 승인을 받아야 한다.
 
 승인 후 실행한다.
 
-기본 생성 후보:
+Fast Track 기본 생성 후보:
 
 ```text
+.ai_project/README.md
 .ai_project/operating_model.md
 .ai_project/agent_registry.md
+.ai_project/current_context.md
+.ai_project/source_of_truth.md
+.ai_project/task_board.md
+.ai_project/ops_decisions.md
+.ai_project/ops_issues.md
+.ai_project/tasks/active/
+.ai_project/tasks/backlog/
+.ai_project/tasks/archive/
+.ai_project/reports/
+.ai_project/qa/
+```
+
+Guided Full 기본 생성 후보:
+
+```text
+.ai_project/README.md
+.ai_project/operating_model.md
+.ai_project/agent_registry.md
+.ai_project/current_context.md
 .ai_project/source_of_truth.md
 .ai_project/task_board.md
 .ai_project/branch_pr_strategy.md
 .ai_project/workflow_overrides.md
 .ai_project/ops_decisions.md
 .ai_project/ops_issues.md
+.ai_project/ops_migration_plan.md
+.ai_project/tasks/active/
+.ai_project/tasks/backlog/
+.ai_project/tasks/archive/
+.ai_project/reports/
+.ai_project/qa/
 ```
 
 필요 시 생성:
@@ -1082,6 +1108,13 @@ AI Ops Agent는 Apply Phase 전에 명시 승인을 받아야 한다.
 .ai_project/teams/<team_id>/team_context.md
 .ai_project/teams/<team_id>/task_board.md
 .ai_project/teams/<team_id>/branch_pr_strategy.md
+```
+
+Template source:
+
+```text
+fast_track: .ai/templates/ai_project/fast_track/
+guided_full: .ai/templates/ai_project/guided_full/
 ```
 
 Apply 기록:

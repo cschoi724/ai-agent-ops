@@ -15,6 +15,7 @@
 - `aiops bootstrap-guide` 명령 추가
 - bootstrap 전 `.ai/`, adapter 파일, `.ai_project/` 상태를 확인하고 다음 Agent 입력 문구를 안내하는 CLI 흐름 추가
 - `.ai_project` 구성 완료 상태에서 활성 Agent/Role 후보, 현재 초점, 첫 Agent 세션 명령 후보를 안내하는 흐름 추가
+- `.ai_project` 생성 템플릿을 `fast_track/` 최소 세트와 `guided_full/` 상세 세트로 분리
 
 ### Changed
 

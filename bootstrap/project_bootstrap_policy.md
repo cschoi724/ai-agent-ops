@@ -29,15 +29,30 @@
 
 이 문서는 프로젝트별 실제 선택값의 인덱스 역할을 한다.
 
-세부 설정은 아래 문서에 나누어 기록한다.
+Fast Track 세부 설정은 아래 최소 문서에 나누어 기록한다.
 
 ```text
 .ai_project/agent_registry.md
+.ai_project/current_context.md
 .ai_project/source_of_truth.md
 .ai_project/task_board.md
+.ai_project/ops_decisions.md
+.ai_project/ops_issues.md
+```
+
+Guided Full에서는 아래 문서를 추가로 생성할 수 있다.
+
+```text
 .ai_project/branch_pr_strategy.md
 .ai_project/workflow_overrides.md
-.ai_project/ops_decisions.md
+.ai_project/ops_migration_plan.md
+```
+
+템플릿 기준:
+
+```text
+fast_track: .ai/templates/ai_project/fast_track/
+guided_full: .ai/templates/ai_project/guided_full/
 ```
 
 Team별 구성이 필요하면 아래 구조를 추가할 수 있다.
