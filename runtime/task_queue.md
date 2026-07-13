@@ -26,6 +26,7 @@ Task 실행 흐름은 Agent별 고정 권한보다 세션 Role과 Task의 `workf
 - Agent는 작업 완료 시 `status`, `target_agent`, `target_role`을 workflow에 정의된 다음 처리 상태로 갱신한다.
 - 기본 workflow에서는 Agent가 한 번의 완료 처리에서 한 단계의 상태 전이만 수행한다.
 - 상태 전이 후 `target_agent` 또는 `target_role`이 자신이 아니면 다음 Role에게 인계한다.
+- Role이 바뀌는 인계에는 `.ai/runtime/role_handoff.md`의 `다음 Agent에게 전달할 말` 블록을 Task 파일과 최종 응답에 남긴다. 실제 다음 Role은 현재 Task의 workflow와 프로젝트별 override가 우선한다.
 - workflow가 명시적으로 연속 전이를 허용하지 않는 한 다음 Role 단계까지 이어서 처리하지 않는다.
 - Agent는 다른 Agent 또는 Role 명의의 상태 전이 기록을 작성하지 않는다.
 - Capability가 맞더라도 `target_agent` 또는 `target_role`이 현재 Role과 맞지 않으면 실행하지 않는다.
@@ -311,6 +312,7 @@ Lead Role:
 2. `org_unit`, `team`, `team_lead`, ownership, dependency, 병렬 실행 가능 여부를 정리한다.
 3. 실행 가능 범위가 정리되면 `scoped`로 전환한다.
 4. 조율이 불가능하면 `blocked`로 전환하고 사유를 기록한다.
+5. 승인된 Task를 다음 Role로 넘길 때는 `.ai/runtime/role_handoff.md`의 필수 인계 필드를 남긴다. 기본 workflow에서 Execution Role로 넘길 때는 Lead -> Execution 문구를 사용할 수 있다.
 
 Execution Role:
 
@@ -320,6 +322,7 @@ Execution Role:
 4. 우선순위와 의존성 기준으로 하나만 선택한다.
 5. 작업 시작 전 lock을 획득하고 Task 상태를 `in_progress`로 바꾼다.
 6. 완료 후 작업 보고서를 `reports/`에 작성하고 Task 상태를 `verification_ready`, `target_role: Verification Role`로 바꾸며 lock을 비운다.
+7. 다음 Role이 바로 시작할 수 있도록 Task 파일과 최종 응답에 인계 문구를 남긴다. 기본 workflow에서 Verification Role로 넘길 때는 Execution -> Verification 문구를 사용할 수 있다.
 
 Verification Role:
 
@@ -332,6 +335,7 @@ Verification Role:
 7. 결과가 `PASS` 또는 `PASS_WITH_RISK`면 Task 상태를 `verification_passed`, `target_role: Completion Role`로 바꾸고 완료 확정 Role에게 인계한다.
 8. 결과가 `FAIL`이면 `rework_requested`, `BLOCKED`면 `blocked`로 갱신한다.
 9. 완료 또는 차단 처리 시 lock을 비운다.
+10. 다음 Role로 넘길 때는 검증 결과와 남은 리스크가 포함된 인계 문구를 남긴다. 기본 workflow에서 Completion Role 또는 Lead Role로 넘길 때는 해당 표준 문구를 사용할 수 있다.
 
 Completion Role:
 
@@ -340,6 +344,7 @@ Completion Role:
 3. 완료 확정이 가능하면 `done`으로 전환한다.
 4. 수정이 필요하면 `rework_requested`로 전환한다.
 5. 외부 결정이 필요하면 `blocked`로 전환한다.
+6. `rework_requested` 또는 `blocked`로 되돌릴 때는 Lead Role이 재조율할 수 있도록 인계 문구를 남긴다.
 
 ## 12. Workflow Routing
 
@@ -359,6 +364,7 @@ Completion Role:
 - `required_capabilities`가 일부 일치해도 라우팅 불일치를 덮어쓸 수 없다.
 - 담당 Role이 애매하면 실행하지 않고 Direction Role 또는 Lead Role에게 라우팅 확인을 요청한다.
 - 다음 전이 후 `target_agent` 또는 `target_role`이 다른 Role로 바뀌면, workflow가 명시적으로 연속 전이를 허용하지 않는 한 그 Role의 단계까지 이어서 처리하지 않는다.
+- 다음 전이 후 담당 Role이 바뀌면 `.ai/runtime/role_handoff.md` 기준으로 `다음 Agent에게 전달할 말`을 남긴다.
 - 상태 전이 기록의 `Agent` 값은 실제로 현재 세션에 부여된 역할만 사용한다.
 
 예:

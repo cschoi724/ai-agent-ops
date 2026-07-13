@@ -104,23 +104,44 @@ pr:
 - 검증 보고: `{{QA_REPORT_PATH}}`
 - 필요 시 갱신 문서:
 
-## 10. 차단 조건
+## 10. Next Agent Handoff
+
+Role 전환이 발생하면 `.ai/runtime/role_handoff.md` 기준으로 아래 블록을 갱신한다. 실제 다음 Role은 이 Task의 `workflow`, `status`, `target_agent`, `target_role`, 프로젝트별 override를 우선한다. 같은 내용은 현재 Agent의 최종 응답에도 포함한다.
+
+```text
+다음 Agent에게 전달할 말:
+
+너는 {{NEXT_AGENT}} / {{NEXT_ROLE}}이야.
+Task {{TASK_ID}}를 이어서 처리해줘.
+
+- 현재 상태: {{CURRENT_STATUS}}
+- 다음에 해야 할 일: {{NEXT_ACTION}}
+- 기준 문서: {{SOURCE_OF_TRUTH}}
+- 허용 경로: {{ALLOWED_PATHS}}
+- 참고 산출물: {{REPORT_OR_QA_PATHS}}
+- 변경/검토 대상: {{CHANGED_OR_AFFECTED_PATHS}}
+- 남은 리스크: {{RISKS_OR_NONE}}
+- 차단/결정 필요: {{BLOCKERS_OR_DECISIONS_OR_NONE}}
+- 주의: 현재 Task의 workflow, status, target_agent, target_role이 네 Role과 맞는지 먼저 확인해줘.
+```
+
+## 11. 차단 조건
 
 - 
 
-## 11. 상태 전이 기록
+## 12. 상태 전이 기록
 
 | 날짜 | Agent | 이전 상태 | 다음 상태 | 사유 |
 |---|---|---|---|---|
 | {{DATE}} | {{CREATED_BY}} |  | proposed | Task 생성 |
 
-## 12. Lock 기록
+## 13. Lock 기록
 
 | 날짜 | Agent | 작업 | 사유 |
 |---|---|---|---|
 |  |  |  |  |
 
-## 13. 변경 이력
+## 14. 변경 이력
 
 | 날짜 | Agent | 변경 내용 |
 |---|---|---|

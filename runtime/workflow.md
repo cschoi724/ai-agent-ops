@@ -175,7 +175,7 @@ Execution Role은 `approved` Task를 처리한다.
 
 작업을 시작하면 lock을 획득하고 `in_progress`로 전환한다.
 
-작업 완료 후에는 작업 보고를 작성하고 `verification_ready`로 넘긴다.
+작업 완료 후에는 작업 보고를 작성하고 `verification_ready`로 넘긴다. 이때 `.ai/runtime/role_handoff.md`의 Execution -> Verification 문구를 Task 파일과 최종 응답에 남긴다.
 
 ### 5.6 Verification
 
@@ -198,6 +198,8 @@ Verification Role은 `verification_ready` Task를 검증한다.
 - 수정 필요: `rework_requested`
 - 외부 차단: `blocked`
 
+검증 후 다음 담당 Role이 바뀌면 `.ai/runtime/role_handoff.md`의 Verification -> Completion 또는 Verification / Completion -> Lead 문구를 남긴다.
+
 ### 5.7 Completion
 
 Completion Role은 `verification_passed` Task를 최종 검토한다.
@@ -214,6 +216,8 @@ Completion Role은 `verification_passed` Task를 최종 검토한다.
 완료 확정 후 `done`으로 전환한다.
 
 Workflow에 따라 Completion Role은 Direction Role, Team Lead, Release Role, AI Ops Division 등으로 달라질 수 있다.
+
+완료 검토 중 재작업이나 차단 상태로 되돌릴 때는 `.ai/runtime/role_handoff.md` 기준으로 Lead Role에게 재조율 인계를 남긴다.
 
 ### 5.8 Learning / Ops Improvement
 

@@ -18,6 +18,7 @@ Task 파일은 Agent 실행 지시의 source of truth다. `task_board.md`, repor
 | 파일 | 용도 |
 |---|---|
 | `task.md` | 일반 Task 파일 템플릿 |
+| `handoff_message.md` | Role 전환 시 다음 Agent에게 전달할 말 템플릿 |
 
 ## 3. 생성 위치
 
@@ -50,3 +51,4 @@ T-YYYYMMDD-001_task-slug.md
 | 2026-07-07 | active/backlog/archive 생성 위치 기준 추가 |
 | 2026-07-09 | vNext 상태 체계와 조직형 Task metadata 반영 |
 | {{DATE}} | ownership, branch, PR metadata와 Role 기반 보고 기준 추가 |
+| 2026-07-13 | Role 전환 인계 메시지 템플릿 추가 |

@@ -16,11 +16,13 @@
 - bootstrap 전 `.ai/`, adapter 파일, `.ai_project/` 상태를 확인하고 다음 Agent 입력 문구를 안내하는 CLI 흐름 추가
 - `.ai_project` 구성 완료 상태에서 활성 Agent/Role 후보, 현재 초점, 첫 Agent 세션 명령 후보를 안내하는 흐름 추가
 - `.ai_project` 생성 템플릿을 `fast_track/` 최소 세트와 `guided_full/` 상세 세트로 분리
+- Role 전환 시 사용할 표준 handoff 문서와 `다음 Agent에게 전달할 말` 템플릿 추가
 
 ### Changed
 
 - README, Quick Start, 설치 문서에 `bootstrap-guide` 사용법 추가
 - Fast Track bootstrap이 제품 아이디어 발굴을 직접 진행하지 않고, Apply 이후 PM Agent / Direction Role 첫 세션으로 넘기도록 경계 명확화
+- Codex와 Claude 어댑터가 같은 Role handoff 규칙으로 Lead / Execution / Verification / Completion 전환을 처리하도록 정리
 
 ## 0.6.0 - 2026-07-09
 
