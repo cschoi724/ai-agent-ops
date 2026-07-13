@@ -83,6 +83,12 @@ AGENTS.md or CLAUDE.md
 
 ### 2. 프로젝트 운영체계 Bootstrap
 
+다음 단계 안내를 CLI로 확인할 수 있다.
+
+```bash
+/path/to/ai-agent-ops/bin/aiops bootstrap-guide
+```
+
 시드 구성이 끝난 뒤 새 Codex 세션을 열고 말한다.
 
 ```text
@@ -156,6 +162,7 @@ AI Agent Ops는 아래 기본 안전 규칙을 가진다.
 | `aiops seed --adapter codex` | 프로젝트에 `.ai`와 `AGENTS.md`를 구성 |
 | `aiops seed --adapter claude` | 프로젝트에 `.ai`와 `CLAUDE.md`를 구성 |
 | `aiops doctor` | 프로젝트의 AI Ops 구성 상태를 점검 |
+| `aiops bootstrap-guide` | 현재 AI Ops 구성 상태별 다음 단계 안내 |
 | `AI Ops bootstrap 시작해줘.` | `.ai_project/` 운영 구성을 대화형으로 시작하고 빠른 시작/세부 설정을 선택 |
 | `AI Ops bootstrap 재검토해줘.` | 기존 `.ai_project/` 결정을 Decision Stack 기준으로 재검토 |
 

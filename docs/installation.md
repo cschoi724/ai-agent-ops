@@ -93,7 +93,17 @@ aiops doctor
 aiops doctor --strict
 ```
 
-## 5. Homebrew 목표 구조
+## 5. Bootstrap Guide
+
+seed와 doctor가 끝난 뒤 다음 Agent 세션에서 무엇을 입력해야 하는지 확인한다.
+
+```bash
+aiops bootstrap-guide
+```
+
+이 명령은 파일을 수정하지 않는다. `.ai/`, adapter 파일, `.ai_project/` 존재 여부를 확인하고 다음 단계 문구를 안내한다.
+
+## 6. Homebrew 목표 구조
 
 향후 목표:
 
@@ -111,7 +121,7 @@ aiops seed --adapter codex
 YourProject/.ai -> /opt/homebrew/share/ai-agent-ops
 ```
 
-## 6. Read-only Core 방향
+## 7. Read-only Core 방향
 
 `.ai/`는 운영체계 코어다. 프로젝트별 설정과 상태는 `.ai_project/`에 둔다.
 

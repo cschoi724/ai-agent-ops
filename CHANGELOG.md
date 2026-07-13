@@ -8,6 +8,18 @@
 - Minor: 새 Agent, workflow, 템플릿, 운영 규칙 추가 또는 기본 흐름 변경
 - Patch: 문구 정리, 충돌 제거, 설명 보강, 누락 수정
 
+## 0.6.1 - 2026-07-13
+
+### Added
+
+- `aiops bootstrap-guide` 명령 추가
+- bootstrap 전 `.ai/`, adapter 파일, `.ai_project/` 상태를 확인하고 다음 Agent 입력 문구를 안내하는 CLI 흐름 추가
+- `.ai_project` 구성 완료 상태에서 활성 Agent/Role 후보, 현재 초점, 첫 Agent 세션 명령 후보를 안내하는 흐름 추가
+
+### Changed
+
+- README, Quick Start, 설치 문서에 `bootstrap-guide` 사용법 추가
+
 ## 0.6.0 - 2026-07-09
 
 ### Added

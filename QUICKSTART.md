@@ -62,6 +62,12 @@ Seed 단계에서는 `.ai_project/`를 만들지 않는다.
 
 ## 4. Bootstrap
 
+다음 단계 안내를 CLI로 확인할 수 있다.
+
+```bash
+/path/to/ai-agent-ops/bin/aiops bootstrap-guide
+```
+
 Agent 세션을 열고 말한다.
 
 ```text
