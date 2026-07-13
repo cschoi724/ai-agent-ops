@@ -35,3 +35,12 @@
 1. `current_context.md`의 다음 초점을 확인한다.
 2. `agent_registry.md`에서 시작할 Role을 고른다.
 3. 제품/업무 방향이 정리되면 첫 Task 생성 여부를 사용자에게 확인한다.
+
+첫 제품 탐색 세션 예시:
+
+```text
+너는 PM Agent / Direction Role이야.
+현재 프로젝트는 Fast Track으로 구성된 초기 탐색 단계야.
+.ai_project/current_context.md를 확인하고, 제품/업무 아이디어를 대화로 구체화해줘.
+아직 파일은 수정하지 말고 문제 후보, 대상 사용자, 다음 결정사항만 정리해줘.
+```

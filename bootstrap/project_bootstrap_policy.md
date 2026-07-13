@@ -111,6 +111,8 @@ Bootstrap은 시작 후 먼저 진행 방식을 선택한다.
 
 Fast Track은 모든 선택지를 한 번에 비교하지 않는다. AI Ops Agent가 쉬운 질문으로 상황을 파악한 뒤 안전 기본값을 제안하고, 사용자가 원하면 고급 설정으로 전환한다.
 
+Fast Track은 제품 아이디어 발굴 세션이 아니다. AI Ops Agent는 운영 구성에 필요한 최소 맥락만 확인하고, 실제 문제 정의, 사용자 탐색, MVP 범위 결정은 Apply 이후 PM Agent / Direction Role 첫 세션으로 넘긴다.
+
 Fast Track 기본값:
 
 | 항목 | 기본값 | 이유 |
@@ -140,7 +142,7 @@ Start Context는 "어떤 조직을 만들 것인가"보다 앞선 질문이다. 
 |---|---|---|
 | `new_project_with_requirement` | 요구사항이 있는 신규 프로젝트/사업 시작 | Direction -> Lead -> Execution/Verification |
 | `assigned_or_existing_project` | 기존 프로젝트, 회사 업무, 과업, 인수인계 | Ops Governance scan -> Lead -> Execution/Verification |
-| `blank_slate_discovery` | 뭘 할지부터 정하는 백지 탐색 | Direction 중심 |
+| `blank_slate_discovery` | 뭘 할지부터 정하는 백지 탐색 | Direction Role 첫 세션 후보 |
 | `rescue_or_recovery` | 중단, 실패, 빌드 불가, 품질 문제 프로젝트 복구 | Ops Governance + Lead + Verification |
 | `migration_or_modernization` | 기존 시스템/문서/운영을 새 구조로 이전 | Ops Governance + Lead |
 | `ops_setup_only` | 제품 개발 없이 AI 운영체계만 도입 | Ops Governance 중심 |

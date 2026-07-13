@@ -20,6 +20,7 @@
 ### Changed
 
 - README, Quick Start, 설치 문서에 `bootstrap-guide` 사용법 추가
+- Fast Track bootstrap이 제품 아이디어 발굴을 직접 진행하지 않고, Apply 이후 PM Agent / Direction Role 첫 세션으로 넘기도록 경계 명확화
 
 ## 0.6.0 - 2026-07-09
 
