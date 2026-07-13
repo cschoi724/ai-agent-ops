@@ -49,6 +49,16 @@ Codex와 Claude:
 /path/to/ai-agent-ops/bin/aiops seed --adapter both
 ```
 
+전역 명령처럼 쓰고 싶으면 PATH 안에 symlink를 둔다.
+
+```bash
+mkdir -p ~/.local/bin
+ln -s /path/to/ai-agent-ops/bin/aiops ~/.local/bin/aiops
+aiops version
+```
+
+자세한 배포와 전역 등록 기준은 `docs/distribution.md`를 따른다.
+
 ## 3. Seed Mode
 
 기본값은 link다.
@@ -103,7 +113,24 @@ aiops bootstrap-guide
 
 이 명령은 파일을 수정하지 않는다. `.ai/`, adapter 파일, `.ai_project/` 존재 여부를 확인하고 다음 단계 문구를 안내한다.
 
-## 6. Homebrew 목표 구조
+## 6. Update
+
+로컬 git checkout 기반 core는 CLI로 갱신할 수 있다.
+
+```bash
+aiops update --check
+aiops update
+```
+
+`aiops update`는 core에 local changes가 있으면 중단한다. Homebrew 또는 복사 설치는 직접 수정하지 않고 갱신 방법만 안내한다.
+
+업데이트 후 대상 프로젝트에서 확인한다.
+
+```bash
+aiops doctor --target /path/to/YourProject --strict
+```
+
+## 7. Homebrew 목표 구조
 
 향후 목표:
 
@@ -117,11 +144,11 @@ aiops seed --adapter codex
 
 ```text
 /opt/homebrew/bin/aiops
-/opt/homebrew/share/ai-agent-ops/
-YourProject/.ai -> /opt/homebrew/share/ai-agent-ops
+/opt/homebrew/opt/ai-agent-ops/libexec/
+YourProject/.ai -> /opt/homebrew/opt/ai-agent-ops/libexec
 ```
 
-## 7. Read-only Core 방향
+## 8. Read-only Core 방향
 
 `.ai/`는 운영체계 코어다. 프로젝트별 설정과 상태는 `.ai_project/`에 둔다.
 

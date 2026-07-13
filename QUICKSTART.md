@@ -10,6 +10,14 @@
 ai-agent-ops/
 ```
 
+선택 사항으로 전역 명령처럼 등록할 수 있다.
+
+```bash
+mkdir -p ~/.local/bin
+ln -s /path/to/ai-agent-ops/bin/aiops ~/.local/bin/aiops
+aiops version
+```
+
 대상 프로젝트로 이동한다.
 
 ```text
@@ -60,6 +68,12 @@ Seed 단계에서는 `.ai_project/`를 만들지 않는다.
 /path/to/ai-agent-ops/bin/aiops doctor --strict
 ```
 
+전역 명령을 등록했다면 아래처럼 짧게 실행할 수 있다.
+
+```bash
+aiops doctor --strict
+```
+
 ## 4. Bootstrap
 
 다음 단계 안내를 CLI로 확인할 수 있다.
@@ -99,7 +113,21 @@ Git/PR은 필요할 때 결정
 
 Agent는 바로 파일을 만들지 않는다. 먼저 질문을 하나씩 하고, 답변을 Decision Stack에 쌓은 뒤 최종 Operating Model Draft를 제안한다.
 
-## 5. Role별 작업
+## 5. Update
+
+로컬 git checkout으로 설치했다면 업데이트 가능 여부를 확인할 수 있다.
+
+```bash
+aiops update --check
+```
+
+실제 업데이트는 core에 local changes가 없을 때만 진행한다.
+
+```bash
+aiops update
+```
+
+## 6. Role별 작업
 
 Bootstrap 이후에는 Role을 부여해서 작업한다.
 
@@ -118,7 +146,7 @@ Bootstrap 이후에는 Role을 부여해서 작업한다.
 검증 대기 Task를 검증해줘.
 ```
 
-## 6. 핵심 규칙
+## 7. 핵심 규칙
 
 - `.ai/`는 운영체계 코어다. 프로젝트에서 직접 수정하지 않는다.
 - 프로젝트별 설정과 상태는 `.ai_project/`에 기록한다.

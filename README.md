@@ -42,6 +42,14 @@ YourProject/
 
 대상 프로젝트 루트에서 CLI를 실행한다.
 
+Homebrew 배포 전에는 저장소 경로로 직접 실행하거나 PATH에 symlink를 등록해서 `aiops` 전역 명령처럼 사용할 수 있다.
+
+```bash
+mkdir -p ~/.local/bin
+ln -s /path/to/ai-agent-ops/bin/aiops ~/.local/bin/aiops
+aiops version
+```
+
 Codex:
 
 ```bash
@@ -163,6 +171,8 @@ AI Agent Ops는 아래 기본 안전 규칙을 가진다.
 | `aiops seed --adapter claude` | 프로젝트에 `.ai`와 `CLAUDE.md`를 구성 |
 | `aiops doctor` | 프로젝트의 AI Ops 구성 상태를 점검 |
 | `aiops bootstrap-guide` | 현재 AI Ops 구성 상태별 다음 단계 안내 |
+| `aiops update --check` | 현재 core 업데이트 방식과 버전 확인 |
+| `aiops update` | git checkout 기반 core를 fast-forward 업데이트 |
 | `AI Ops bootstrap 시작해줘.` | `.ai_project/` 운영 구성을 대화형으로 시작하고 빠른 시작/세부 설정을 선택 |
 | `AI Ops bootstrap 재검토해줘.` | 기존 `.ai_project/` 결정을 Decision Stack 기준으로 재검토 |
 
@@ -200,15 +210,16 @@ AI Agent Ops Organization
 1. `core/constitution.md`
 2. `QUICKSTART.md`
 3. `docs/installation.md`
-4. `bootstrap/install_runbook.md`
-5. `bootstrap/bootstrap_runbook.md`
-6. `models/role_model.md`
-7. `models/team_model.md`
-8. `runtime/workflow.md`
-9. `runtime/task_queue.md`
-10. `policies/branch_pr_policy.md`
-11. `templates/tool_adapters/codex/AGENTS.md`
-12. `templates/tool_adapters/claude/CLAUDE.md`
+4. `docs/distribution.md`
+5. `bootstrap/install_runbook.md`
+6. `bootstrap/bootstrap_runbook.md`
+7. `models/role_model.md`
+8. `models/team_model.md`
+9. `runtime/workflow.md`
+10. `runtime/task_queue.md`
+11. `policies/branch_pr_policy.md`
+12. `templates/tool_adapters/codex/AGENTS.md`
+13. `templates/tool_adapters/claude/CLAUDE.md`
 
 ## Directory Structure
 

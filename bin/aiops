@@ -10,6 +10,7 @@ Usage:
   aiops doctor [--target DIR] [--strict]
   aiops bootstrap-guide [--target DIR]
   aiops version [--core DIR]
+  aiops update [--core DIR] [--check]
   aiops help
 
 Defaults:
@@ -24,6 +25,7 @@ Examples:
   aiops seed --adapter both --mode copy
   aiops doctor
   aiops bootstrap-guide
+  aiops update --check
 EOF
 }
 
@@ -94,7 +96,16 @@ print_agent_registry_rows() {
 }
 
 script_dir() {
-  cd "$(dirname "$0")" && pwd
+  source="$0"
+  while [ -L "$source" ]; do
+    dir="$(cd "$(dirname "$source")" && pwd)"
+    link="$(readlink "$source")"
+    case "$link" in
+      /*) source="$link" ;;
+      *) source="$dir/$link" ;;
+    esac
+  done
+  cd "$(dirname "$source")" && pwd
 }
 
 default_core_dir() {
@@ -449,6 +460,87 @@ cmd_version() {
   fi
 }
 
+cmd_update() {
+  core="$(default_core_dir)"
+  check_only="no"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --core)
+        shift
+        [ "$#" -gt 0 ] || die "--core requires a value"
+        core="$1"
+        ;;
+      --check)
+        check_only="yes"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "unknown update option: $1"
+        ;;
+    esac
+    shift
+  done
+
+  core="$(abs_path "$core")"
+  require_core "$core"
+
+  current_version="unknown"
+  if [ -f "$core/VERSION" ]; then
+    current_version="$(cat "$core/VERSION")"
+  fi
+
+  info "AI Ops update"
+  info "core: $core"
+  info "current version: $current_version"
+
+  if [ -d "$core/.git" ]; then
+    branch="$(git -C "$core" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'unknown')"
+    info "install method: git checkout"
+    info "branch: $branch"
+
+    if [ "$check_only" = "yes" ]; then
+      info ""
+      info "No files changed."
+      info "To update this git-based core:"
+      info "  aiops update --core \"$core\""
+      return 0
+    fi
+
+    if ! git -C "$core" diff --quiet || ! git -C "$core" diff --cached --quiet; then
+      die "core has local changes; commit, stash, or resolve them before update"
+    fi
+
+    git -C "$core" pull --ff-only
+
+    new_version="$current_version"
+    if [ -f "$core/VERSION" ]; then
+      new_version="$(cat "$core/VERSION")"
+    fi
+
+    info ""
+    info "AI Ops update complete."
+    info "previous version: $current_version"
+    info "current version: $new_version"
+    info "Next: run doctor in target projects:"
+    info "  aiops doctor --strict"
+    return 0
+  fi
+
+  info "install method: packaged or copied core"
+  info ""
+  if [ "$check_only" = "yes" ]; then
+    info "No files changed."
+  fi
+  info "This core is not a git checkout, so aiops will not modify it directly."
+  info "If installed with Homebrew in the future, update with:"
+  info "  brew upgrade ai-agent-ops"
+  info "If copied into a project, reseed from an updated core after reviewing migration impact."
+}
+
 cmd_bootstrap_guide() {
   target="$(pwd)"
 
@@ -562,6 +654,7 @@ main() {
     doctor) cmd_doctor "$@" ;;
     bootstrap-guide) cmd_bootstrap_guide "$@" ;;
     version) cmd_version "$@" ;;
+    update) cmd_update "$@" ;;
     help|-h|--help) usage ;;
     *) die "unknown command: $cmd" ;;
   esac

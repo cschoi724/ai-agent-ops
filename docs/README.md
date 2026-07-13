@@ -5,3 +5,4 @@
 | 문서 | 역할 |
 |---|---|
 | `installation.md` | 로컬 CLI와 향후 Homebrew 설치 방향 |
+| `distribution.md` | 전역 명령 등록, release, Homebrew Formula 준비 기준 |
