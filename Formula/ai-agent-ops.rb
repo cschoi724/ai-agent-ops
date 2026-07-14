@@ -5,7 +5,11 @@ class AiAgentOps < Formula
   sha256 "13b62c63a099bc2fae8950fcedf33349f4c675f0e12ad4757f56ac30bf69f626"
 
   def install
-    libexec.install Dir["*"]
+    libexec.install "VERSION"
+    libexec.install "README.md", "QUICKSTART.md", "CHANGELOG.md", "LICENSE"
+    libexec.install "agents", "bin", "bootstrap", "core", "docs", "models"
+    libexec.install "policies", "runtime", "templates", "workflows"
+
     (bin/"aiops").write <<~EOS
       #!/bin/sh
       export AIOPS_CORE_HOME="#{opt_libexec}"
