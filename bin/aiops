@@ -625,20 +625,32 @@ cmd_release_check() {
 
   formula="$core/Formula/ai-agent-ops.rb"
   if [ -f "$formula" ]; then
-    if grep -q "refs/tags/v$version.tar.gz" "$formula"; then
-      info "ok: Formula URL matches VERSION"
+    if grep -q "refs/tags/v$version.tar.gz" "$formula" || grep -q "tag:[[:space:]]*\"v$version\"" "$formula"; then
+      info "ok: Formula version reference matches VERSION"
     else
-      info "warn: Formula URL does not match VERSION v$version"
+      info "warn: Formula version reference does not match VERSION v$version"
       warnings=$((warnings + 1))
     fi
 
     if grep -q 'REPLACE_WITH_RELEASE_SHA256' "$formula"; then
       info "warn: Formula sha256 placeholder must be replaced before Homebrew release"
       warnings=$((warnings + 1))
-    elif grep -Eq 'sha256 "[0-9a-f]{64}"' "$formula"; then
-      info "ok: Formula sha256 format"
+    elif grep -q "refs/tags/v$version.tar.gz" "$formula"; then
+      if grep -Eq 'sha256 "[0-9a-f]{64}"' "$formula"; then
+        info "ok: Formula sha256 format"
+      else
+        info "warn: Formula sha256 is missing or invalid"
+        warnings=$((warnings + 1))
+      fi
+    elif grep -q "tag:[[:space:]]*\"v$version\"" "$formula"; then
+      if grep -Eq 'revision:[[:space:]]*"[0-9a-f]{40}"' "$formula"; then
+        info "ok: Formula git revision format"
+      else
+        info "warn: Formula git revision is missing or invalid"
+        warnings=$((warnings + 1))
+      fi
     else
-      info "warn: Formula sha256 is missing or invalid"
+      info "warn: Formula source format is not recognized"
       warnings=$((warnings + 1))
     fi
 

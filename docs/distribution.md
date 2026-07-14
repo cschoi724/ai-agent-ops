@@ -64,8 +64,8 @@ aiops update --check
 5. `bin/aiops update --check` 확인
 6. license 결정과 `LICENSE` 파일 확인
 7. git tag 생성: `vX.Y.Z`
-8. GitHub release tarball SHA256 계산
-9. `Formula/ai-agent-ops.rb`의 `url`, `sha256` 갱신
+8. `Formula/ai-agent-ops.rb`의 `tag`, `revision` 갱신
+9. 필요한 경우 GitHub release tarball SHA256 계산 후 tarball URL 방식으로 전환
 10. `bin/aiops release-check --strict` 재확인
 11. Homebrew tap 저장소에 Formula 반영
 
@@ -83,7 +83,7 @@ Formula 위치:
 Formula/ai-agent-ops.rb
 ```
 
-현재 Formula는 release SHA가 없으므로 `REPLACE_WITH_RELEASE_SHA256` placeholder를 가진다. 실제 Homebrew 배포 전에는 반드시 release tarball의 SHA256으로 교체한다.
+초기 Formula는 Git URL과 `tag`, `revision`으로 버전을 고정한다. GitHub release tarball을 공개적으로 받을 수 있는 상태가 되면 tarball URL과 `sha256` 방식으로 바꿀 수 있다.
 
 예상 설치 구조:
 
@@ -137,7 +137,7 @@ aiops release-check --strict
 - `CHANGELOG.md`의 현재 버전 섹션
 - 필수 문서와 adapter 템플릿 존재 여부
 - Formula URL과 VERSION 일치 여부
-- Formula SHA256 placeholder 제거 여부
+- Formula tag/revision 또는 tarball SHA256 상태
 - Formula Ruby 문법
 - `LICENSE` 존재 여부
 - git working tree clean 여부
