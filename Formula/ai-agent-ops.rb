@@ -1,9 +1,8 @@
 class AiAgentOps < Formula
   desc "Document-based operating system for AI agent collaboration"
   homepage "https://github.com/cschoi724/ai-agent-ops"
-  url "https://github.com/cschoi724/ai-agent-ops.git",
-      tag:      "v0.6.1",
-      revision: "758e25df693fbbc371fa11fb1dee40cca2111a36"
+  url "https://github.com/cschoi724/ai-agent-ops/archive/refs/tags/v0.6.1.tar.gz"
+  sha256 "13b62c63a099bc2fae8950fcedf33349f4c675f0e12ad4757f56ac30bf69f626"
 
   def install
     libexec.install Dir["*"]
