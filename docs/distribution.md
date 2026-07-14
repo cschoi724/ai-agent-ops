@@ -25,6 +25,8 @@ aiops doctor --target ./YourProject --strict
 | Homebrew Formula | 준비 중 | 일반 사용자 설치 |
 | 복사 설치 | 지원 | 외부 업데이트를 받지 않는 고정 snapshot |
 
+License: MIT
+
 ## 3. 전역 명령 등록
 
 Homebrew 전에는 로컬 checkout의 `bin/aiops`를 PATH 안에 symlink로 둔다.
