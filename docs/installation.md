@@ -29,24 +29,25 @@ YourProject/
   .ai_project/
 ```
 
-## 2. 현재 설치 방식
+## 2. Homebrew 설치
 
-저장소의 CLI를 직접 실행한다.
+권장 설치 방식은 Homebrew tap이다.
+
+```bash
+brew tap cschoi724/tap
+brew trust cschoi724/tap
+brew install ai-agent-ops
+aiops version
+```
+
+Homebrew 6에서는 외부 tap Formula 실행 전에 trust가 필요할 수 있다.
+
+## 3. 로컬 checkout 설치
+
+저장소의 CLI를 직접 실행할 수도 있다.
 
 ```bash
 /path/to/ai-agent-ops/bin/aiops seed --adapter codex
-```
-
-Claude:
-
-```bash
-/path/to/ai-agent-ops/bin/aiops seed --adapter claude
-```
-
-Codex와 Claude:
-
-```bash
-/path/to/ai-agent-ops/bin/aiops seed --adapter both
 ```
 
 전역 명령처럼 쓰고 싶으면 PATH 안에 symlink를 둔다.
@@ -59,7 +60,25 @@ aiops version
 
 자세한 배포와 전역 등록 기준은 `docs/distribution.md`를 따른다.
 
-## 3. Seed Mode
+## 4. Seed Mode
+
+Codex:
+
+```bash
+aiops seed --adapter codex
+```
+
+Claude:
+
+```bash
+aiops seed --adapter claude
+```
+
+Codex와 Claude:
+
+```bash
+aiops seed --adapter both
+```
 
 기본값은 link다.
 
@@ -79,7 +98,7 @@ aiops seed --mode link
 aiops seed --mode copy
 ```
 
-## 4. Doctor
+## 5. Doctor
 
 ```bash
 aiops doctor
@@ -103,7 +122,7 @@ aiops doctor
 aiops doctor --strict
 ```
 
-## 5. Bootstrap Guide
+## 6. Bootstrap Guide
 
 seed와 doctor가 끝난 뒤 다음 Agent 세션에서 무엇을 입력해야 하는지 확인한다.
 
@@ -113,7 +132,7 @@ aiops bootstrap-guide
 
 이 명령은 파일을 수정하지 않는다. `.ai/`, adapter 파일, `.ai_project/` 존재 여부를 확인하고 다음 단계 문구를 안내한다.
 
-## 6. Update
+## 7. Update
 
 로컬 git checkout 기반 core는 CLI로 갱신할 수 있다.
 
@@ -130,12 +149,14 @@ aiops update
 aiops doctor --target /path/to/YourProject --strict
 ```
 
-## 7. Homebrew 목표 구조
+## 8. Homebrew 설치 구조
 
-향후 목표:
+설치:
 
 ```bash
-brew install cschoi724/tap/ai-agent-ops
+brew tap cschoi724/tap
+brew trust cschoi724/tap
+brew install ai-agent-ops
 cd YourProject
 aiops seed --adapter codex
 ```
@@ -148,7 +169,7 @@ aiops seed --adapter codex
 YourProject/.ai -> /opt/homebrew/opt/ai-agent-ops/libexec
 ```
 
-## 8. Read-only Core 방향
+## 9. Read-only Core 방향
 
 `.ai/`는 운영체계 코어다. 프로젝트별 설정과 상태는 `.ai_project/`에 둔다.
 

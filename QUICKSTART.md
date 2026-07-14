@@ -2,20 +2,21 @@
 
 이 문서는 AI Agent Ops를 처음 사용하는 사람이 프로젝트에 운영체계를 구성하는 최소 절차다.
 
-## 1. 준비
+## 1. 설치
 
-현재 저장소를 로컬에 둔다.
+Homebrew로 설치한다.
+
+```bash
+brew tap cschoi724/tap
+brew trust cschoi724/tap
+brew install ai-agent-ops
+aiops version
+```
+
+Homebrew를 쓰지 않으면 저장소를 로컬에 두고 직접 실행할 수 있다.
 
 ```text
 ai-agent-ops/
-```
-
-선택 사항으로 전역 명령처럼 등록할 수 있다.
-
-```bash
-mkdir -p ~/.local/bin
-ln -s /path/to/ai-agent-ops/bin/aiops ~/.local/bin/aiops
-aiops version
 ```
 
 대상 프로젝트로 이동한다.
@@ -29,19 +30,19 @@ cd YourProject
 Codex만 쓸 때:
 
 ```bash
-/path/to/ai-agent-ops/bin/aiops seed --adapter codex
+aiops seed --adapter codex
 ```
 
 Claude만 쓸 때:
 
 ```bash
-/path/to/ai-agent-ops/bin/aiops seed --adapter claude
+aiops seed --adapter claude
 ```
 
 둘 다 쓸 때:
 
 ```bash
-/path/to/ai-agent-ops/bin/aiops seed --adapter both
+aiops seed --adapter both
 ```
 
 생성되는 것:
@@ -59,16 +60,10 @@ Seed 단계에서는 `.ai_project/`를 만들지 않는다.
 구성이 맞는지 확인한다.
 
 ```bash
-/path/to/ai-agent-ops/bin/aiops doctor
+aiops doctor
 ```
 
 경고까지 실패로 처리하려면:
-
-```bash
-/path/to/ai-agent-ops/bin/aiops doctor --strict
-```
-
-전역 명령을 등록했다면 아래처럼 짧게 실행할 수 있다.
 
 ```bash
 aiops doctor --strict
@@ -79,7 +74,7 @@ aiops doctor --strict
 다음 단계 안내를 CLI로 확인할 수 있다.
 
 ```bash
-/path/to/ai-agent-ops/bin/aiops bootstrap-guide
+aiops bootstrap-guide
 ```
 
 Agent 세션을 열고 말한다.

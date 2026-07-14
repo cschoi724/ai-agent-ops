@@ -42,32 +42,33 @@ YourProject/
 
 ### 1. 프로젝트에 AI Ops 시드 구성
 
-대상 프로젝트 루트에서 CLI를 실행한다.
-
-Homebrew 배포 전에는 저장소 경로로 직접 실행하거나 PATH에 symlink를 등록해서 `aiops` 전역 명령처럼 사용할 수 있다.
+먼저 Homebrew로 설치한다.
 
 ```bash
-mkdir -p ~/.local/bin
-ln -s /path/to/ai-agent-ops/bin/aiops ~/.local/bin/aiops
+brew tap cschoi724/tap
+brew trust cschoi724/tap
+brew install ai-agent-ops
 aiops version
 ```
+
+Homebrew를 쓰지 않으면 저장소 경로로 직접 실행하거나 PATH에 symlink를 등록해서 `aiops` 전역 명령처럼 사용할 수 있다.
 
 Codex:
 
 ```bash
-/path/to/ai-agent-ops/bin/aiops seed --adapter codex
+aiops seed --adapter codex
 ```
 
 Claude:
 
 ```bash
-/path/to/ai-agent-ops/bin/aiops seed --adapter claude
+aiops seed --adapter claude
 ```
 
 Codex와 Claude:
 
 ```bash
-/path/to/ai-agent-ops/bin/aiops seed --adapter both
+aiops seed --adapter both
 ```
 
 승인 후 생성되는 것:
@@ -82,13 +83,13 @@ AGENTS.md or CLAUDE.md
 구성을 확인한다.
 
 ```bash
-/path/to/ai-agent-ops/bin/aiops doctor
+aiops doctor
 ```
 
 경고까지 실패로 보고 싶으면 strict 모드를 사용한다.
 
 ```bash
-/path/to/ai-agent-ops/bin/aiops doctor --strict
+aiops doctor --strict
 ```
 
 ### 2. 프로젝트 운영체계 Bootstrap
@@ -96,7 +97,7 @@ AGENTS.md or CLAUDE.md
 다음 단계 안내를 CLI로 확인할 수 있다.
 
 ```bash
-/path/to/ai-agent-ops/bin/aiops bootstrap-guide
+aiops bootstrap-guide
 ```
 
 시드 구성이 끝난 뒤 새 Codex 세션을 열고 말한다.

@@ -19,6 +19,7 @@
 - Role 전환 시 사용할 표준 handoff 문서와 `다음 Agent에게 전달할 말` 템플릿 추가
 - `aiops update` 명령과 Homebrew Formula 초안, 배포 준비 문서 추가
 - 초기 배포 전 VERSION, Formula, license, 필수 문서 상태를 확인하는 `aiops release-check` 명령 추가
+- Homebrew tap 설치 검증 완료 및 설치 문서를 `brew tap cschoi724/tap` 기준으로 갱신
 
 ### Changed
 
@@ -26,6 +27,7 @@
 - Fast Track bootstrap이 제품 아이디어 발굴을 직접 진행하지 않고, Apply 이후 PM Agent / Direction Role 첫 세션으로 넘기도록 경계 명확화
 - Codex와 Claude 어댑터가 같은 Role handoff 규칙으로 Lead / Execution / Verification / Completion 전환을 처리하도록 정리
 - 전역 `aiops` symlink 실행 시 실제 core 경로를 따라가도록 CLI 경로 계산 보강
+- Formula 설치 대상을 runtime core 파일로 명시해 Homebrew 설치 결과를 안정화
 
 ## 0.6.0 - 2026-07-09
 

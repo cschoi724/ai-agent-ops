@@ -8,13 +8,15 @@
 AI Agent Ops는 최종적으로 아래 방식으로 설치할 수 있게 한다.
 
 ```bash
+brew tap cschoi724/tap
+brew trust cschoi724/tap
 brew install cschoi724/tap/ai-agent-ops
 aiops version
 aiops seed --adapter both --target ./YourProject
 aiops doctor --target ./YourProject --strict
 ```
 
-현재 단계에서는 Homebrew 배포를 바로 활성화하지 않고, release와 Formula가 요구하는 구조를 먼저 준비한다.
+Homebrew 6에서는 외부 tap Formula 실행 전에 `brew trust cschoi724/tap`이 필요할 수 있다.
 
 ## 2. 설치 채널
 
@@ -22,16 +24,32 @@ aiops doctor --target ./YourProject --strict
 |---|---|---|
 | 로컬 git checkout | 현재 지원 | 개발자/운영자가 직접 repo를 받아 사용 |
 | 전역 symlink | 현재 지원 | Homebrew 전까지 `aiops`를 전역 명령처럼 사용 |
-| Homebrew Formula | 준비 중 | 일반 사용자 설치 |
+| Homebrew Formula | 지원 | 일반 사용자 설치 |
 | 복사 설치 | 지원 | 외부 업데이트를 받지 않는 고정 snapshot |
 
 License: MIT
 
-## 3. 전역 명령 등록
+## 3. Homebrew 설치
 
-Homebrew 전에는 로컬 checkout의 `bin/aiops`를 PATH 안에 symlink로 둔다.
+권장 설치:
 
-예:
+```bash
+brew tap cschoi724/tap
+brew trust cschoi724/tap
+brew install ai-agent-ops
+```
+
+확인:
+
+```bash
+aiops version
+aiops seed --adapter both --target ./YourProject
+aiops doctor --target ./YourProject --strict
+```
+
+## 4. 전역 명령 등록
+
+Homebrew를 쓰지 않으면 로컬 checkout의 `bin/aiops`를 PATH 안에 symlink로 둘 수 있다.
 
 ```bash
 mkdir -p ~/.local/bin
@@ -53,7 +71,7 @@ aiops update --check
 
 `aiops`는 symlink로 실행되어도 실제 core 위치를 따라가야 한다. 따라서 전역 symlink를 쓰더라도 `.ai` seed 대상은 `/path/to/ai-agent-ops` core를 바라봐야 한다.
 
-## 4. Release 구조
+## 5. Release 구조
 
 릴리스 전 확인 항목:
 
@@ -75,7 +93,7 @@ aiops update --check
 v0.6.1
 ```
 
-## 5. Homebrew Formula 초안
+## 6. Homebrew Formula
 
 Formula 위치:
 
@@ -98,7 +116,7 @@ $(brew --prefix)/opt/ai-agent-ops/libexec/
 YourProject/.ai -> $(brew --prefix)/opt/ai-agent-ops/libexec
 ```
 
-## 6. Update 흐름
+## 7. Update 흐름
 
 현재 지원:
 
@@ -122,7 +140,7 @@ aiops doctor --target ./YourProject --strict
 
 업데이트 후에도 `.ai_project/`는 덮어쓰지 않는다. 프로젝트별 반영은 Ops Governance Role이 `.ai/policies/update_policy.md` 기준으로 점검한다.
 
-## 7. Release Check
+## 8. Release Check
 
 릴리스 전에는 아래 명령으로 배포 차단 항목을 확인한다.
 
