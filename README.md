@@ -1,14 +1,20 @@
 # AI Agent Ops
 
+AI Agent Operating Harness
+
 작성일: 2026-07-10  
 상태: Draft vNext  
-범위: 프로젝트별 AI Agent 운영체계 템플릿
+범위: 프로젝트별 AI Agent 운영 하네스
 
 ## What Is This
 
-AI Agent Ops는 여러 AI Agent를 하나의 작은 조직처럼 운영하기 위한 문서 기반 운영체계다.
+AI Agent Ops는 Codex, Claude 같은 AI Agent가 프로젝트 안에서 역할, 절차, 검증, 인계를 지키며 협업하도록 만드는 AI 에이전트 운영 하네스다.
 
-이 저장소는 특정 제품의 코드가 아니라, 프로젝트마다 복사해서 사용할 수 있는 운영 템플릿을 제공한다. 핵심 목표는 아래와 같다.
+이 저장소는 특정 제품의 코드가 아니라, 여러 프로젝트에 적용할 수 있는 운영 코어와 CLI를 제공한다. 역할, 권한, 작업 상태, 검증, 인계, 프로젝트별 운영 상태를 문서와 명령어로 관리한다.
+
+AI Agent Ops는 Codex 전용 플러그인이나 Claude 전용 프롬프트 팩이 아니다. 여러 Agent 환경에 프로젝트 지침을 심고, 프로젝트별 운영 상태를 일관된 방식으로 관리하는 도구 중립적인 operating harness다.
+
+핵심 목표는 아래와 같다.
 
 - AI Agent가 Role 밖 행동을 하지 않게 한다.
 - 제품 방향, Task, 검증, 완료 판단을 한 흐름으로 관리한다.
