@@ -15,7 +15,7 @@ Usage:
   aiops knowledge status [--target DIR]
   aiops version [--core DIR]
   aiops update [--core DIR] [--check]
-  aiops release-check [--core DIR] [--strict]
+  aiops release-check [--core DIR] [--strict] [--allow-pending-release]
   aiops help
 
 Defaults:
@@ -879,6 +879,7 @@ cmd_update() {
 cmd_release_check() {
   core="$(default_core_dir)"
   strict="no"
+  allow_pending_release="no"
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -889,6 +890,9 @@ cmd_release_check() {
         ;;
       --strict)
         strict="yes"
+        ;;
+      --allow-pending-release)
+        allow_pending_release="yes"
         ;;
       -h|--help)
         usage
@@ -970,8 +974,12 @@ cmd_release_check() {
     fi
 
     if grep -q 'REPLACE_WITH_RELEASE_SHA256' "$formula"; then
-      info "warn: Formula sha256 placeholder must be replaced before Homebrew release"
-      warnings=$((warnings + 1))
+      if [ "$allow_pending_release" = "yes" ]; then
+        info "note: Formula sha256 placeholder pending release"
+      else
+        info "warn: Formula sha256 placeholder must be replaced before Homebrew release"
+        warnings=$((warnings + 1))
+      fi
     elif grep -q "refs/tags/v$version.tar.gz" "$formula"; then
       if grep -Eq 'sha256 "[0-9a-f]{64}"' "$formula"; then
         info "ok: Formula sha256 format"

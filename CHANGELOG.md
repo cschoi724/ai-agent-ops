@@ -8,6 +8,31 @@
 - Minor: 새 Agent, workflow, 템플릿, 운영 규칙 추가 또는 기본 흐름 변경
 - Patch: 문구 정리, 충돌 제거, 설명 보강, 누락 수정
 
+## 0.6.2 - 2026-07-21
+
+### Added
+
+- `aiops validate task FILE` 명령 추가
+- `.ai_knowledge/` LLM Wiki workspace 모델, 정책, 템플릿 추가
+- `aiops knowledge init`, `aiops knowledge lint`, `aiops knowledge status` 명령 추가
+- `policies/versioning_policy.md` 추가
+- seed / doctor / Fast Track / invalid Task / validate task / knowledge E2E 테스트 추가
+- GitHub Actions 기본 CI 추가
+
+### Changed
+
+- `doctor --strict`가 Fast Track optional 문서를 올바르게 처리하도록 개선
+- Task metadata 경고가 strict 실패에 반영되도록 개선
+- `.ai_project/operating_model.md`의 `core_version`과 현재 `.ai/VERSION` 불일치를 doctor 경고로 표시
+- Bootstrap 선택값에 `knowledge_mode` 추가
+- `bootstrap_runbook.md`를 핵심 실행 흐름으로 축소하고 상세 내용은 `bootstrap_reference.md`로 분리
+- README를 필수 소개와 5분 시작 중심으로 축소하고 긴 설명은 상세 문서 링크로 이동
+- 개발 브랜치 CI에서 pending Formula sha를 허용할 수 있도록 `release-check --allow-pending-release` 옵션 추가
+
+### Removed
+
+- 임시 작업 계획 문서 `design_notes/hardening_and_knowledge_plan.md` 삭제
+
 ## 0.6.1 - 2026-07-13
 
 ### Added
