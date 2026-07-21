@@ -8,6 +8,7 @@ aiops - AI Agent Ops project helper
 Usage:
   aiops seed [--adapter codex|claude|both] [--mode link|copy] [--target DIR] [--core DIR] [--force]
   aiops doctor [--target DIR] [--strict]
+  aiops migrate [--target DIR] [--plan|--apply]
   aiops bootstrap-guide [--target DIR]
   aiops validate task FILE
   aiops knowledge init [--target DIR] [--mode minimal|full] [--force]
@@ -29,6 +30,7 @@ Examples:
   aiops seed --adapter claude
   aiops seed --adapter both --mode copy
   aiops doctor
+  aiops migrate --plan
   aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
   aiops knowledge init --mode minimal
   aiops knowledge lint
@@ -210,6 +212,348 @@ knowledge_required_file() {
   fi
   info "missing: .ai_knowledge/$file"
   return 1
+}
+
+target_core_source() {
+  target="$1"
+  ai="$target/.ai"
+
+  if [ -L "$ai" ]; then
+    link_target="$(readlink "$ai")"
+    case "$link_target" in
+      *homebrew*|*/Cellar/*|*/opt/ai-agent-ops*) printf '%s\n' "homebrew" ;;
+      *) printf '%s\n' "symlink" ;;
+    esac
+  elif [ -d "$ai" ]; then
+    printf '%s\n' "project_local_copy"
+  else
+    printf '%s\n' "missing"
+  fi
+}
+
+target_core_version() {
+  target="$1"
+  if [ -f "$target/.ai/VERSION" ]; then
+    cat "$target/.ai/VERSION"
+  else
+    printf '%s\n' "unknown"
+  fi
+}
+
+project_recorded_core_version() {
+  operating_model="$1"
+  if [ ! -f "$operating_model" ]; then
+    printf '%s\n' "missing"
+    return 0
+  fi
+
+  recorded="$(task_field_value "$operating_model" "core_version")"
+  if [ -z "$recorded" ]; then
+    recorded="$(markdown_table_value "$operating_model" "core_version")"
+  fi
+  if [ -z "$recorded" ]; then
+    printf '%s\n' "missing"
+  else
+    printf '%s\n' "$recorded"
+  fi
+}
+
+project_needs_core_version_update() {
+  operating_model="$1"
+  current_version="$2"
+  recorded_version="$3"
+
+  [ -f "$operating_model" ] || return 1
+  case "$recorded_version" in
+    ""|"missing"|"{{CORE_VERSION}}") return 0 ;;
+    "$current_version") return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+update_operating_model_core_version() {
+  operating_model="$1"
+  current_version="$2"
+  core_source="$3"
+
+  tmp_file="${TMPDIR:-/tmp}/aiops-operating-model.$$"
+  if grep -q '|[[:space:]]*core_version[[:space:]]*|' "$operating_model"; then
+    awk -F'|' -v version="$current_version" -v core_source="$core_source" '
+      BEGIN { OFS="|" }
+      $0 ~ /^\|/ {
+        key=$2
+        gsub(/^[ \t]+|[ \t]+$/, "", key)
+        if (key == "core_version") {
+          print "", " core_version ", " " version " ", ""
+          next
+        }
+        if (key == "core_source") {
+          print "", " core_source ", " " core_source " ", ""
+          next
+        }
+      }
+      { print }
+    ' "$operating_model" > "$tmp_file"
+    mv "$tmp_file" "$operating_model"
+    return 0
+  fi
+
+  {
+    cat "$operating_model"
+    printf '\n'
+    printf '## Migration Version Record\n\n'
+    printf '| 항목 | 값 |\n'
+    printf '|---|---|\n'
+    printf '| core_version | %s |\n' "$current_version"
+    printf '| core_source | %s |\n' "$core_source"
+    printf '| core_update_policy | manual_review |\n'
+  } > "$tmp_file"
+  mv "$tmp_file" "$operating_model"
+}
+
+print_migration_lists() {
+  target="$1"
+  current_version="$2"
+  recorded_version="$3"
+  mode="$4"
+
+  operating_model="$target/.ai_project/operating_model.md"
+  safe_count=0
+
+  info "safe_auto_fix:"
+  if project_needs_core_version_update "$operating_model" "$current_version" "$recorded_version"; then
+    info "  - operating_model.md core_version/core_source record"
+    safe_count=$((safe_count + 1))
+  fi
+  for dir in "$target/.ai_project/tasks/active" "$target/.ai_project/tasks/backlog" "$target/.ai_project/tasks/archive"; do
+    if [ ! -d "$dir" ]; then
+      info "  - ${dir#$target/}"
+      safe_count=$((safe_count + 1))
+    fi
+  done
+  for file in "$target/.ai_project/ops_migration_plan.md" "$target/.ai_project/ops_decisions.md" "$target/.ai_project/ops_issues.md"; do
+    if [ ! -f "$file" ]; then
+      info "  - ${file#$target/}"
+      safe_count=$((safe_count + 1))
+    fi
+  done
+  if [ ! -d "$target/.ai_knowledge" ]; then
+    info "  - .ai_knowledge minimal workspace"
+    safe_count=$((safe_count + 1))
+  fi
+  if [ "$safe_count" -eq 0 ]; then
+    info "  - none"
+  fi
+
+  info "needs_user_decision:"
+  if [ -f "$target/AGENTS.md" ] && [ -f "$target/.ai/templates/tool_adapters/codex/AGENTS.md" ] && ! same_file_content "$target/AGENTS.md" "$target/.ai/templates/tool_adapters/codex/AGENTS.md"; then
+    info "  - AGENTS.md adapter update"
+  else
+    info "  - none_detected_for_codex_adapter"
+  fi
+  if [ -f "$target/CLAUDE.md" ] && [ -f "$target/.ai/templates/tool_adapters/claude/CLAUDE.md" ] && ! same_file_content "$target/CLAUDE.md" "$target/.ai/templates/tool_adapters/claude/CLAUDE.md"; then
+    info "  - CLAUDE.md adapter update"
+  else
+    info "  - none_detected_for_claude_adapter"
+  fi
+  info "  - source_of_truth changes require user decision"
+  info "  - Task metadata auto-fill requires user decision"
+
+  info "manual_only:"
+  info "  - product code"
+  info "  - product Docs"
+  info "  - Task status"
+  info "  - Role / Agent mapping"
+  info "  - branch / PR strategy"
+  info "  - commit / push / deploy"
+
+  if [ "$mode" = "plan" ]; then
+    info ""
+    info "apply_scope:"
+    info "  - .ai_project/operating_model.md"
+    info "  - .ai_project/ops_migration_plan.md"
+    info "  - .ai_project/ops_decisions.md"
+    info "  - .ai_project/ops_issues.md"
+    info "  - .ai_project/tasks/"
+    info "  - .ai_knowledge/"
+  fi
+}
+
+cmd_migrate() {
+  target="$(pwd)"
+  mode="check"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --target)
+        shift
+        [ "$#" -gt 0 ] || die "--target requires a value"
+        target="$1"
+        ;;
+      --plan)
+        mode="plan"
+        ;;
+      --apply)
+        mode="apply"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "unknown migrate option: $1"
+        ;;
+    esac
+    shift
+  done
+
+  target="$(abs_path "$target")"
+  [ -d "$target" ] || die "target directory not found: $target"
+
+  current_version="$(target_core_version "$target")"
+  core_source="$(target_core_source "$target")"
+  project_mode="missing"
+  recorded_version="missing"
+  status="not_configured"
+
+  if [ -d "$target/.ai_project" ]; then
+    project_mode="$(detect_ai_project_mode "$target/.ai_project")"
+    recorded_version="$(project_recorded_core_version "$target/.ai_project/operating_model.md")"
+    status="up_to_date"
+
+    if project_needs_core_version_update "$target/.ai_project/operating_model.md" "$current_version" "$recorded_version"; then
+      status="migration_needed"
+    fi
+    for dir in "$target/.ai_project/tasks/active" "$target/.ai_project/tasks/backlog" "$target/.ai_project/tasks/archive"; do
+      [ -d "$dir" ] || status="migration_needed"
+    done
+    for file in "$target/.ai_project/ops_migration_plan.md" "$target/.ai_project/ops_decisions.md" "$target/.ai_project/ops_issues.md"; do
+      [ -f "$file" ] || status="migration_needed"
+    done
+    [ -d "$target/.ai_knowledge" ] || status="migration_needed"
+  fi
+
+  info "AI Ops migrate"
+  info "mode: $mode"
+  info "target: $target"
+  info "core_source: $core_source"
+  info "current_core_version: $current_version"
+  info "project_mode: $project_mode"
+  info "recorded_core_version: $recorded_version"
+  info "migration_status: $status"
+
+  if [ "$mode" != "apply" ]; then
+    if [ "$core_source" = "missing" ]; then
+      info "blocking:"
+      info "  - .ai missing; run aiops seed first"
+      info ""
+      info "No files changed."
+      return 0
+    fi
+
+    if [ ! -d "$target/.ai_project" ]; then
+      info "blocking:"
+      info "  - .ai_project missing; run bootstrap before migration"
+      info ""
+      info "safe_auto_fix:"
+      info "  - none"
+      info ""
+      info "No files changed."
+      return 0
+    fi
+
+    print_migration_lists "$target" "$current_version" "$recorded_version" "$mode"
+    info ""
+    info "No files changed."
+    return 0
+  fi
+
+  [ "$core_source" != "missing" ] || die ".ai missing; run aiops seed first"
+  [ -d "$target/.ai_project" ] || die ".ai_project missing; run bootstrap before migration apply"
+  [ -f "$target/.ai_project/operating_model.md" ] || die ".ai_project/operating_model.md missing"
+  [ "$current_version" != "unknown" ] || die ".ai/VERSION missing"
+
+  date_value="$(date +%Y-%m-%d)"
+  project_name="$(basename "$target")"
+
+  info ""
+  info "Applying safe migration scope..."
+
+  update_operating_model_core_version "$target/.ai_project/operating_model.md" "$current_version" "$core_source"
+  info "updated: .ai_project/operating_model.md"
+
+  mkdir -p "$target/.ai_project/tasks/active" "$target/.ai_project/tasks/backlog" "$target/.ai_project/tasks/archive"
+  info "ensured: .ai_project/tasks/active backlog archive"
+
+  if [ ! -f "$target/.ai_project/ops_migration_plan.md" ]; then
+    {
+      printf '# AI Ops Migration Plan\n\n'
+      printf '작성일: %s\n' "$date_value"
+      printf '프로젝트: %s\n' "$project_name"
+      printf '상태: Applied\n\n'
+      printf '## Migration Record\n\n'
+      printf '| 항목 | 값 |\n'
+      printf '|---|---|\n'
+      printf '| core_version | %s |\n' "$current_version"
+      printf '| core_source | %s |\n' "$core_source"
+      printf '| apply_scope | safe_auto_fix |\n'
+    } > "$target/.ai_project/ops_migration_plan.md"
+    info "created: .ai_project/ops_migration_plan.md"
+  else
+    {
+      printf '\n## Migration Record - %s\n\n' "$date_value"
+      printf '| 항목 | 값 |\n'
+      printf '|---|---|\n'
+      printf '| core_version | %s |\n' "$current_version"
+      printf '| core_source | %s |\n' "$core_source"
+      printf '| apply_scope | safe_auto_fix |\n'
+    } >> "$target/.ai_project/ops_migration_plan.md"
+    info "updated: .ai_project/ops_migration_plan.md"
+  fi
+
+  if [ ! -f "$target/.ai_project/ops_decisions.md" ]; then
+    {
+      printf '# Ops Decisions\n\n'
+      printf '작성일: %s\n' "$date_value"
+      printf '프로젝트: %s\n\n' "$project_name"
+    } > "$target/.ai_project/ops_decisions.md"
+    info "created: .ai_project/ops_decisions.md"
+  fi
+  {
+    printf '\n## Migration Decision - %s\n\n' "$date_value"
+    printf '| 결정 | 값 |\n'
+    printf '|---|---|\n'
+    printf '| core_version | %s |\n' "$current_version"
+    printf '| apply_scope | safe_auto_fix only |\n'
+    printf '| manual_only | product code, product Docs, Task status, Role mapping, branch/PR, commit/push/deploy |\n'
+  } >> "$target/.ai_project/ops_decisions.md"
+  info "updated: .ai_project/ops_decisions.md"
+
+  if [ ! -f "$target/.ai_project/ops_issues.md" ]; then
+    {
+      printf '# Ops Issues\n\n'
+      printf '작성일: %s\n' "$date_value"
+      printf '프로젝트: %s\n\n' "$project_name"
+      printf '## Open Issues\n\n'
+      printf '| ID | 유형 | 내용 | 상태 | 다음 조치 |\n'
+      printf '|---|---|---|---|---|\n'
+      printf '|  |  |  |  |  |\n'
+    } > "$target/.ai_project/ops_issues.md"
+    info "created: .ai_project/ops_issues.md"
+  fi
+
+  if [ ! -d "$target/.ai_knowledge" ]; then
+    cmd_knowledge init --target "$target" --mode minimal >/dev/null
+    info "created: .ai_knowledge minimal workspace"
+  else
+    info "ok: .ai_knowledge exists"
+  fi
+
+  info ""
+  info "AI Ops migration apply complete."
+  info "Next verification:"
+  info "  aiops doctor --target \"$target\" --strict"
+  info "  aiops knowledge lint --target \"$target\""
 }
 
 print_markdown_section_list() {
@@ -942,10 +1286,12 @@ cmd_release_check() {
     "$core/docs/distribution.md" \
     "$core/bin/aiops" \
     "$core/bootstrap/bootstrap_reference.md" \
+    "$core/bootstrap/migration_runbook.md" \
     "$core/Formula/ai-agent-ops.rb" \
     "$core/core/constitution.md" \
     "$core/models/knowledge_model.md" \
     "$core/policies/knowledge_policy.md" \
+    "$core/policies/migration_policy.md" \
     "$core/policies/versioning_policy.md" \
     "$core/runtime/workflow.md" \
     "$core/runtime/task_queue.md" \
@@ -1146,6 +1492,7 @@ main() {
   case "$cmd" in
     seed) cmd_seed "$@" ;;
     doctor) cmd_doctor "$@" ;;
+    migrate) cmd_migrate "$@" ;;
     bootstrap-guide) cmd_bootstrap_guide "$@" ;;
     validate) cmd_validate "$@" ;;
     knowledge) cmd_knowledge "$@" ;;
