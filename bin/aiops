@@ -66,6 +66,22 @@ check_required_dir() {
   fi
 }
 
+detect_ai_project_mode() {
+  project_dir="$1"
+  operating_model="$project_dir/operating_model.md"
+
+  if [ ! -f "$operating_model" ]; then
+    printf '%s\n' "unknown"
+    return 0
+  fi
+
+  if grep -q 'bootstrap_mode.*fast_track' "$operating_model"; then
+    printf '%s\n' "fast_track"
+  else
+    printf '%s\n' "guided_full"
+  fi
+}
+
 print_markdown_section_list() {
   file="$1"
   heading="$2"
@@ -369,13 +385,15 @@ cmd_doctor() {
 
   if [ -d "$target/.ai_project" ]; then
     info "ok: .ai_project"
+    ai_project_mode="$(detect_ai_project_mode "$target/.ai_project")"
+    info "mode: .ai_project $ai_project_mode"
+
     for required in \
       "$target/.ai_project/operating_model.md" \
       "$target/.ai_project/agent_registry.md" \
+      "$target/.ai_project/current_context.md" \
       "$target/.ai_project/source_of_truth.md" \
       "$target/.ai_project/task_board.md" \
-      "$target/.ai_project/branch_pr_strategy.md" \
-      "$target/.ai_project/workflow_overrides.md" \
       "$target/.ai_project/ops_decisions.md" \
       "$target/.ai_project/ops_issues.md" \
       "$target/.ai_project/tasks"
@@ -387,6 +405,28 @@ cmd_doctor() {
       fi
     done
 
+    if [ "$ai_project_mode" = "fast_track" ]; then
+      for optional in \
+        "$target/.ai_project/branch_pr_strategy.md" \
+        "$target/.ai_project/workflow_overrides.md" \
+        "$target/.ai_project/ops_migration_plan.md"
+      do
+        if [ -e "$optional" ]; then
+          info "ok: optional ${optional#$target/}"
+        else
+          info "note: optional for fast_track missing ${optional#$target/}"
+        fi
+      done
+    else
+      for required in \
+        "$target/.ai_project/branch_pr_strategy.md" \
+        "$target/.ai_project/workflow_overrides.md" \
+        "$target/.ai_project/ops_migration_plan.md"
+      do
+        check_required_file "$required" "${required#$target/}" || failed=1
+      done
+    fi
+
     for task_dir in "$target/.ai_project/tasks/active" "$target/.ai_project/tasks/backlog" "$target/.ai_project/tasks/archive"; do
       if [ -d "$task_dir" ]; then
         info "ok: ${task_dir#$target/}"
@@ -397,17 +437,22 @@ cmd_doctor() {
     done
 
     if [ -d "$target/.ai_project/tasks" ]; then
+      task_warning_file="${TMPDIR:-/tmp}/aiops-doctor-task-warnings.$$"
+      : > "$task_warning_file"
       find "$target/.ai_project/tasks" -type f -name '*.md' | while IFS= read -r task; do
         if ! grep -q '^status:' "$task"; then
           printf 'warn: task missing status: %s\n' "${task#$target/}"
+          printf '1\n' >> "$task_warning_file"
         fi
         if ! grep -q '^target_role:' "$task"; then
           printf 'warn: task missing target_role: %s\n' "${task#$target/}"
+          printf '1\n' >> "$task_warning_file"
         fi
         if grep -q '^status: verification_ready' "$task"; then
           qa_to="$(awk -F': ' '/^qa_to:/{print $2; exit}' "$task")"
           if [ -z "$qa_to" ]; then
             printf 'warn: verification_ready task missing qa_to: %s\n' "${task#$target/}"
+            printf '1\n' >> "$task_warning_file"
           elif [ -f "$target/$qa_to" ]; then
             printf 'ok: qa report exists for %s\n' "${task#$target/}"
           else
@@ -415,6 +460,11 @@ cmd_doctor() {
           fi
         fi
       done
+      if [ -s "$task_warning_file" ]; then
+        task_warnings="$(wc -l < "$task_warning_file" | tr -d ' ')"
+        warnings=$((warnings + task_warnings))
+      fi
+      rm -f "$task_warning_file"
     fi
   else
     info "note: .ai_project missing; run bootstrap when ready"
