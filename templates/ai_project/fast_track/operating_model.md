@@ -13,6 +13,9 @@
 | 항목 | 선택값 |
 |---|---|
 | bootstrap_mode | `fast_track` |
+| core_version | {{CORE_VERSION}} |
+| core_source | {{CORE_SOURCE}} |
+| core_update_policy | `manual_review` |
 | start_context | {{START_CONTEXT}} |
 | readiness_level | {{READINESS_LEVEL}} |
 | operating_mode | `solo_light` |

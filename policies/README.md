@@ -12,4 +12,4 @@
 | `document_governance.md` | 운영 문서 보호 기준 |
 | `project_workspace.md` | `.ai_project/` 구조와 수정 권한 |
 | `update_policy.md` | 운영체계 갱신 정책 |
-
+| `versioning_policy.md` | core version 기록과 update risk 기준 |

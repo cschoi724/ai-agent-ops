@@ -90,6 +90,24 @@ task_field_value() {
   awk -F': *' -v field="$field" '$1 == field { print $2; exit }' "$file"
 }
 
+markdown_table_value() {
+  file="$1"
+  key="$2"
+  awk -F'|' -v key="$key" '
+    NF >= 3 {
+      left=$2
+      value=$3
+      gsub(/^[ \t]+|[ \t]+$/, "", left)
+      gsub(/^[ \t]+|[ \t]+$/, "", value)
+      gsub(/^`|`$/, "", value)
+      if (left == key) {
+        print value
+        exit
+      }
+    }
+  ' "$file"
+}
+
 task_has_field() {
   file="$1"
   field="$2"
@@ -463,6 +481,7 @@ cmd_doctor() {
     info "ok: .ai_project"
     ai_project_mode="$(detect_ai_project_mode "$target/.ai_project")"
     info "mode: .ai_project $ai_project_mode"
+    operating_model="$target/.ai_project/operating_model.md"
 
     for required in \
       "$target/.ai_project/operating_model.md" \
@@ -541,6 +560,27 @@ cmd_doctor() {
         warnings=$((warnings + task_warnings))
       fi
       rm -f "$task_warning_file"
+    fi
+
+    if [ -f "$ai/VERSION" ] && [ -f "$operating_model" ]; then
+      current_core_version="$(cat "$ai/VERSION")"
+      recorded_core_version="$(task_field_value "$operating_model" "core_version")"
+      if [ -z "$recorded_core_version" ]; then
+        recorded_core_version="$(markdown_table_value "$operating_model" "core_version")"
+      fi
+
+      case "$recorded_core_version" in
+        ""|"{{CORE_VERSION}}")
+          info "note: .ai_project core_version not recorded"
+          ;;
+        "$current_core_version")
+          info "ok: .ai_project core_version matches $current_core_version"
+          ;;
+        *)
+          info "warn: .ai_project core_version $recorded_core_version differs from current core $current_core_version"
+          warnings=$((warnings + 1))
+          ;;
+      esac
     fi
   else
     info "note: .ai_project missing; run bootstrap when ready"
@@ -748,6 +788,7 @@ cmd_release_check() {
     "$core/bin/aiops" \
     "$core/Formula/ai-agent-ops.rb" \
     "$core/core/constitution.md" \
+    "$core/policies/versioning_policy.md" \
     "$core/runtime/workflow.md" \
     "$core/runtime/task_queue.md" \
     "$core/templates/tool_adapters/codex/AGENTS.md" \

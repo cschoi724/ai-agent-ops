@@ -23,11 +23,15 @@
 | Board | `.ai/policies/board_model.md` |
 | Branch / PR | `.ai/policies/branch_pr_policy.md` |
 | Task Queue | `.ai/runtime/task_queue.md` |
+| Versioning | `.ai/policies/versioning_policy.md` |
 
 ## 3. Start Context
 
 | 항목 | 선택값 |
 |---|---|
+| core_version | {{CORE_VERSION}} |
+| core_source | {{CORE_SOURCE}} |
+| core_update_policy | {{CORE_UPDATE_POLICY}} |
 | start_context | {{START_CONTEXT}} |
 | readiness_level | {{READINESS_LEVEL}} |
 | start_context_summary | {{START_CONTEXT_SUMMARY}} |

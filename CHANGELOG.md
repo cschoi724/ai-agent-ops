@@ -22,6 +22,7 @@
 - Homebrew tap 설치 검증 완료 및 설치 문서를 `brew tap cschoi724/tap` 기준으로 갱신
 - Task Markdown metadata를 검증하는 `aiops validate task FILE` 명령 추가
 - seed / doctor / Fast Track / invalid Task / validate task E2E 테스트와 기본 CI workflow 추가
+- core version 기록과 update risk를 다루는 `policies/versioning_policy.md` 추가
 
 ### Changed
 
@@ -29,6 +30,7 @@
 - README와 Quick Start를 초보자용 5분 시작 흐름으로 정리하고 `install -> seed -> doctor -> bootstrap-guide -> bootstrap` 순서를 명확화
 - Homebrew `tap`, `trust`, `install` 명령의 의미와 bootstrap 전후 생성 파일 범위를 문서화
 - `doctor --strict`가 Fast Track optional 문서를 허용하고 Task metadata 경고를 strict 실패에 반영하도록 개선
+- `doctor --strict`가 `.ai_project/operating_model.md`의 `core_version`과 현재 `.ai/VERSION` 불일치를 경고하도록 개선
 - Fast Track bootstrap이 제품 아이디어 발굴을 직접 진행하지 않고, Apply 이후 PM Agent / Direction Role 첫 세션으로 넘기도록 경계 명확화
 - Codex와 Claude 어댑터가 같은 Role handoff 규칙으로 Lead / Execution / Verification / Completion 전환을 처리하도록 정리
 - 전역 `aiops` symlink 실행 시 실제 core 경로를 따라가도록 CLI 경로 계산 보강
