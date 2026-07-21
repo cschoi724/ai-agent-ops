@@ -382,6 +382,7 @@ print_migration_lists() {
 cmd_migrate() {
   target="$(pwd)"
   mode="check"
+  mode_option_count=0
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -391,9 +392,11 @@ cmd_migrate() {
         target="$1"
         ;;
       --plan)
+        mode_option_count=$((mode_option_count + 1))
         mode="plan"
         ;;
       --apply)
+        mode_option_count=$((mode_option_count + 1))
         mode="apply"
         ;;
       -h|--help)
@@ -406,6 +409,8 @@ cmd_migrate() {
     esac
     shift
   done
+
+  [ "$mode_option_count" -le 1 ] || die "migrate accepts only one of --plan or --apply"
 
   target="$(abs_path "$target")"
   [ -d "$target" ] || die "target directory not found: $target"
@@ -448,7 +453,7 @@ cmd_migrate() {
       info "  - .ai missing; run aiops seed first"
       info ""
       info "No files changed."
-      return 0
+      return 1
     fi
 
     if [ ! -d "$target/.ai_project" ]; then
@@ -459,7 +464,7 @@ cmd_migrate() {
       info "  - none"
       info ""
       info "No files changed."
-      return 0
+      return 1
     fi
 
     print_migration_lists "$target" "$current_version" "$recorded_version" "$mode"
@@ -472,6 +477,13 @@ cmd_migrate() {
   [ -d "$target/.ai_project" ] || die ".ai_project missing; run bootstrap before migration apply"
   [ -f "$target/.ai_project/operating_model.md" ] || die ".ai_project/operating_model.md missing"
   [ "$current_version" != "unknown" ] || die ".ai/VERSION missing"
+
+  if [ "$status" = "up_to_date" ]; then
+    info ""
+    info "No migration changes needed."
+    info "No files changed."
+    return 0
+  fi
 
   date_value="$(date +%Y-%m-%d)"
   project_name="$(basename "$target")"
