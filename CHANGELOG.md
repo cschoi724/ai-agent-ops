@@ -21,6 +21,7 @@
 - 초기 배포 전 VERSION, Formula, license, 필수 문서 상태를 확인하는 `aiops release-check` 명령 추가
 - Homebrew tap 설치 검증 완료 및 설치 문서를 `brew tap cschoi724/tap` 기준으로 갱신
 - Task Markdown metadata를 검증하는 `aiops validate task FILE` 명령 추가
+- `.ai_knowledge/`를 생성/점검하는 `aiops knowledge init`, `knowledge lint`, `knowledge status` 명령 추가
 - seed / doctor / Fast Track / invalid Task / validate task E2E 테스트와 기본 CI workflow 추가
 - core version 기록과 update risk를 다루는 `policies/versioning_policy.md` 추가
 - LLM Wiki 기반 `.ai_knowledge/` 계층을 정의하는 Knowledge Model, Policy, 템플릿 추가

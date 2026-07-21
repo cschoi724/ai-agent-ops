@@ -10,6 +10,9 @@ Usage:
   aiops doctor [--target DIR] [--strict]
   aiops bootstrap-guide [--target DIR]
   aiops validate task FILE
+  aiops knowledge init [--target DIR] [--mode minimal|full] [--force]
+  aiops knowledge lint [--target DIR]
+  aiops knowledge status [--target DIR]
   aiops version [--core DIR]
   aiops update [--core DIR] [--check]
   aiops release-check [--core DIR] [--strict]
@@ -27,6 +30,8 @@ Examples:
   aiops seed --adapter both --mode copy
   aiops doctor
   aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
+  aiops knowledge init --mode minimal
+  aiops knowledge lint
   aiops bootstrap-guide
   aiops update --check
   aiops release-check --strict
@@ -174,6 +179,37 @@ validate_task_file() {
 
   [ "$failed" -eq 0 ] || return 1
   info "ok: task metadata"
+}
+
+render_template_file() {
+  src="$1"
+  dest="$2"
+  date_value="$3"
+  project_name="$4"
+
+  sed \
+    -e "s/{{DATE}}/$date_value/g" \
+    -e "s/{{PROJECT_NAME}}/$project_name/g" \
+    -e "s/{{PROJECT_ONE_LINE_SUMMARY}}/unresolved/g" \
+    -e "s/{{PROJECT_GOAL}}/unresolved/g" \
+    -e "s/{{PROJECT_STAGE}}/unresolved/g" \
+    -e "s/{{KEY_DECISION}}/unresolved/g" \
+    -e "s/{{SOURCE_DOC}}/unresolved/g" \
+    -e "s/{{SOURCE_ROLE}}/unresolved/g" \
+    -e "s/{{PRODUCT_SOURCE_OF_TRUTH}}/unresolved/g" \
+    -e "s/{{TECH_SOURCE_OF_TRUTH}}/unresolved/g" \
+    "$src" > "$dest"
+}
+
+knowledge_required_file() {
+  target="$1"
+  file="$2"
+  if [ -f "$target/.ai_knowledge/$file" ]; then
+    info "ok: .ai_knowledge/$file"
+    return 0
+  fi
+  info "missing: .ai_knowledge/$file"
+  return 1
 }
 
 print_markdown_section_list() {
@@ -614,6 +650,121 @@ cmd_validate() {
   esac
 }
 
+cmd_knowledge() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "knowledge requires an action: init, lint, status"
+  shift
+
+  target="$(pwd)"
+  mode="minimal"
+  force="no"
+  core="$(default_core_dir)"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --target)
+        shift
+        [ "$#" -gt 0 ] || die "--target requires a value"
+        target="$1"
+        ;;
+      --mode)
+        shift
+        [ "$#" -gt 0 ] || die "--mode requires a value"
+        mode="$1"
+        ;;
+      --force)
+        force="yes"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "unknown knowledge option: $1"
+        ;;
+    esac
+    shift
+  done
+
+  target="$(abs_path "$target")"
+  core="$(abs_path "$core")"
+  knowledge_dir="$target/.ai_knowledge"
+
+  case "$action" in
+    init)
+      case "$mode" in
+        minimal|full) ;;
+        *) die "unknown knowledge mode: $mode" ;;
+      esac
+
+      [ -d "$target" ] || die "target directory not found: $target"
+      [ -d "$core/templates/ai_knowledge" ] || die "knowledge templates not found"
+
+      if [ -e "$knowledge_dir" ] && [ "$force" != "yes" ]; then
+        die ".ai_knowledge already exists; use --force to replace"
+      fi
+
+      if [ -e "$knowledge_dir" ]; then
+        rm -rf "$knowledge_dir"
+      fi
+
+      mkdir -p "$knowledge_dir"
+      date_value="$(date +%Y-%m-%d)"
+      project_name="$(basename "$target")"
+
+      for file in README.md index.md log.md project_brief.md; do
+        render_template_file "$core/templates/ai_knowledge/$file" "$knowledge_dir/$file" "$date_value" "$project_name"
+      done
+
+      if [ "$mode" = "full" ]; then
+        for dir in concepts decisions architecture open_questions; do
+          mkdir -p "$knowledge_dir/$dir"
+          render_template_file "$core/templates/ai_knowledge/$dir/_template.md" "$knowledge_dir/$dir/_template.md" "$date_value" "$project_name"
+        done
+      fi
+
+      info "created: $knowledge_dir"
+      info "mode: $mode"
+      ;;
+    lint)
+      failed=0
+      info "AI Ops knowledge lint"
+      info "target: $target"
+      if [ -d "$knowledge_dir" ]; then
+        info "ok: .ai_knowledge"
+      else
+        info "missing: .ai_knowledge"
+        failed=1
+      fi
+
+      for file in README.md index.md log.md project_brief.md; do
+        knowledge_required_file "$target" "$file" || failed=1
+      done
+
+      [ "$failed" -eq 0 ] || exit 1
+      info "ok: knowledge workspace"
+      ;;
+    status)
+      info "AI Ops knowledge status"
+      info "target: $target"
+      if [ -d "$knowledge_dir" ]; then
+        info "ok: .ai_knowledge exists"
+        for file in README.md index.md log.md project_brief.md; do
+          if [ -f "$knowledge_dir/$file" ]; then
+            info "  - $file"
+          fi
+        done
+      else
+        info "missing: .ai_knowledge"
+        info "Next: aiops knowledge init --target \"$target\" --mode minimal"
+      fi
+      ;;
+    *)
+      die "unknown knowledge action: $action"
+      ;;
+  esac
+}
+
 cmd_version() {
   core="$(default_core_dir)"
 
@@ -988,6 +1139,7 @@ main() {
     doctor) cmd_doctor "$@" ;;
     bootstrap-guide) cmd_bootstrap_guide "$@" ;;
     validate) cmd_validate "$@" ;;
+    knowledge) cmd_knowledge "$@" ;;
     version) cmd_version "$@" ;;
     update) cmd_update "$@" ;;
     release-check) cmd_release_check "$@" ;;
