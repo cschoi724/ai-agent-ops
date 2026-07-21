@@ -67,7 +67,7 @@ bootstrap 시작해줘.
 AI 운영체계 초기 구성 시작해줘.
 ```
 
-이 요청을 받으면 Codex는 AI Ops Agent로 동작하고 `.ai/bootstrap/bootstrap_runbook.md`를 따른다.
+이 요청을 받으면 Codex는 AI Ops Agent로 동작하고 `.ai/bootstrap/bootstrap_runbook.md`를 먼저 따른다. 상세 선택지나 질문 팩이 필요할 때만 `.ai/bootstrap/bootstrap_reference.md`를 참조한다.
 
 Bootstrap 기본 실행 모드:
 
@@ -84,7 +84,7 @@ Discovery Phase에서는 파일을 생성하거나 수정하지 않는다. Apply
 
 Bootstrap 첫 응답에는 기준 문서 `.ai/bootstrap/bootstrap_runbook.md`, `.ai/` 존재 여부, `AGENTS.md` 존재 여부, `.ai_project/` 존재 여부를 함께 보고한다.
 
-Bootstrap Discovery는 일괄 제안 방식이 아니다. Codex는 한 번에 전체 운영모델을 작성하지 않고, Start Context, Readiness, Product Direction, Operating Mode, Team, Role, Workflow, Ownership, Board, Branch / PR, Source of Truth를 단계별 질문으로 확인한다. 각 답변은 Decision Stack에 누적하고, 필수 결정값이 충분해진 뒤에만 최종 Operating Model Draft와 Apply 승인 질문을 제시한다.
+Bootstrap Discovery는 일괄 제안 방식이 아니다. Codex는 한 번에 전체 운영모델을 작성하지 않고, Start Context, Readiness, Product Direction, Operating Mode, Team, Role, Workflow, Ownership, Board, Branch / PR, Knowledge Mode, Source of Truth를 단계별 질문으로 확인한다. 각 답변은 Decision Stack에 누적하고, 필수 결정값이 충분해진 뒤에만 최종 Operating Model Draft와 Apply 승인 질문을 제시한다.
 
 Bootstrap 요청을 받았는데 현재 프로젝트에 `.ai/`가 없으면 바로 `.ai_project/` 생성을 제안하지 않는다. 먼저 `AI Ops 시드 구성해줘.`로 `.ai/`를 구성하라고 안내한다.
 

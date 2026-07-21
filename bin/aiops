@@ -937,6 +937,7 @@ cmd_release_check() {
     "$core/docs/installation.md" \
     "$core/docs/distribution.md" \
     "$core/bin/aiops" \
+    "$core/bootstrap/bootstrap_reference.md" \
     "$core/Formula/ai-agent-ops.rb" \
     "$core/core/constitution.md" \
     "$core/models/knowledge_model.md" \
