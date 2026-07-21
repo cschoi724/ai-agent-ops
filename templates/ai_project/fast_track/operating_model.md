@@ -25,6 +25,7 @@
 | coordination | `single_active_task` |
 | board_model | `project_board_only` |
 | branch_pr | `pending_decision` |
+| knowledge_mode | `minimal` |
 | release_role | `inactive` |
 
 ## 3. Active Organization

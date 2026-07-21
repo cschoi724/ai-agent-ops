@@ -34,9 +34,13 @@ Fast Track은 아래 문서만 기본 생성한다.
 .ai_project/tasks/archive/
 .ai_project/reports/
 .ai_project/qa/
+.ai_knowledge/README.md
+.ai_knowledge/index.md
+.ai_knowledge/log.md
+.ai_knowledge/project_brief.md
 ```
 
-Fast Track은 branch / PR, workflow override, team context를 기본 생성하지 않는다. 필요해지면 Guided Full 문서를 추가한다.
+Fast Track은 branch / PR, workflow override, team context를 기본 생성하지 않는다. `knowledge_mode: minimal`을 선택하면 `.ai_knowledge/` 최소 문서를 함께 생성한다. 필요해지면 Guided Full 문서를 추가한다.
 
 ## 4. Guided Full 생성 후보
 
@@ -59,6 +63,7 @@ Guided Full은 아래 문서를 기본 생성한다.
 .ai_project/tasks/archive/
 .ai_project/reports/
 .ai_project/qa/
+.ai_knowledge/
 ```
 
 Team별 구성이 필요하면 아래 문서를 추가한다.
@@ -73,6 +78,7 @@ Team별 구성이 필요하면 아래 문서를 추가한다.
 
 - 사용자가 선택한 bootstrap mode에 맞는 템플릿만 기본 적용한다.
 - Fast Track으로 시작한 프로젝트도 나중에 Guided Full 문서를 추가할 수 있다.
+- `.ai_knowledge/`는 source of truth가 아니라 Agent 온보딩용 LLM Wiki다.
 - 존재하지 않는 기준 문서는 `unresolved` 또는 `to_create_candidate`로 기록한다.
 - `.ai_project/tasks/`의 Task 파일이 실행 지시의 source of truth다.
 

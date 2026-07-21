@@ -32,6 +32,7 @@
 | core_version | {{CORE_VERSION}} |
 | core_source | {{CORE_SOURCE}} |
 | core_update_policy | {{CORE_UPDATE_POLICY}} |
+| knowledge_mode | {{KNOWLEDGE_MODE}} |
 | start_context | {{START_CONTEXT}} |
 | readiness_level | {{READINESS_LEVEL}} |
 | start_context_summary | {{START_CONTEXT_SUMMARY}} |

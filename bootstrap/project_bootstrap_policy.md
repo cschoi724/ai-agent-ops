@@ -126,6 +126,7 @@ Fast Track 기본값:
 | Coordination | `single_active_task` | 충돌을 줄이는 쉬운 시작 |
 | Board | `project_board_only` | 한 개 현황판으로 시작 |
 | Branch / PR | `pending_decision` | 코드/Git 준비 전 확정하지 않음 |
+| Knowledge | `minimal` | Agent 온보딩용 최소 LLM Wiki 생성 |
 | Release Role | inactive | 실제 배포 전까지 비활성 |
 
 Fast Track도 Discovery Phase와 Apply Phase를 분리한다. 사용자 승인 없이 `.ai_project/`를 생성하지 않는다.
@@ -643,6 +644,7 @@ ownership_policy:
 board_policy:
 branch_pr_policy:
 source_of_truth:
+knowledge_mode:
 files_to_create:
 files_to_update:
 open_questions:
@@ -669,7 +671,13 @@ open_questions:
 .ai_project/tasks/
 .ai_project/reports/
 .ai_project/qa/
+.ai_knowledge/README.md
+.ai_knowledge/index.md
+.ai_knowledge/log.md
+.ai_knowledge/project_brief.md
 ```
+
+`.ai_knowledge/`는 선택 생성 대상이다. `knowledge_mode`가 `none`이면 생성하지 않고, `minimal`이면 위 네 문서만 생성하며, `full`이면 concepts / decisions / architecture / open_questions 템플릿까지 추가한다.
 
 ## 18. AI Ops Agent 질문 세트
 
@@ -688,6 +696,7 @@ open_questions:
 10. Execution Role이 task branch에 commit/push할 수 있나요?
 11. merge owner는 Lead Role인가요, 사용자인가요?
 12. source of truth 문서는 무엇인가요?
+13. Knowledge Wiki는 none / minimal / full 중 무엇으로 시작할까요?
 ```
 
 질문은 한 번에 모두 던지기보다, 프로젝트 복잡도에 따라 묶어서 제시한다.

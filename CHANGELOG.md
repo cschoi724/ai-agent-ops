@@ -32,6 +32,7 @@
 - Homebrew `tap`, `trust`, `install` 명령의 의미와 bootstrap 전후 생성 파일 범위를 문서화
 - `doctor --strict`가 Fast Track optional 문서를 허용하고 Task metadata 경고를 strict 실패에 반영하도록 개선
 - `doctor --strict`가 `.ai_project/operating_model.md`의 `core_version`과 현재 `.ai/VERSION` 불일치를 경고하도록 개선
+- Bootstrap 선택값에 `knowledge_mode`를 추가하고 Fast Track 최소 Knowledge Wiki 생성 후보를 문서화
 - Fast Track bootstrap이 제품 아이디어 발굴을 직접 진행하지 않고, Apply 이후 PM Agent / Direction Role 첫 세션으로 넘기도록 경계 명확화
 - Codex와 Claude 어댑터가 같은 Role handoff 규칙으로 Lead / Execution / Verification / Completion 전환을 처리하도록 정리
 - 전역 `aiops` symlink 실행 시 실제 core 경로를 따라가도록 CLI 경로 계산 보강
