@@ -33,6 +33,7 @@ YourProject/
   .ai/           # AI Agent Ops 공통 운영체계 템플릿
   AGENTS.md      # Codex가 읽는 프로젝트 진입 지침
   .ai_project/   # 이 프로젝트의 실제 운영 상태와 Task
+  .ai_knowledge/ # 선택: LLM Wiki 기반 프로젝트 지식 요약
   ...
 ```
 
@@ -43,6 +44,7 @@ YourProject/
 | `.ai/` | 헌법, 모델, 정책, workflow, 템플릿 |
 | `AGENTS.md` | Codex 세션이 읽는 현재 프로젝트 지침 |
 | `.ai_project/` | 프로젝트별 운영 모델, Agent 매핑, Task, 보고서 |
+| `.ai_knowledge/` | Agent 온보딩용 지식 요약, 개념, 결정, 미해결 질문 |
 
 ## 5-Minute Start
 
@@ -170,6 +172,7 @@ AI Agent Ops는 아래 기본 안전 규칙을 가진다.
 
 - `.ai/` 운영 문서는 적용 대상 프로젝트에서 임의 수정하지 않는다.
 - `.ai_project/`는 프로젝트별 상태만 기록한다.
+- `.ai_knowledge/`는 source of truth가 아니라 원본 이해를 돕는 LLM Wiki다.
 - 제품 Task는 운영 구성이 확정된 뒤에만 만든다.
 - Role 밖 행동은 하지 않는다.
 - 승인 없는 코드 수정, Git commit, push, PR, merge, 배포는 하지 않는다.
@@ -231,6 +234,7 @@ AI Agent Ops Organization
 5. `bootstrap/install_runbook.md`
 6. `bootstrap/bootstrap_runbook.md`
 7. `models/role_model.md`
+8. `models/knowledge_model.md`
 8. `models/team_model.md`
 9. `runtime/workflow.md`
 10. `runtime/task_queue.md`

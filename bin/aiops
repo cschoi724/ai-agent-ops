@@ -788,6 +788,8 @@ cmd_release_check() {
     "$core/bin/aiops" \
     "$core/Formula/ai-agent-ops.rb" \
     "$core/core/constitution.md" \
+    "$core/models/knowledge_model.md" \
+    "$core/policies/knowledge_policy.md" \
     "$core/policies/versioning_policy.md" \
     "$core/runtime/workflow.md" \
     "$core/runtime/task_queue.md" \

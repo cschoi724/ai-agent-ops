@@ -23,6 +23,7 @@
 - Task Markdown metadata를 검증하는 `aiops validate task FILE` 명령 추가
 - seed / doctor / Fast Track / invalid Task / validate task E2E 테스트와 기본 CI workflow 추가
 - core version 기록과 update risk를 다루는 `policies/versioning_policy.md` 추가
+- LLM Wiki 기반 `.ai_knowledge/` 계층을 정의하는 Knowledge Model, Policy, 템플릿 추가
 
 ### Changed
 

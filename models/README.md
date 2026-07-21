@@ -9,4 +9,4 @@
 | `role_model.md` | Role / Agent / Capability 책임 경계 |
 | `capabilities.md` | Role 기반 capability 체계 |
 | `agent_registry.md` | 기본 Agent와 Role 매핑 |
-
+| `knowledge_model.md` | LLM Wiki 기반 프로젝트 지식 계층 |
