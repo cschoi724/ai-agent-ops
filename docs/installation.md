@@ -7,6 +7,8 @@
 
 AI Agent Ops는 최종적으로 패키지 매니저로 설치할 수 있는 운영체계 코어를 목표로 한다.
 
+처음 사용하는 사람은 `QUICKSTART.md`의 5분 시작 흐름을 먼저 따른다. 이 문서는 설치 방식과 디렉토리 구조를 더 자세히 설명하는 레퍼런스다.
+
 초기 구조:
 
 ```text
@@ -41,6 +43,15 @@ aiops version
 ```
 
 Homebrew 6에서는 외부 tap Formula 실행 전에 trust가 필요할 수 있다.
+
+명령별 의미:
+
+| 명령 | 의미 |
+|---|---|
+| `brew tap cschoi724/tap` | AI Agent Ops Formula가 있는 tap 등록 |
+| `brew trust cschoi724/tap` | 외부 tap Formula 실행 허용 |
+| `brew install ai-agent-ops` | `aiops` 전역 명령 설치 |
+| `aiops version` | 설치된 CLI 버전 확인 |
 
 ## 3. 로컬 checkout 설치
 
@@ -131,6 +142,22 @@ aiops bootstrap-guide
 ```
 
 이 명령은 파일을 수정하지 않는다. `.ai/`, adapter 파일, `.ai_project/` 존재 여부를 확인하고 다음 단계 문구를 안내한다.
+
+일반적인 첫 설치 흐름은 아래 순서다.
+
+```bash
+aiops seed --adapter both
+aiops doctor --strict
+aiops bootstrap-guide
+```
+
+그 다음 새 Agent 세션에서 말한다.
+
+```text
+AI Ops bootstrap 시작해줘.
+```
+
+bootstrap은 Discovery와 Decision Stack 확인을 먼저 진행하고, 최종 Operating Model Draft 승인 후에만 `.ai_project/`를 만든다.
 
 ## 7. Update
 

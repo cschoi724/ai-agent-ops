@@ -24,6 +24,8 @@
 ### Changed
 
 - README, Quick Start, 설치 문서에 `bootstrap-guide` 사용법 추가
+- README와 Quick Start를 초보자용 5분 시작 흐름으로 정리하고 `install -> seed -> doctor -> bootstrap-guide -> bootstrap` 순서를 명확화
+- Homebrew `tap`, `trust`, `install` 명령의 의미와 bootstrap 전후 생성 파일 범위를 문서화
 - Fast Track bootstrap이 제품 아이디어 발굴을 직접 진행하지 않고, Apply 이후 PM Agent / Direction Role 첫 세션으로 넘기도록 경계 명확화
 - Codex와 Claude 어댑터가 같은 Role handoff 규칙으로 Lead / Execution / Verification / Completion 전환을 처리하도록 정리
 - 전역 `aiops` symlink 실행 시 실제 core 경로를 따라가도록 CLI 경로 계산 보강

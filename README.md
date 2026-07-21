@@ -38,11 +38,11 @@ YourProject/
 | `AGENTS.md` | Codex 세션이 읽는 현재 프로젝트 지침 |
 | `.ai_project/` | 프로젝트별 운영 모델, Agent 매핑, Task, 보고서 |
 
-## Quick Start
+## 5-Minute Start
 
-### 1. 프로젝트에 AI Ops 시드 구성
+처음 쓰는 경우에는 아래 순서만 따르면 된다.
 
-먼저 Homebrew로 설치한다.
+### 1. Install
 
 ```bash
 brew tap cschoi724/tap
@@ -51,21 +51,29 @@ brew install ai-agent-ops
 aiops version
 ```
 
-Homebrew를 쓰지 않으면 저장소 경로로 직접 실행하거나 PATH에 symlink를 등록해서 `aiops` 전역 명령처럼 사용할 수 있다.
+`brew trust cschoi724/tap`은 외부 tap Formula 실행을 허용하는 Homebrew 안전 절차다.
 
-Codex:
+### 2. Seed Target Project
+
+AI Ops를 적용할 프로젝트 폴더로 이동한다.
+
+```bash
+cd /path/to/YourProject
+```
+
+Codex만 쓰면:
 
 ```bash
 aiops seed --adapter codex
 ```
 
-Claude:
+Claude만 쓰면:
 
 ```bash
 aiops seed --adapter claude
 ```
 
-Codex와 Claude:
+둘 다 쓰거나 아직 정하지 못했으면:
 
 ```bash
 aiops seed --adapter both
@@ -78,35 +86,33 @@ aiops seed --adapter both
 AGENTS.md or CLAUDE.md
 ```
 
-이 단계에서는 `.ai_project/`를 만들지 않는다.
+이 단계에서는 `.ai_project/`를 만들지 않는다. `.ai/`는 공통 운영체계 코어를 가리키고, `AGENTS.md`와 `CLAUDE.md`는 각 Agent 세션의 진입 지침이다.
 
-구성을 확인한다.
-
-```bash
-aiops doctor
-```
-
-경고까지 실패로 보고 싶으면 strict 모드를 사용한다.
+### 3. Check
 
 ```bash
 aiops doctor --strict
 ```
 
-### 2. 프로젝트 운영체계 Bootstrap
+문제가 있으면 메시지에 나온 항목만 먼저 고치면 된다. 일반적인 확인만 필요하면 `aiops doctor`를 사용할 수 있다.
 
-다음 단계 안내를 CLI로 확인할 수 있다.
+### 4. Open Bootstrap Guide
 
 ```bash
 aiops bootstrap-guide
 ```
 
-시드 구성이 끝난 뒤 새 Codex 세션을 열고 말한다.
+이 명령은 파일을 수정하지 않고, 현재 프로젝트가 다음에 무엇을 해야 하는지 알려준다.
+
+### 5. Start Bootstrap With Agent
+
+새 Codex 또는 Claude 세션을 열고 아래 한 줄을 말한다.
 
 ```text
 AI Ops bootstrap 시작해줘.
 ```
 
-Agent가 먼저 시작 방식을 물어본다.
+Agent는 먼저 Discovery를 진행하고, 파일을 수정하지 않은 상태에서 시작 방식을 물어본다.
 
 처음 쓰거나 쉽게 시작하고 싶으면 `빠른 시작`을 선택한다. Fast Track은 한 개 Team, 단일 작업 흐름, Release Role 비활성, Git/PR 보류 같은 안전 기본값으로 시작한다. 필요한 경우 나중에 Team, Role, Workflow, Branch 전략을 확장한다.
 
@@ -131,7 +137,7 @@ Bootstrap은 바로 전체 결과를 만들지 않는다. Codex는 질문을 하
   qa/
 ```
 
-### 3. Role별로 작업 진행
+## After Bootstrap
 
 Bootstrap 이후에는 세션마다 Role을 부여해서 진행한다.
 
