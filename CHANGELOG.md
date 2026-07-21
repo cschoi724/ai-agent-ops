@@ -8,6 +8,20 @@
 - Minor: 새 Agent, workflow, 템플릿, 운영 규칙 추가 또는 기본 흐름 변경
 - Patch: 문구 정리, 충돌 제거, 설명 보강, 누락 수정
 
+## 0.6.3 - Unreleased
+
+### Added
+
+- 기존 프로젝트 운영모델 갱신을 위한 `policies/migration_policy.md` 추가
+- Migration Discovery / Plan / Apply 절차를 설명하는 `bootstrap/migration_runbook.md` 추가
+- `aiops migrate --target DIR`, `--plan`, `--apply` 명령 추가
+- migration check / version mismatch / safe apply / product no-touch E2E 테스트 추가
+
+### Changed
+
+- README에 migration 명령과 관련 문서 링크 추가
+- Codex / Claude adapter가 migration 요청을 bootstrap과 분리해 처리하도록 갱신
+
 ## 0.6.2 - 2026-07-21
 
 ### Added

@@ -6,9 +6,11 @@
 
 ## 1. 목적
 
-이 문서는 현재 프로젝트에 AI Agent 운영 체계를 도입하기 위한 프로젝트별 마이그레이션 계획이다.
+이 문서는 현재 프로젝트에 AI Agent 운영 체계를 도입하거나, 기존 운영 프로젝트를 새 AI Agent Ops core 기준으로 갱신하기 위한 프로젝트별 마이그레이션 계획이다.
 
 운영 체계 도입은 AI Ops Agent 또는 Ops Governance Role이 주도한다. 제품 우선순위와 개발 Task 승인은 Lead Role, Direction Role, Product Owner가 담당한다.
+
+기존 운영 프로젝트 갱신 시에는 `.ai/bootstrap/migration_runbook.md`와 `.ai/policies/migration_policy.md`를 우선한다. Discovery Phase에서는 파일을 수정하지 않고, Apply Phase는 사용자가 승인한 운영 파일 범위 안에서만 진행한다.
 
 ## 2. 현재 프로젝트 구조 요약
 
@@ -111,7 +113,23 @@
 | source of truth 미정 | Task 실행 기준 불명확 | Lead Role 또는 Product Owner가 기준 문서 확정 |
 | 코드/빌드 경로 영향 | 개발 작업 실패 가능 | Execution Role Task로 분리 |
 
-## 12. 변경 이력
+## 12. Core Version Migration
+
+| 항목 | 값 |
+|---|---|
+| current_core_version |  |
+| project_recorded_core_version |  |
+| migration_status | pending_check |
+| safe_auto_fix_scope | `.ai_project/`, `.ai_knowledge/` |
+| manual_only_scope | product code, product Docs, Task status, Role mapping, branch/PR, commit/push/deploy |
+
+## 13. Migration Apply Record
+
+| 날짜 | core_version | 적용 범위 | 검증 결과 |
+|---|---|---|---|
+|  |  |  |  |
+
+## 14. 변경 이력
 
 | 날짜 | 변경 내용 |
 |---|---|
