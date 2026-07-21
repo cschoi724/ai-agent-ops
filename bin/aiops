@@ -9,6 +9,7 @@ Usage:
   aiops seed [--adapter codex|claude|both] [--mode link|copy] [--target DIR] [--core DIR] [--force]
   aiops doctor [--target DIR] [--strict]
   aiops bootstrap-guide [--target DIR]
+  aiops validate task FILE
   aiops version [--core DIR]
   aiops update [--core DIR] [--check]
   aiops release-check [--core DIR] [--strict]
@@ -25,6 +26,7 @@ Examples:
   aiops seed --adapter claude
   aiops seed --adapter both --mode copy
   aiops doctor
+  aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
   aiops bootstrap-guide
   aiops update --check
   aiops release-check --strict
@@ -80,6 +82,80 @@ detect_ai_project_mode() {
   else
     printf '%s\n' "guided_full"
   fi
+}
+
+task_field_value() {
+  file="$1"
+  field="$2"
+  awk -F': *' -v field="$field" '$1 == field { print $2; exit }' "$file"
+}
+
+task_has_field() {
+  file="$1"
+  field="$2"
+  grep -q "^$field:" "$file"
+}
+
+validate_task_file() {
+  task="$1"
+  failed=0
+
+  [ -f "$task" ] || {
+    info "missing: $task"
+    return 1
+  }
+
+  info "AI Ops task validate"
+  info "task: $task"
+
+  for field in id status workflow target_role required_capabilities; do
+    if task_has_field "$task" "$field"; then
+      info "ok: $field"
+    else
+      info "missing: $field"
+      failed=1
+    fi
+  done
+
+  status="$(task_field_value "$task" "status")"
+  case "$status" in
+    approved|in_progress)
+      for field in allowed_paths source_of_truth report_to; do
+        if task_has_field "$task" "$field"; then
+          info "ok: $field"
+        else
+          info "missing: $field required for status $status"
+          failed=1
+        fi
+      done
+      ;;
+    verification_ready|verification_in_progress|verification_passed)
+      if task_has_field "$task" "qa_to"; then
+        info "ok: qa_to"
+      else
+        info "missing: qa_to required for status $status"
+        failed=1
+      fi
+      ;;
+    blocked)
+      for field in blocker next_decision; do
+        if task_has_field "$task" "$field"; then
+          info "ok: $field"
+        else
+          info "missing: $field required for status blocked"
+          failed=1
+        fi
+      done
+      ;;
+    "")
+      ;;
+    *)
+      info "note: no status-specific checks for $status"
+      ;;
+  esac
+
+  [ "$failed" -eq 0 ] || return 1
+  info "ok: task metadata"
 }
 
 print_markdown_section_list() {
@@ -482,6 +558,22 @@ cmd_doctor() {
   [ "$failed" -eq 0 ] || exit 1
 }
 
+cmd_validate() {
+  subject="${1:-}"
+  [ "$#" -gt 0 ] || die "validate requires a subject: task"
+  shift
+
+  case "$subject" in
+    task)
+      [ "$#" -eq 1 ] || die "validate task requires exactly one FILE"
+      validate_task_file "$1"
+      ;;
+    *)
+      die "unknown validate subject: $subject"
+      ;;
+  esac
+}
+
 cmd_version() {
   core="$(default_core_dir)"
 
@@ -852,6 +944,7 @@ main() {
     seed) cmd_seed "$@" ;;
     doctor) cmd_doctor "$@" ;;
     bootstrap-guide) cmd_bootstrap_guide "$@" ;;
+    validate) cmd_validate "$@" ;;
     version) cmd_version "$@" ;;
     update) cmd_update "$@" ;;
     release-check) cmd_release_check "$@" ;;

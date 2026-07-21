@@ -186,6 +186,7 @@ AI Agent Ops는 아래 기본 안전 규칙을 가진다.
 | `aiops seed --adapter claude` | 프로젝트에 `.ai`와 `CLAUDE.md`를 구성 |
 | `aiops doctor` | 프로젝트의 AI Ops 구성 상태를 점검 |
 | `aiops bootstrap-guide` | 현재 AI Ops 구성 상태별 다음 단계 안내 |
+| `aiops validate task FILE` | Task Markdown metadata를 상태별 필수 필드 기준으로 검증 |
 | `aiops update --check` | 현재 core 업데이트 방식과 버전 확인 |
 | `aiops update` | git checkout 기반 core를 fast-forward 업데이트 |
 | `aiops release-check --strict` | 초기 배포 전 VERSION, Formula, 문서, license 상태 점검 |
