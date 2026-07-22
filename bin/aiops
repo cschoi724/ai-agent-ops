@@ -482,6 +482,11 @@ cmd_migrate() {
     info ""
     info "No migration changes needed."
     info "No files changed."
+    info ""
+    info "Verifying migration state..."
+    cmd_doctor --target "$target" --strict
+    cmd_knowledge lint --target "$target"
+    info "verification: passed"
     return 0
   fi
 
@@ -563,9 +568,11 @@ cmd_migrate() {
 
   info ""
   info "AI Ops migration apply complete."
-  info "Next verification:"
-  info "  aiops doctor --target \"$target\" --strict"
-  info "  aiops knowledge lint --target \"$target\""
+  info ""
+  info "Verifying migration state..."
+  cmd_doctor --target "$target" --strict
+  cmd_knowledge lint --target "$target"
+  info "verification: passed"
 }
 
 print_markdown_section_list() {

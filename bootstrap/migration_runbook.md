@@ -89,7 +89,7 @@ aiops migrate --target . --apply
 
 ## 5. Verify
 
-Apply 후 아래 검증을 실행한다.
+`aiops migrate --apply`는 Apply 후 아래 검증을 직접 실행한다.
 
 ```bash
 aiops doctor --target . --strict

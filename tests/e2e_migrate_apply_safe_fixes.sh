@@ -39,4 +39,14 @@ done
 "$repo_root/bin/aiops" knowledge lint --target "$tmpdir" >/tmp/aiops-e2e-migrate-apply-knowledge.out
 "$repo_root/bin/aiops" doctor --target "$tmpdir" --strict >/tmp/aiops-e2e-migrate-apply-doctor.out
 
+grep -q 'Verifying migration state' /tmp/aiops-e2e-migrate-apply.out || {
+  printf '%s\n' "migrate apply did not run verification" >&2
+  exit 1
+}
+
+grep -q 'verification: passed' /tmp/aiops-e2e-migrate-apply.out || {
+  printf '%s\n' "migrate apply did not report verification pass" >&2
+  exit 1
+}
+
 printf '%s\n' "ok: migrate apply safe fixes"

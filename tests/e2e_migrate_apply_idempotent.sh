@@ -29,6 +29,11 @@ grep -q 'No migration changes needed.' /tmp/aiops-e2e-migrate-idempotent.out || 
   exit 1
 }
 
+grep -q 'verification: passed' /tmp/aiops-e2e-migrate-idempotent.out || {
+  printf '%s\n' "migrate apply no-op did not verify state" >&2
+  exit 1
+}
+
 [ "$before" = "$after" ] || {
   printf '%s\n' "migrate apply should be idempotent when up to date" >&2
   exit 1
