@@ -8,7 +8,7 @@
 - Minor: 새 Agent, workflow, 템플릿, 운영 규칙 추가 또는 기본 흐름 변경
 - Patch: 문구 정리, 충돌 제거, 설명 보강, 누락 수정
 
-## 0.6.3 - Unreleased
+## 0.6.3 - 2026-07-22
 
 ### Added
 

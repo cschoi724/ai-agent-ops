@@ -126,8 +126,8 @@ YourProject/
 
 ## Status
 
-Current version: `0.6.2`
+Current version: `0.6.3`
 
-Homebrew release: `v0.6.2`
+Homebrew release: `v0.6.3`
 
 AI Agent Ops는 현재 베타 하네스다. 운영 철학과 문서 모델에 더해 CLI 검증, E2E 테스트, CI, Knowledge workspace가 추가되었지만, Git 권한이나 배포 권한 같은 물리적 통제는 프로젝트 환경에서 별도로 유지해야 한다.
