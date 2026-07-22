@@ -70,14 +70,17 @@ Agent는 적용 전에 아래 내용을 사용자에게 보여준다.
 
 ## 5. 검증 기준
 
-Apply 후에는 아래 검증을 실행한다.
+Apply 후에는 migration-safe verification을 실행한다.
 
 ```bash
-aiops doctor --strict
-aiops knowledge lint
+aiops migrate --apply
 ```
 
-Task 파일을 변경하지 않았더라도 기존 Task가 있으면 필요에 따라 아래 검증을 추가한다.
+migration-safe verification은 `.ai/`, `.ai/VERSION`, `.ai_project/operating_model.md`, core version 기록, task directory, migration 기록 문서, `.ai_knowledge/` lint를 확인한다.
+
+`AGENTS.md`와 `CLAUDE.md` adapter drift는 실패가 아니라 `needs_user_decision`으로 보고한다.
+
+Task 파일을 변경하지 않았더라도 기존 Task를 엄격히 확인해야 하면 필요에 따라 아래 검증을 추가한다.
 
 ```bash
 aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md

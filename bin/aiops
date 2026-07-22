@@ -379,6 +379,74 @@ print_migration_lists() {
   fi
 }
 
+cmd_migrate_verify() {
+  target="$1"
+  expected_version="$2"
+  failed=0
+
+  info "AI Ops migration verify"
+  info "target: $target"
+
+  if [ -d "$target/.ai" ] || [ -L "$target/.ai" ]; then
+    info "ok: .ai"
+  else
+    info "missing: .ai"
+    failed=1
+  fi
+
+  if [ -f "$target/.ai/VERSION" ]; then
+    info "ok: .ai/VERSION"
+  else
+    info "missing: .ai/VERSION"
+    failed=1
+  fi
+
+  operating_model="$target/.ai_project/operating_model.md"
+  if [ -f "$operating_model" ]; then
+    info "ok: .ai_project/operating_model.md"
+    recorded_version="$(project_recorded_core_version "$operating_model")"
+    if [ "$recorded_version" = "$expected_version" ]; then
+      info "ok: core_version $expected_version"
+    else
+      info "missing: core_version match expected $expected_version"
+      failed=1
+    fi
+  else
+    info "missing: .ai_project/operating_model.md"
+    failed=1
+  fi
+
+  for dir in "$target/.ai_project/tasks/active" "$target/.ai_project/tasks/backlog" "$target/.ai_project/tasks/archive"; do
+    if [ -d "$dir" ]; then
+      info "ok: ${dir#$target/}"
+    else
+      info "missing: ${dir#$target/}"
+      failed=1
+    fi
+  done
+
+  for file in "$target/.ai_project/ops_migration_plan.md" "$target/.ai_project/ops_decisions.md" "$target/.ai_project/ops_issues.md"; do
+    if [ -f "$file" ]; then
+      info "ok: ${file#$target/}"
+    else
+      info "missing: ${file#$target/}"
+      failed=1
+    fi
+  done
+
+  if [ -f "$target/AGENTS.md" ] && [ -f "$target/.ai/templates/tool_adapters/codex/AGENTS.md" ] && ! same_file_content "$target/AGENTS.md" "$target/.ai/templates/tool_adapters/codex/AGENTS.md"; then
+    info "needs_user_decision: AGENTS.md adapter update"
+  fi
+  if [ -f "$target/CLAUDE.md" ] && [ -f "$target/.ai/templates/tool_adapters/claude/CLAUDE.md" ] && ! same_file_content "$target/CLAUDE.md" "$target/.ai/templates/tool_adapters/claude/CLAUDE.md"; then
+    info "needs_user_decision: CLAUDE.md adapter update"
+  fi
+
+  cmd_knowledge lint --target "$target" || failed=1
+
+  [ "$failed" -eq 0 ] || return 1
+  info "verification: passed"
+}
+
 cmd_migrate() {
   target="$(pwd)"
   mode="check"
@@ -484,9 +552,7 @@ cmd_migrate() {
     info "No files changed."
     info ""
     info "Verifying migration state..."
-    cmd_doctor --target "$target" --strict
-    cmd_knowledge lint --target "$target"
-    info "verification: passed"
+    cmd_migrate_verify "$target" "$current_version"
     return 0
   fi
 
@@ -570,9 +636,7 @@ cmd_migrate() {
   info "AI Ops migration apply complete."
   info ""
   info "Verifying migration state..."
-  cmd_doctor --target "$target" --strict
-  cmd_knowledge lint --target "$target"
-  info "verification: passed"
+  cmd_migrate_verify "$target" "$current_version"
 }
 
 print_markdown_section_list() {

@@ -89,11 +89,14 @@ aiops migrate --target . --apply
 
 ## 5. Verify
 
-`aiops migrate --apply`는 Apply 후 아래 검증을 직접 실행한다.
+`aiops migrate --apply`는 Apply 후 migration-safe verification을 직접 실행한다.
 
 ```bash
-aiops doctor --target . --strict
-aiops knowledge lint --target .
+aiops migrate --target . --apply
 ```
+
+이 검증은 `.ai/`, `.ai/VERSION`, `.ai_project/operating_model.md`, core version 기록, task directory, migration 기록 문서, `.ai_knowledge/` lint를 확인한다.
+
+`AGENTS.md`와 `CLAUDE.md` adapter drift는 실패가 아니라 `needs_user_decision`으로 보고한다.
 
 검증 실패 시 제품 작업으로 넘어가지 않는다. Agent는 실패 원인, 수정된 운영 파일, 남은 사용자 결정 항목을 보고한다.

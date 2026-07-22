@@ -22,7 +22,7 @@
 - README에 migration 명령과 관련 문서 링크 추가
 - Codex / Claude adapter가 migration 요청을 bootstrap과 분리해 처리하도록 갱신
 - `aiops migrate`가 `--plan` / `--apply` 동시 지정, blocking 상태, 최신 상태 재적용을 안전하게 처리하도록 개선
-- `aiops migrate --apply`가 적용 후 `doctor --strict`와 `knowledge lint` 검증을 직접 실행하도록 개선
+- `aiops migrate --apply`가 적용 후 migration-safe verification을 직접 실행하도록 개선
 
 ## 0.6.2 - 2026-07-21
 
