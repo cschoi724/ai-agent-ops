@@ -123,6 +123,7 @@ YourProject/
 - [runtime/task_queue.md](runtime/task_queue.md): Task Queue 기준
 - [policies/versioning_policy.md](policies/versioning_policy.md): core version 기록과 update risk
 - [policies/migration_policy.md](policies/migration_policy.md): migration 적용 범위와 금지 범위
+- [policies/session_orchestration_policy.md](policies/session_orchestration_policy.md): Agent 세션 분리와 보조 위임 기준
 
 ## Status
 

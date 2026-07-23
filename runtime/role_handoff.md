@@ -10,6 +10,8 @@
 
 Task 상태 전이 자체는 `.ai/runtime/workflow.md`와 `.ai/runtime/task_queue.md`를 따른다. 이 문서는 전이 후 다음 Agent가 같은 맥락에서 바로 시작할 수 있도록 무엇을 전달해야 하는지만 정한다.
 
+Agent 세션 분리와 보조 위임 기준은 `.ai/policies/session_orchestration_policy.md`를 따른다.
+
 아래 Lead -> Execution, Execution -> Verification, Verification -> Completion, Rework/Blocked -> Lead 문구는 기본 workflow의 표준 예시다. 프로젝트별 workflow나 `.ai_project/workflow_overrides.md`가 다른 Role 순서, 추가 게이트, 생략 단계를 정의하면 그 정의가 우선한다.
 
 ## 2. 기본 원칙
@@ -19,6 +21,7 @@ Task 상태 전이 자체는 `.ai/runtime/workflow.md`와 `.ai/runtime/task_queu
 - 다음 담당에게 넘길 말은 Task 파일의 `Next Agent Handoff` 섹션과 최종 응답에 같은 내용으로 남긴다.
 - 인계 메시지는 Codex와 Claude 모두 이해할 수 있는 일반 문장과 Task metadata로 작성한다.
 - 다음 Agent에게 역할을 명시한다. 예: `너는 Development Agent / Execution Role이야.`
+- 다음 Role을 별도 세션에서 시작해야 하면 새 세션 시작에 필요한 정보를 함께 남긴다.
 - 인계 메시지는 실행 지시가 아니라 다음 Role이 읽어야 할 시작 컨텍스트다. 승인, commit, push, merge, 배포 권한은 프로젝트 정책을 따른다.
 - 실제 다음 Role은 Task의 `workflow`, `status`, `target_agent`, `target_role`, 프로젝트별 override를 기준으로 정한다.
 - 이 문서의 상태별 표준 문구와 다른 전이가 필요하면 필수 인계 필드는 유지하고 Role 이름, 상태, 다음 행동만 해당 workflow에 맞게 바꾼다.
@@ -137,3 +140,4 @@ Task {{TASK_ID}}의 범위 또는 차단 상태를 다시 조율해줘.
 - 인계 메시지 없이 `target_role`만 바꾸지 않는다.
 - `다음 Agent에게 전달할 말`에 실제로 확인하지 않은 테스트, 승인, 리스크 해소를 적지 않는다.
 - Codex 전용 명령이나 Claude 전용 명령을 표준 문구로 강제하지 않는다.
+- 보조 작업 결과를 독립 Role 세션의 검증이나 완료 판정으로 표기하지 않는다.

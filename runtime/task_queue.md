@@ -15,6 +15,7 @@ Task 실행 흐름은 Agent별 고정 권한보다 세션 Role과 Task의 `workf
 ## 2. 기본 원칙
 
 - Agent Role은 세션 시작 시 사용자가 부여한다.
+- Agent 세션 분리와 보조 위임 기준은 `.ai/policies/session_orchestration_policy.md`를 따른다.
 - PM/Development/QA Agent는 vNext 책임 단계 위에 매핑되는 bootstrap Role이다.
 - Agent는 세션 시작 또는 재개 시 `.ai_project/current_context.md`와 `.ai_project/tasks/`를 확인한다.
 - `workflow`는 Task의 상태 전이 규칙을 정한다.
@@ -137,6 +138,7 @@ lock_session: session-id
 
 - `locked_by`가 비어 있지 않으면 다른 Agent는 실행하지 않는다.
 - 같은 Agent라도 이미 `in_progress` 또는 `verification_in_progress` Task가 있으면 새 Task를 시작하지 않는다.
+- 보조 작업자 또는 subagent는 별도 lock owner가 아니다.
 - 작업을 정상 완료하면 다음 상태로 넘기면서 lock을 비운다.
 - Agent 세션이 중단되어 lock이 오래 남으면 Lead Role 또는 Direction Role이 사용자 확인 후 lock을 해제한다.
 - lock 해제 사유는 Task 변경 이력에 기록한다.

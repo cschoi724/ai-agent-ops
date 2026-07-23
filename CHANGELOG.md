@@ -8,6 +8,16 @@
 - Minor: 새 Agent, workflow, 템플릿, 운영 규칙 추가 또는 기본 흐름 변경
 - Patch: 문구 정리, 충돌 제거, 설명 보강, 누락 수정
 
+## 0.6.4 - Unreleased
+
+### Added
+
+- Agent 세션 분리와 보조 위임 기준을 정의하는 `policies/session_orchestration_policy.md` 추가
+
+### Changed
+
+- Codex / Claude adapter, Task Queue, Role Handoff 문서에 session orchestration 기준 연결
+
 ## 0.6.3 - 2026-07-22
 
 ### Added

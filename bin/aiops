@@ -1375,6 +1375,7 @@ cmd_release_check() {
     "$core/models/knowledge_model.md" \
     "$core/policies/knowledge_policy.md" \
     "$core/policies/migration_policy.md" \
+    "$core/policies/session_orchestration_policy.md" \
     "$core/policies/versioning_policy.md" \
     "$core/runtime/workflow.md" \
     "$core/runtime/task_queue.md" \
