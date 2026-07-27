@@ -14,11 +14,14 @@
 
 - 프로젝트 저장소용 GitHub Actions workflow를 생성하는 `aiops ci init` 명령 추가
 - AI Ops 프로젝트 CI 템플릿 `templates/ci/github-actions/aiops.yml` 추가
+- 외부 runtime 연결 준비를 위한 `adapters/` 문서 추가
+- `aiops export runtime` 명령과 `schemas/runtime_export.schema.json` 추가
 
 ### Changed
 
 - 저장소 CI를 E2E 테스트, release safety, project CI template 검증 job으로 분리
 - `aiops release-check --strict`가 shell/schema 구문과 seed된 샘플 프로젝트의 doctor/validate/migrate/knowledge gate를 확인하도록 강화
+- Formula 설치 대상에 `adapters/` 포함
 
 ## 0.6.4 - 2026-07-23
 

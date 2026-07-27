@@ -78,6 +78,7 @@ Bootstrap은 Discovery Phase에서 파일을 수정하지 않는다. Agent가 �
 | `aiops knowledge pack TOPIC --create` | 작업별 context pack 생성 |
 | `aiops knowledge lint` | Knowledge workspace 점검 |
 | `aiops ci init` | 프로젝트용 GitHub Actions AI Ops 검증 workflow 생성 |
+| `aiops export runtime` | 외부 runtime adapter용 Task/Role/Handoff JSON snapshot 생성 |
 | `aiops update --check` | core 업데이트 가능 여부 확인 |
 | `aiops release-check --strict` | 배포 전 필수 문서와 Formula 상태 점검 |
 
@@ -132,6 +133,7 @@ YourProject/
 - [models/knowledge_model.md](models/knowledge_model.md): `.ai_knowledge/` 모델
 - [runtime/workflow.md](runtime/workflow.md): workflow 상태 모델
 - [runtime/task_queue.md](runtime/task_queue.md): Task Queue 기준
+- [adapters/README.md](adapters/README.md): 외부 runtime adapter export 계약
 - [policies/versioning_policy.md](policies/versioning_policy.md): core version 기록과 update risk
 - [policies/migration_policy.md](policies/migration_policy.md): migration 적용 범위와 금지 범위
 - [policies/session_orchestration_policy.md](policies/session_orchestration_policy.md): Agent 세션 분리와 보조 위임 기준

@@ -27,6 +27,7 @@ Usage:
   aiops knowledge lint [--target DIR]
   aiops knowledge status [--target DIR]
   aiops ci init [--target DIR] [--provider github] [--force]
+  aiops export runtime [--target DIR] [--output FILE]
   aiops version [--core DIR]
   aiops update [--core DIR] [--check]
   aiops release-check [--core DIR] [--strict] [--allow-pending-release]
@@ -55,6 +56,7 @@ Examples:
   aiops knowledge pack ios_login --create --task T-YYYYMMDD-001
   aiops knowledge lint
   aiops ci init
+  aiops export runtime
   aiops bootstrap-guide
   aiops session-guide
   aiops role prompt execution --task T-YYYYMMDD-001 --adapter codex
@@ -3233,6 +3235,195 @@ cmd_ci() {
   esac
 }
 
+cmd_export() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "export requires an action: runtime"
+  shift
+
+  case "$action" in
+    runtime)
+      target="$(pwd)"
+      output=""
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --output)
+            shift
+            [ "$#" -gt 0 ] || die "--output requires a value"
+            output="$1"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown export runtime option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      target="$(abs_path "$target")"
+      [ -d "$target/.ai_project" ] || die ".ai_project missing; bootstrap project first"
+      [ -f "$target/.ai_project/operating_model.md" ] || die ".ai_project/operating_model.md missing"
+
+      if [ -n "$output" ]; then
+        output="$(abs_path "$output")"
+        output_dir="$(dirname "$output")"
+        [ -d "$output_dir" ] || die "output directory not found: $output_dir"
+      fi
+
+      if command -v ruby >/dev/null 2>&1; then
+        ruby -ryaml -rjson -rtime -rdate -rfind -e '
+          target = ARGV[0]
+          output = ARGV[1].to_s
+
+          def front_matter(path)
+            return {} unless File.file?(path)
+            text = File.read(path)
+            return {} unless text.start_with?("---\n")
+            lines = text.lines
+            closing = nil
+            lines[1..].each_with_index do |line, idx|
+              if line.strip == "---"
+                closing = idx + 1
+                break
+              end
+            end
+            return {} unless closing
+            YAML.safe_load(lines[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+          rescue Psych::SyntaxError
+            {}
+          end
+
+          def files_under(path, pattern)
+            return [] unless Dir.exist?(path)
+            files = []
+            Find.find(path) do |entry|
+              next unless File.file?(entry)
+              files << entry if File.fnmatch(pattern, File.basename(entry))
+            end
+            files.sort
+          end
+
+          project_dir = File.join(target, ".ai_project")
+          operating_model = front_matter(File.join(project_dir, "operating_model.md"))
+          agent_registry = front_matter(File.join(project_dir, "agent_registry.md"))
+
+          tasks = files_under(File.join(project_dir, "tasks"), "*.md").map do |path|
+            data = front_matter(path)
+            {
+              "id" => data["id"] || File.basename(path, ".md"),
+              "title" => data["title"],
+              "status" => data["status"],
+              "workflow" => data["workflow"],
+              "target_role" => data["target_role"],
+              "target_agent" => data["target_agent"],
+              "required_capabilities" => data["required_capabilities"] || [],
+              "allowed_paths" => data["allowed_paths"] || [],
+              "source_of_truth" => data["source_of_truth"] || [],
+              "depends_on" => data["depends_on"] || [],
+              "blocks" => data["blocks"] || [],
+              "locked_by" => data["locked_by"],
+              "lock_session" => data["lock_session"],
+              "report_to" => data["report_to"],
+              "qa_to" => data["qa_to"],
+              "branch" => data["branch"] || {},
+              "pr" => data["pr"] || {},
+              "path" => path.sub(%r{\A#{Regexp.escape(target)}/?}, "")
+            }
+          end
+
+          handoffs = files_under(File.join(project_dir, "handoffs"), "*.md").map do |path|
+            data = front_matter(path)
+            {
+              "task_id" => data["task_id"],
+              "from_role" => data["from_role"],
+              "to_role" => data["to_role"],
+              "from_agent" => data["from_agent"],
+              "to_agent" => data["to_agent"],
+              "current_status" => data["current_status"],
+              "next_action" => data["next_action"],
+              "source_of_truth" => data["source_of_truth"] || [],
+              "allowed_paths" => data["allowed_paths"] || [],
+              "report_paths" => data["report_paths"] || [],
+              "risks" => data["risks"] || [],
+              "blockers" => data["blockers"] || [],
+              "open_questions" => data["open_questions"] || [],
+              "created_at" => data["created_at"],
+              "path" => path.sub(%r{\A#{Regexp.escape(target)}/?}, "")
+            }
+          end
+
+          approval_statuses = %w[proposed scoped approved verification_ready verification_in_progress verification_passed completion_review done blocked rework_requested cancelled]
+          checkpoints = tasks.map do |task|
+            status = task["status"]
+            next unless approval_statuses.include?(status.to_s)
+            {
+              "task_id" => task["id"],
+              "status" => status,
+              "type" => case status
+                        when "approved" then "work_approved"
+                        when "verification_ready", "verification_in_progress" then "verification_checkpoint"
+                        when "completion_review" then "completion_approval"
+                        when "done" then "completion_recorded"
+                        when "blocked", "rework_requested", "cancelled" then "lead_decision_required"
+                        else "scope_or_direction_decision"
+                        end,
+              "owner_role" => task["target_role"]
+            }
+          end.compact
+
+          export = {
+            "schema" => "aiops.runtime_export.v1",
+            "exported_at" => Time.now.utc.iso8601,
+            "target" => target,
+            "project" => operating_model["project"] || File.basename(target),
+            "core_version" => operating_model["core_version"],
+            "operating_model" => operating_model,
+            "agents" => agent_registry["agents"] || [],
+            "tasks" => tasks,
+            "handoffs" => handoffs,
+            "approval_checkpoints" => checkpoints,
+            "adapter_contract" => {
+              "task_graph" => "tasks[].depends_on / tasks[].blocks",
+              "role_assignment" => "tasks[].target_role and agents[].roles",
+              "state_transitions" => "tasks[].status plus runtime/workflow.md",
+              "handoff_events" => "handoffs[]",
+              "approval_checkpoints" => "approval_checkpoints[]"
+            }
+          }
+
+          json = JSON.pretty_generate(export) + "\n"
+          if output.empty?
+            puts json
+          else
+            File.write(output, json)
+          end
+        ' "$target" "$output"
+        if [ -n "$output" ]; then
+          info "AI Ops runtime export"
+          info "target: $target"
+          info "created: $output"
+        fi
+      else
+        die "ruby is required for runtime export"
+      fi
+      ;;
+    -h|--help)
+      usage
+      ;;
+    *)
+      die "unknown export action: $action"
+      ;;
+  esac
+}
+
 cmd_version() {
   core="$(default_core_dir)"
 
@@ -3417,6 +3608,10 @@ cmd_release_check() {
     "$core/schemas/handoff.schema.json" \
     "$core/schemas/agent_registry.schema.json" \
     "$core/schemas/operating_model.schema.json" \
+    "$core/schemas/runtime_export.schema.json" \
+    "$core/adapters/README.md" \
+    "$core/adapters/langgraph/README.md" \
+    "$core/adapters/openai_agents/README.md" \
     "$core/bootstrap/bootstrap_reference.md" \
     "$core/bootstrap/migration_runbook.md" \
     "$core/Formula/ai-agent-ops.rb" \
@@ -3479,6 +3674,7 @@ cmd_release_check() {
     "$core/bin/aiops" validate --target "$release_tmp" --strict >/dev/null
     "$core/bin/aiops" migrate --target "$release_tmp" --plan >/dev/null
     "$core/bin/aiops" knowledge lint --target "$release_tmp" >/dev/null
+    "$core/bin/aiops" export runtime --target "$release_tmp" >/dev/null
   ); then
     info "ok: seeded project release gate"
   else
@@ -3502,6 +3698,13 @@ cmd_release_check() {
       info "ok: Formula version reference matches VERSION"
     else
       info "warn: Formula version reference does not match VERSION v$version"
+      warnings=$((warnings + 1))
+    fi
+
+    if grep -q 'libexec.install.*"adapters"' "$formula"; then
+      info "ok: Formula installs adapters"
+    else
+      info "warn: Formula missing adapters install"
       warnings=$((warnings + 1))
     fi
 
@@ -3687,6 +3890,7 @@ main() {
     handoff) cmd_handoff "$@" ;;
     knowledge) cmd_knowledge "$@" ;;
     ci) cmd_ci "$@" ;;
+    export) cmd_export "$@" ;;
     version) cmd_version "$@" ;;
     update) cmd_update "$@" ;;
     release-check) cmd_release_check "$@" ;;

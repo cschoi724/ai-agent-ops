@@ -51,6 +51,7 @@ CLI는 front matter를 읽어 schema로 검증하고, 본문은 사람이 읽는
 | `handoff.schema.json` | handoff metadata/message | Role 간 인계 필수 정보 |
 | `agent_registry.schema.json` | `.ai_project/agent_registry.md` front matter | Agent, Role, capability 매핑 |
 | `operating_model.schema.json` | `.ai_project/operating_model.md` front matter | 프로젝트 운영 모드, workflow, board, ownership 선택값 |
+| `runtime_export.schema.json` | `aiops export runtime` JSON | 외부 runtime adapter가 읽을 Task/Role/Handoff snapshot |
 
 ## 단계별 적용
 
@@ -59,6 +60,8 @@ CLI는 front matter를 읽어 schema로 검증하고, 본문은 사람이 읽는
 2단계부터 `aiops validate`가 이 schema 기준의 필수 필드와 허용 값을 검사한다.
 
 3단계 이후 `aiops task transition`, `aiops handoff validate`가 같은 schema를 상태 전이 guardrail로 사용한다.
+
+9단계 이후 `aiops export runtime`이 Task graph, Role assignment, 상태, Handoff, approval checkpoint를 runtime adapter용 JSON으로 내보낸다.
 
 ## 호환성 원칙
 

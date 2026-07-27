@@ -108,6 +108,7 @@ Formula는 GitHub release tarball URL과 `sha256`으로 버전을 고정한다. 
 ```text
 $(brew --prefix)/bin/aiops
 $(brew --prefix)/opt/ai-agent-ops/libexec/
+$(brew --prefix)/opt/ai-agent-ops/libexec/adapters/
 ```
 
 대상 프로젝트 seed 결과:
