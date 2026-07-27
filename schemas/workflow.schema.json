@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/workflow.schema.json",
+  "title": "AI Ops Workflow Definition",
+  "description": "Schema for machine-readable AI Ops workflow definitions.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema",
+    "workflow_id",
+    "name",
+    "states",
+    "transitions"
+  ],
+  "properties": {
+    "schema": {
+      "const": "aiops.workflow.v1"
+    },
+    "workflow_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_/-]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "fast_track",
+        "guided_full",
+        "both",
+        "custom"
+      ]
+    },
+    "states": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/taskStatus"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "initial_status": {
+      "$ref": "#/$defs/taskStatus"
+    },
+    "terminal_statuses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/taskStatus"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "transitions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/transition"
+      },
+      "minItems": 1
+    }
+  },
+  "$defs": {
+    "taskStatus": {
+      "type": "string",
+      "enum": [
+        "proposed",
+        "scoped",
+        "approved",
+        "in_progress",
+        "verification_ready",
+        "verification_in_progress",
+        "verification_passed",
+        "completion_review",
+        "done",
+        "blocked",
+        "rework_requested",
+        "cancelled"
+      ]
+    },
+    "roleName": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "Direction Role",
+        "Lead Role",
+        "Execution Role",
+        "Verification Role",
+        "Completion Role",
+        "Release Role",
+        "Ops Governance Role",
+        "Product Owner",
+        "any"
+      ]
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "from",
+        "to",
+        "allowed_roles"
+      ],
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/taskStatus"
+        },
+        "to": {
+          "$ref": "#/$defs/taskStatus"
+        },
+        "allowed_roles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/roleName"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "next_role": {
+          "$ref": "#/$defs/roleName"
+        },
+        "requires_approval": {
+          "type": "boolean"
+        },
+        "requires_handoff": {
+          "type": "boolean"
+        },
+        "requires_verification": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

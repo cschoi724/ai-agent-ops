@@ -280,6 +280,14 @@ update_operating_model_core_version() {
   if grep -q '|[[:space:]]*core_version[[:space:]]*|' "$operating_model"; then
     awk -F'|' -v version="$current_version" -v core_source="$core_source" '
       BEGIN { OFS="|" }
+      /^core_version:/ {
+        print "core_version: " version
+        next
+      }
+      /^core_source:/ {
+        print "core_source: " core_source
+        next
+      }
       $0 ~ /^\|/ {
         key=$2
         gsub(/^[ \t]+|[ \t]+$/, "", key)
@@ -1368,6 +1376,12 @@ cmd_release_check() {
     "$core/docs/installation.md" \
     "$core/docs/distribution.md" \
     "$core/bin/aiops" \
+    "$core/schemas/README.md" \
+    "$core/schemas/task.schema.json" \
+    "$core/schemas/workflow.schema.json" \
+    "$core/schemas/handoff.schema.json" \
+    "$core/schemas/agent_registry.schema.json" \
+    "$core/schemas/operating_model.schema.json" \
     "$core/bootstrap/bootstrap_reference.md" \
     "$core/bootstrap/migration_runbook.md" \
     "$core/Formula/ai-agent-ops.rb" \

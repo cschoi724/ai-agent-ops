@@ -1,3 +1,37 @@
+---
+schema: aiops.agent_registry.v1
+project: {{PROJECT_NAME}}
+agents:
+  - agent: {{DIRECTION_AGENT}}
+    status: enabled
+    team: {{TEAM_NAME}}
+    roles:
+      - Direction Role
+    capabilities:
+      - planning
+      - priority_management
+      - approval
+  - agent: {{LEAD_AGENT}}
+    status: enabled
+    team: {{TEAM_NAME}}
+    roles:
+      - Lead Role
+      - Completion Role
+    capabilities:
+      - scope_definition
+      - ownership_review
+      - completion_review
+  - agent: AI Ops Agent
+    status: enabled
+    team: AI Ops Governance
+    roles:
+      - Ops Governance Role
+    capabilities:
+      - process_governance
+      - workflow_governance
+      - ops_migration
+---
+
 # Project Agent Registry
 
 작성일: {{DATE}}

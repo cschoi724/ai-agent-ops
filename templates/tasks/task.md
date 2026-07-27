@@ -1,4 +1,5 @@
 ---
+schema: aiops.task.v1
 id: T-{{DATE_COMPACT}}-001
 title: {{TASK_TITLE}}
 status: proposed

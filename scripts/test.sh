@@ -6,6 +6,13 @@ repo_root="$(CDPATH= cd "$(dirname "$0")/.." && pwd)"
 printf '%s\n' "== shell syntax =="
 sh -n "$repo_root/bin/aiops"
 
+printf '%s\n' "== schema syntax =="
+if command -v ruby >/dev/null 2>&1; then
+  ruby -rjson -e 'ARGV.each { |path| JSON.parse(File.read(path)); puts "ok: #{path}" }' "$repo_root"/schemas/*.schema.json
+else
+  printf '%s\n' "skip: ruby not found; schema syntax check skipped"
+fi
+
 printf '%s\n' "== release check =="
 if git -C "$repo_root" diff --quiet && git -C "$repo_root" diff --cached --quiet; then
   "$repo_root/bin/aiops" release-check --strict --allow-pending-release

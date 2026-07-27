@@ -1,3 +1,30 @@
+---
+schema: aiops.operating_model.v1
+project: {{PROJECT_NAME}}
+bootstrap_mode: fast_track
+core_version: {{CORE_VERSION}}
+core_source: {{CORE_SOURCE}}
+core_update_policy: manual_review
+start_context: {{START_CONTEXT}}
+readiness_level: {{READINESS_LEVEL}}
+operating_mode: solo_light
+team_pattern: single_team
+workflow_policy: skip_scoped_for_simple_tasks
+ownership_model: path_plus_domain
+coordination: single_active_task
+board_model: project_board_only
+branch_pr: pending_decision
+knowledge_mode: minimal
+release_role: inactive
+active_roles:
+  - Direction Role
+  - Lead Role
+  - Ops Governance Role
+deferred_roles:
+  - Execution Role
+  - Verification Role
+---
+
 # Project Operating Model
 
 작성일: {{DATE}}

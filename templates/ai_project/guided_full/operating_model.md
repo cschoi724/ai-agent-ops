@@ -1,3 +1,30 @@
+---
+schema: aiops.operating_model.v1
+project: {{PROJECT_NAME}}
+bootstrap_mode: guided_full
+core_version: {{CORE_VERSION}}
+core_source: {{CORE_SOURCE}}
+core_update_policy: {{CORE_UPDATE_POLICY}}
+start_context: {{START_CONTEXT}}
+readiness_level: {{READINESS_LEVEL}}
+operating_mode: {{OPERATING_MODE}}
+team_pattern: {{TEAM_PATTERN}}
+workflow_policy: standard_vnext
+ownership_model: {{OWNERSHIP_MODEL}}
+coordination: {{PARALLEL_CONTROL}}
+board_model: {{BOARD_MODEL}}
+branch_pr: {{BRANCH_STRATEGY_MODEL}}
+knowledge_mode: {{KNOWLEDGE_MODE}}
+release_role: deferred
+active_roles:
+  - Lead Role
+  - Execution Role
+  - Verification Role
+  - Ops Governance Role
+deferred_roles:
+  - Release Role
+---
+
 # Project Operating Model
 
 작성일: {{DATE}}  

@@ -1,3 +1,30 @@
+---
+schema: aiops.handoff.v1
+task_id: {{TASK_ID}}
+from_role: {{FROM_ROLE}}
+to_role: {{NEXT_ROLE}}
+from_agent: {{FROM_AGENT}}
+to_agent: {{NEXT_AGENT}}
+current_status: {{CURRENT_STATUS}}
+next_action: {{NEXT_ACTION}}
+source_of_truth:
+  - {{SOURCE_OF_TRUTH}}
+allowed_paths:
+  - {{ALLOWED_PATHS}}
+report_paths:
+  - {{REPORT_OR_QA_PATHS}}
+changed_or_affected_paths:
+  - {{CHANGED_OR_AFFECTED_PATHS}}
+validation_result: {{VALIDATION_RESULT}}
+risks:
+  - {{RISKS_OR_NONE}}
+blockers:
+  - {{BLOCKERS_OR_DECISIONS_OR_NONE}}
+open_questions: []
+created_at: {{DATE}}
+created_by: {{FROM_AGENT}}
+---
+
 # Handoff Message Template
 
 Task ID: `{{TASK_ID}}`
