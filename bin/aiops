@@ -12,11 +12,14 @@ Usage:
   aiops bootstrap-guide [--target DIR]
   aiops validate [project] [--target DIR] [--strict]
   aiops validate task FILE [--strict]
+  aiops validate handoff FILE [--strict]
   aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
   aiops task status TASK_ID [--target DIR]
   aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT]
   aiops task lock TASK_ID --by AGENT [--target DIR] [--role ROLE] [--session ID]
   aiops task unlock TASK_ID --by AGENT [--target DIR]
+  aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT [--target DIR]
+  aiops handoff validate FILE|TASK_ID [--target DIR] [--strict]
   aiops knowledge init [--target DIR] [--mode minimal|full] [--force]
   aiops knowledge lint [--target DIR]
   aiops knowledge status [--target DIR]
@@ -40,8 +43,10 @@ Examples:
   aiops validate --strict
   aiops validate project --target /path/to/project --strict
   aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
+  aiops validate handoff .ai_project/handoffs/T-YYYYMMDD-001_execution_to_verification.md --strict
   aiops task create --title "로그인 화면 구현" --workflow feature --role "Lead Role"
   aiops task transition T-YYYYMMDD-001 --to approved --role "Direction Role"
+  aiops handoff create T-YYYYMMDD-001 --from "Execution Role" --to "Verification Role" --next-action "변경 결과 검증"
   aiops knowledge init --mode minimal
   aiops knowledge lint
   aiops bootstrap-guide
@@ -701,6 +706,39 @@ task_require_project() {
   target="$1"
   [ -d "$target/.ai_project/tasks" ] || die ".ai_project/tasks missing; bootstrap or migrate project first"
   mkdir -p "$target/.ai_project/tasks/active" "$target/.ai_project/tasks/backlog" "$target/.ai_project/tasks/archive"
+}
+
+role_slug() {
+  printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/ role$//; s/[^a-z0-9]/_/g; s/_\{2,\}/_/g; s/^_//; s/_$//'
+}
+
+handoff_find_file() {
+  target="$1"
+  value="$2"
+
+  if [ -f "$value" ]; then
+    abs_path "$value"
+    return 0
+  fi
+
+  case "$value" in
+    /*)
+      [ -f "$value" ] || return 1
+      printf '%s\n' "$value"
+      return 0
+      ;;
+  esac
+
+  if [ -f "$target/$value" ]; then
+    printf '%s\n' "$target/$value"
+    return 0
+  fi
+
+  handoff_dir="$target/.ai_project/handoffs"
+  [ -d "$handoff_dir" ] || return 1
+  found="$(find "$handoff_dir" -type f -name "$value*.md" | sort | tail -n 1 || true)"
+  [ -n "$found" ] || return 1
+  printf '%s\n' "$found"
 }
 
 render_template_file() {
@@ -1634,6 +1672,38 @@ cmd_validate() {
         validate_task_file "$file"
       fi
       ;;
+    handoff)
+      strict="no"
+      file=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --strict)
+            strict="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          -*)
+            die "unknown validate handoff option: $1"
+            ;;
+          *)
+            [ -z "$file" ] || die "validate handoff requires exactly one FILE"
+            file="$1"
+            ;;
+        esac
+        shift
+      done
+      [ -n "$file" ] || die "validate handoff requires exactly one FILE"
+      [ -f "$file" ] || {
+        info "missing: $file"
+        return 1
+      }
+      info "AI Ops handoff validate"
+      info "handoff: $file"
+      validate_front_matter handoff "$file" "$strict"
+      info "ok: handoff metadata"
+      ;;
     project)
       target="$(pwd)"
       strict="no"
@@ -2105,6 +2175,280 @@ EOF
 
     *)
       die "unknown task action: $action"
+      ;;
+  esac
+}
+
+cmd_handoff() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "handoff requires an action: create, validate"
+  shift
+
+  case "$action" in
+    create)
+      target="$(pwd)"
+      task_id=""
+      from_role=""
+      to_role=""
+      from_agent=""
+      to_agent=""
+      next_action=""
+      summary="handoff created"
+      validation_result="not_run"
+      force="no"
+      report_paths=""
+      changed_paths=""
+      risks=""
+      blockers=""
+      open_questions=""
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --from)
+            shift
+            [ "$#" -gt 0 ] || die "--from requires a value"
+            from_role="$1"
+            ;;
+          --to)
+            shift
+            [ "$#" -gt 0 ] || die "--to requires a value"
+            to_role="$1"
+            ;;
+          --from-agent)
+            shift
+            [ "$#" -gt 0 ] || die "--from-agent requires a value"
+            from_agent="$1"
+            ;;
+          --to-agent)
+            shift
+            [ "$#" -gt 0 ] || die "--to-agent requires a value"
+            to_agent="$1"
+            ;;
+          --next-action)
+            shift
+            [ "$#" -gt 0 ] || die "--next-action requires a value"
+            next_action="$1"
+            ;;
+          --summary)
+            shift
+            [ "$#" -gt 0 ] || die "--summary requires a value"
+            summary="$1"
+            ;;
+          --report)
+            shift
+            [ "$#" -gt 0 ] || die "--report requires a value"
+            report_paths="${report_paths}
+$1"
+            ;;
+          --changed-path)
+            shift
+            [ "$#" -gt 0 ] || die "--changed-path requires a value"
+            changed_paths="${changed_paths}
+$1"
+            ;;
+          --risk)
+            shift
+            [ "$#" -gt 0 ] || die "--risk requires a value"
+            risks="${risks}
+$1"
+            ;;
+          --blocker)
+            shift
+            [ "$#" -gt 0 ] || die "--blocker requires a value"
+            blockers="${blockers}
+$1"
+            ;;
+          --open-question)
+            shift
+            [ "$#" -gt 0 ] || die "--open-question requires a value"
+            open_questions="${open_questions}
+$1"
+            ;;
+          --validation-result)
+            shift
+            [ "$#" -gt 0 ] || die "--validation-result requires a value"
+            validation_result="$1"
+            ;;
+          --force)
+            force="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          -*)
+            die "unknown handoff create option: $1"
+            ;;
+          *)
+            [ -z "$task_id" ] || die "handoff create requires exactly one TASK_ID"
+            task_id="$1"
+            ;;
+        esac
+        shift
+      done
+
+      [ -n "$task_id" ] || die "handoff create requires TASK_ID"
+      [ -n "$from_role" ] || die "handoff create requires --from"
+      [ -n "$to_role" ] || die "handoff create requires --to"
+      [ -n "$next_action" ] || die "handoff create requires --next-action"
+
+      target="$(abs_path "$target")"
+      task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+      handoff_dir="$target/.ai_project/handoffs"
+      mkdir -p "$handoff_dir"
+
+      current_status="$(task_yaml_field "$task_file" status)"
+      source_of_truth="$(task_yaml_field "$task_file" source_of_truth)"
+      allowed_paths="$(task_yaml_field "$task_file" allowed_paths)"
+      task_report="$(task_yaml_field "$task_file" report_to)"
+      qa_report="$(task_yaml_field "$task_file" qa_to)"
+      date_value="$(date +%Y-%m-%d)"
+      from_slug="$(role_slug "$from_role")"
+      to_slug="$(role_slug "$to_role")"
+      handoff_file="$handoff_dir/${task_id}_${from_slug}_to_${to_slug}.md"
+
+      if [ -e "$handoff_file" ] && [ "$force" != "yes" ]; then
+        die "handoff already exists: ${handoff_file#$target/}; use --force to replace"
+      fi
+
+      if [ -z "$report_paths" ]; then
+        [ -z "$task_report" ] || report_paths="${report_paths}
+$task_report"
+        [ -z "$qa_report" ] || report_paths="${report_paths}
+$qa_report"
+      fi
+
+      ruby -ryaml -e '
+        path = ARGV[0]
+        task_id = ARGV[1]
+        from_role = ARGV[2]
+        to_role = ARGV[3]
+        from_agent = ARGV[4]
+        to_agent = ARGV[5]
+        current_status = ARGV[6]
+        next_action = ARGV[7]
+        source_of_truth = ARGV[8]
+        allowed_paths = ARGV[9]
+        report_paths = ARGV[10]
+        changed_paths = ARGV[11]
+        validation_result = ARGV[12]
+        risks = ARGV[13]
+        blockers = ARGV[14]
+        open_questions = ARGV[15]
+        created_at = ARGV[16]
+        summary = ARGV[17]
+
+        def list(value)
+          value.to_s.lines.map(&:strip).reject(&:empty?).flat_map { |line| line.split(",").map(&:strip) }.reject(&:empty?)
+        end
+
+        data = {
+          "schema" => "aiops.handoff.v1",
+          "task_id" => task_id,
+          "from_role" => from_role,
+          "to_role" => to_role,
+          "from_agent" => from_agent.empty? ? nil : from_agent,
+          "to_agent" => to_agent.empty? ? nil : to_agent,
+          "current_status" => current_status,
+          "next_action" => next_action,
+          "source_of_truth" => list(source_of_truth),
+          "allowed_paths" => list(allowed_paths),
+          "report_paths" => list(report_paths),
+          "changed_or_affected_paths" => list(changed_paths),
+          "validation_result" => validation_result,
+          "risks" => list(risks),
+          "blockers" => list(blockers),
+          "open_questions" => list(open_questions),
+          "created_at" => created_at,
+          "created_by" => from_agent.empty? ? from_role : from_agent
+        }
+
+        body = <<~MD
+          # Handoff: #{task_id}
+
+          ## 다음 Agent에게 전달할 말
+
+          너는 #{to_agent.empty? ? "다음 Agent" : to_agent} / #{to_role}이야.
+          Task #{task_id}를 이어서 처리해줘.
+
+          - 현재 상태: #{current_status}
+          - 다음에 해야 할 일: #{next_action}
+          - 기준 문서: #{data["source_of_truth"].join(", ")}
+          - 허용 경로: #{data["allowed_paths"].join(", ")}
+          - 참고 산출물: #{data["report_paths"].empty? ? "없음" : data["report_paths"].join(", ")}
+          - 변경/검토 대상: #{data["changed_or_affected_paths"].empty? ? "미기록" : data["changed_or_affected_paths"].join(", ")}
+          - 남은 리스크: #{data["risks"].empty? ? "없음" : data["risks"].join(", ")}
+          - 차단/결정 필요: #{data["blockers"].empty? ? "없음" : data["blockers"].join(", ")}
+          - 주의: 현재 Task의 workflow, status, target_agent, target_role이 네 Role과 맞는지 먼저 확인해줘.
+
+          ## 인계 기록
+
+          | 날짜 | From | To | 상태 | 요약 |
+          |---|---|---|---|---|
+          | #{created_at} | #{from_role} | #{to_role} | #{current_status} | #{summary} |
+        MD
+
+        File.write(path, YAML.dump(data) + "---\n\n" + body)
+      ' "$handoff_file" "$task_id" "$from_role" "$to_role" "$from_agent" "$to_agent" "$current_status" "$next_action" "$source_of_truth" "$allowed_paths" "$report_paths" "$changed_paths" "$validation_result" "$risks" "$blockers" "$open_questions" "$date_value" "$summary"
+
+      validate_front_matter handoff "$handoff_file" yes >/dev/null || {
+        rm -f "$handoff_file"
+        die "created handoff failed schema validation"
+      }
+      task_append_event "$task_file" "handoff: $from_role -> $to_role" "${from_agent:-$from_role}" "$summary"
+
+      info "AI Ops handoff create"
+      info "created: ${handoff_file#$target/}"
+      info "task_id: $task_id"
+      info "from_role: $from_role"
+      info "to_role: $to_role"
+      info "current_status: $current_status"
+      ;;
+
+    validate)
+      target="$(pwd)"
+      value=""
+      strict="no"
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --strict)
+            strict="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          -*)
+            die "unknown handoff validate option: $1"
+            ;;
+          *)
+            [ -z "$value" ] || die "handoff validate requires exactly one FILE or TASK_ID"
+            value="$1"
+            ;;
+        esac
+        shift
+      done
+      [ -n "$value" ] || die "handoff validate requires FILE or TASK_ID"
+      target="$(abs_path "$target")"
+      handoff_file="$(handoff_find_file "$target" "$value")" || die "handoff not found: $value"
+      info "AI Ops handoff validate"
+      info "handoff: ${handoff_file#$target/}"
+      validate_front_matter handoff "$handoff_file" "$strict"
+      info "ok: handoff metadata"
+      ;;
+
+    *)
+      die "unknown handoff action: $action"
       ;;
   esac
 }
@@ -2618,6 +2962,7 @@ main() {
     bootstrap-guide) cmd_bootstrap_guide "$@" ;;
     validate) cmd_validate "$@" ;;
     task) cmd_task "$@" ;;
+    handoff) cmd_handoff "$@" ;;
     knowledge) cmd_knowledge "$@" ;;
     version) cmd_version "$@" ;;
     update) cmd_update "$@" ;;
