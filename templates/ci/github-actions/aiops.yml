@@ -1,0 +1,79 @@
+name: AI Ops
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  aiops:
+    name: AI Ops project checks
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve aiops
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -x "./.ai/bin/aiops" ]; then
+            echo "AIOPS_BIN=./.ai/bin/aiops" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          if command -v aiops >/dev/null 2>&1; then
+            echo "AIOPS_BIN=$(command -v aiops)" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          brew tap cschoi724/tap
+          brew trust cschoi724/tap || true
+          brew install ai-agent-ops
+          echo "AIOPS_BIN=$(command -v aiops)" >> "$GITHUB_ENV"
+
+      - name: Ensure AI Ops seed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ ! -e ".ai" ] && [ ! -L ".ai" ]; then
+            "$AIOPS_BIN" seed --adapter both --mode link
+          fi
+
+      - name: Doctor
+        run: "$AIOPS_BIN" doctor --strict
+
+      - name: Validate operating model
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -d ".ai_project" ]; then
+            "$AIOPS_BIN" validate --strict
+          else
+            echo "skip: .ai_project missing"
+          fi
+
+      - name: Migration dry-run
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -d ".ai_project" ]; then
+            "$AIOPS_BIN" migrate --plan
+          else
+            echo "skip: .ai_project missing"
+          fi
+
+      - name: Knowledge lint
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -d ".ai_knowledge" ]; then
+            "$AIOPS_BIN" knowledge lint
+          else
+            echo "skip: .ai_knowledge missing"
+          fi

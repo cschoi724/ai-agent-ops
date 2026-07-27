@@ -8,6 +8,18 @@
 - Minor: 새 Agent, workflow, 템플릿, 운영 규칙 추가 또는 기본 흐름 변경
 - Patch: 문구 정리, 충돌 제거, 설명 보강, 누락 수정
 
+## Unreleased
+
+### Added
+
+- 프로젝트 저장소용 GitHub Actions workflow를 생성하는 `aiops ci init` 명령 추가
+- AI Ops 프로젝트 CI 템플릿 `templates/ci/github-actions/aiops.yml` 추가
+
+### Changed
+
+- 저장소 CI를 E2E 테스트, release safety, project CI template 검증 job으로 분리
+- `aiops release-check --strict`가 shell/schema 구문과 seed된 샘플 프로젝트의 doctor/validate/migrate/knowledge gate를 확인하도록 강화
+
 ## 0.6.4 - 2026-07-23
 
 ### Added

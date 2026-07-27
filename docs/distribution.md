@@ -159,5 +159,35 @@ aiops release-check --strict
 - Formula Ruby 문법
 - `LICENSE` 존재 여부
 - git working tree clean 여부
+- shell script 구문
+- schema JSON 구문
+- seed된 샘플 프로젝트의 `doctor --strict`, `validate --strict`, `migrate --plan`, `knowledge lint`
 
 `--strict`는 경고를 실패로 처리한다. 초기 public Homebrew 배포 전에는 반드시 strict 모드를 통과해야 한다.
+
+## 9. Project CI Template
+
+AI Ops가 적용된 프로젝트에는 GitHub Actions workflow를 생성할 수 있다.
+
+```bash
+aiops ci init
+```
+
+생성 파일:
+
+```text
+.github/workflows/aiops.yml
+```
+
+기본 검증:
+
+- `aiops doctor --strict`
+- `.ai_project/`가 있으면 `aiops validate --strict`
+- `.ai_project/`가 있으면 `aiops migrate --plan`
+- `.ai_knowledge/`가 있으면 `aiops knowledge lint`
+
+이미 workflow가 있으면 덮어쓰지 않는다. 교체가 필요할 때만 아래처럼 명시한다.
+
+```bash
+aiops ci init --force
+```

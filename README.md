@@ -77,6 +77,7 @@ Bootstrap은 Discovery Phase에서 파일을 수정하지 않는다. Agent가 �
 | `aiops knowledge init --mode minimal` | `.ai_knowledge/` 최소 workspace 생성 |
 | `aiops knowledge pack TOPIC --create` | 작업별 context pack 생성 |
 | `aiops knowledge lint` | Knowledge workspace 점검 |
+| `aiops ci init` | 프로젝트용 GitHub Actions AI Ops 검증 workflow 생성 |
 | `aiops update --check` | core 업데이트 가능 여부 확인 |
 | `aiops release-check --strict` | 배포 전 필수 문서와 Formula 상태 점검 |
 

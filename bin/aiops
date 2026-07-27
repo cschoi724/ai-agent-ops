@@ -26,6 +26,7 @@ Usage:
   aiops knowledge pack TOPIC [--target DIR] [--create] [--task TASK_ID] [--source PATH] [--purpose TEXT]
   aiops knowledge lint [--target DIR]
   aiops knowledge status [--target DIR]
+  aiops ci init [--target DIR] [--provider github] [--force]
   aiops version [--core DIR]
   aiops update [--core DIR] [--check]
   aiops release-check [--core DIR] [--strict] [--allow-pending-release]
@@ -53,6 +54,7 @@ Examples:
   aiops knowledge init --mode minimal
   aiops knowledge pack ios_login --create --task T-YYYYMMDD-001
   aiops knowledge lint
+  aiops ci init
   aiops bootstrap-guide
   aiops session-guide
   aiops role prompt execution --task T-YYYYMMDD-001 --adapter codex
@@ -3145,6 +3147,92 @@ EOF
   esac
 }
 
+cmd_ci() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "ci requires an action: init"
+  shift
+
+  case "$action" in
+    init)
+      target="$(pwd)"
+      provider="github"
+      force="no"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --provider)
+            shift
+            [ "$#" -gt 0 ] || die "--provider requires a value"
+            provider="$1"
+            ;;
+          --force)
+            force="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown ci init option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      [ "$provider" = "github" ] || die "unsupported ci provider: $provider"
+
+      target="$(abs_path "$target")"
+      [ -d "$target" ] || die "target directory not found: $target"
+
+      if [ -d "$target/.ai" ] || [ -L "$target/.ai" ]; then
+        core="$target/.ai"
+      else
+        core="$(default_core_dir)"
+      fi
+
+      template="$core/templates/ci/github-actions/aiops.yml"
+      [ -f "$template" ] || die "CI template not found: $template"
+
+      workflow_dir="$target/.github/workflows"
+      workflow_file="$workflow_dir/aiops.yml"
+      mkdir -p "$workflow_dir"
+
+      if [ -e "$workflow_file" ] && [ "$force" != "yes" ]; then
+        info "AI Ops CI init"
+        info "target: $target"
+        info "provider: github"
+        info "skip: .github/workflows/aiops.yml already exists"
+        info "Use --force to replace it."
+        return 0
+      fi
+
+      cp "$template" "$workflow_file"
+
+      info "AI Ops CI init"
+      info "target: $target"
+      info "provider: github"
+      info "created: .github/workflows/aiops.yml"
+      info ""
+      info "CI checks:"
+      info "  - aiops doctor --strict"
+      info "  - aiops validate --strict when .ai_project exists"
+      info "  - aiops migrate --plan when .ai_project exists"
+      info "  - aiops knowledge lint when .ai_knowledge exists"
+      ;;
+    -h|--help)
+      usage
+      ;;
+    *)
+      die "unknown ci action: $action"
+      ;;
+  esac
+}
+
 cmd_version() {
   core="$(default_core_dir)"
 
@@ -3318,8 +3406,10 @@ cmd_release_check() {
     "$core/README.md" \
     "$core/QUICKSTART.md" \
     "$core/CHANGELOG.md" \
+    "$core/.github/workflows/ci.yml" \
     "$core/docs/installation.md" \
     "$core/docs/distribution.md" \
+    "$core/scripts/test.sh" \
     "$core/bin/aiops" \
     "$core/schemas/README.md" \
     "$core/schemas/task.schema.json" \
@@ -3338,11 +3428,64 @@ cmd_release_check() {
     "$core/policies/versioning_policy.md" \
     "$core/runtime/workflow.md" \
     "$core/runtime/task_queue.md" \
+    "$core/templates/ci/github-actions/aiops.yml" \
     "$core/templates/tool_adapters/codex/AGENTS.md" \
     "$core/templates/tool_adapters/claude/CLAUDE.md"
   do
     check_required_file "$required" "${required#$core/}" || failed=1
   done
+
+  shell_syntax_failed=0
+  for shell_file in "$core/bin/aiops" "$core/scripts/test.sh" "$core"/tests/e2e_*.sh; do
+    [ -f "$shell_file" ] || continue
+    if sh -n "$shell_file"; then
+      :
+    else
+      shell_syntax_failed=1
+    fi
+  done
+  if [ "$shell_syntax_failed" -eq 0 ]; then
+    info "ok: shell syntax"
+  else
+    info "warn: shell syntax failed"
+    warnings=$((warnings + 1))
+  fi
+
+  if command -v ruby >/dev/null 2>&1; then
+    if ruby -rjson -e 'ARGV.each { |path| JSON.parse(File.read(path)) }' "$core"/schemas/*.schema.json >/dev/null 2>&1; then
+      info "ok: schema JSON syntax"
+    else
+      info "warn: schema JSON syntax failed"
+      warnings=$((warnings + 1))
+    fi
+  else
+    info "note: ruby not available; schema JSON syntax not checked"
+  fi
+
+  release_tmp="${TMPDIR:-/tmp}/aiops-release-check-project.$$"
+  rm -rf "$release_tmp"
+  if (
+    set -eu
+    mkdir -p "$release_tmp"
+    "$core/bin/aiops" seed --target "$release_tmp" --adapter both --mode link --core "$core" >/dev/null
+    cp -R "$core/templates/ai_project/fast_track" "$release_tmp/.ai_project"
+    mkdir -p \
+      "$release_tmp/.ai_project/tasks/active" \
+      "$release_tmp/.ai_project/tasks/backlog" \
+      "$release_tmp/.ai_project/tasks/archive" \
+      "$release_tmp/.ai_project/handoffs"
+    "$core/bin/aiops" knowledge init --target "$release_tmp" --mode minimal >/dev/null
+    "$core/bin/aiops" doctor --target "$release_tmp" --strict >/dev/null
+    "$core/bin/aiops" validate --target "$release_tmp" --strict >/dev/null
+    "$core/bin/aiops" migrate --target "$release_tmp" --plan >/dev/null
+    "$core/bin/aiops" knowledge lint --target "$release_tmp" >/dev/null
+  ); then
+    info "ok: seeded project release gate"
+  else
+    info "warn: seeded project release gate failed"
+    warnings=$((warnings + 1))
+  fi
+  rm -rf "$release_tmp"
 
   if [ -f "$core/CHANGELOG.md" ]; then
     if grep -q "^## $version " "$core/CHANGELOG.md"; then
@@ -3543,6 +3686,7 @@ main() {
     task) cmd_task "$@" ;;
     handoff) cmd_handoff "$@" ;;
     knowledge) cmd_knowledge "$@" ;;
+    ci) cmd_ci "$@" ;;
     version) cmd_version "$@" ;;
     update) cmd_update "$@" ;;
     release-check) cmd_release_check "$@" ;;
