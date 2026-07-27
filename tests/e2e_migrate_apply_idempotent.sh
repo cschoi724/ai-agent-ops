@@ -12,7 +12,8 @@ cp -R "$repo_root/templates/ai_project/fast_track" "$tmpdir/.ai_project"
 mkdir -p \
   "$tmpdir/.ai_project/tasks/active" \
   "$tmpdir/.ai_project/tasks/backlog" \
-  "$tmpdir/.ai_project/tasks/archive"
+  "$tmpdir/.ai_project/tasks/archive" \
+  "$tmpdir/.ai_project/handoffs"
 cp "$repo_root/templates/ai_project/guided_full/ops_migration_plan.md" "$tmpdir/.ai_project/ops_migration_plan.md"
 "$repo_root/bin/aiops" knowledge init --target "$tmpdir" --mode minimal >/tmp/aiops-e2e-migrate-idempotent-knowledge.out
 

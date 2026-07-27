@@ -29,12 +29,27 @@ for dir in active backlog archive; do
   }
 done
 
+[ -d "$tmpdir/.ai_project/handoffs" ] || {
+  printf '%s\n' "migrate apply did not create handoffs directory" >&2
+  exit 1
+}
+
 for file in ops_migration_plan.md ops_decisions.md ops_issues.md; do
   [ -f "$tmpdir/.ai_project/$file" ] || {
     printf 'migrate apply did not create %s\n' "$file" >&2
     exit 1
   }
 done
+
+[ -d "$tmpdir/.ai_knowledge/context_packs" ] || {
+  printf '%s\n' "migrate apply did not create knowledge context_packs" >&2
+  exit 1
+}
+
+[ -f "$tmpdir/.ai_knowledge/context_packs/_template.md" ] || {
+  printf '%s\n' "migrate apply did not create context pack template" >&2
+  exit 1
+}
 
 "$repo_root/bin/aiops" knowledge lint --target "$tmpdir" >/tmp/aiops-e2e-migrate-apply-knowledge.out
 "$repo_root/bin/aiops" doctor --target "$tmpdir" --strict >/tmp/aiops-e2e-migrate-apply-doctor.out

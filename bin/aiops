@@ -920,6 +920,63 @@ project_needs_core_version_update() {
   esac
 }
 
+file_has_schema_value() {
+  file="$1"
+  expected="$2"
+
+  [ -f "$file" ] || return 1
+  awk -v expected="$expected" '
+    NR == 1 && $0 == "---" { in_front_matter=1; next }
+    in_front_matter && $0 == "---" { exit }
+    in_front_matter && $1 == "schema:" {
+      if ($2 == expected) {
+        found=1
+      }
+      exit
+    }
+    END { exit(found ? 0 : 1) }
+  ' "$file"
+}
+
+missing_task_schema_count() {
+  target="$1"
+  task_root="$target/.ai_project/tasks"
+
+  [ -d "$task_root" ] || {
+    printf '%s\n' "0"
+    return 0
+  }
+
+  find "$task_root" -type f -name '*.md' -print | while IFS= read -r task_file; do
+    if ! file_has_schema_value "$task_file" "aiops.task.v1"; then
+      printf '%s\n' "$task_file"
+    fi
+  done | wc -l | tr -d ' '
+}
+
+project_needs_review_decision() {
+  target="$1"
+  project_dir="$target/.ai_project"
+
+  if [ -f "$project_dir/operating_model.md" ] && ! file_has_schema_value "$project_dir/operating_model.md" "aiops.operating_model.v1"; then
+    return 0
+  fi
+  if [ -f "$project_dir/agent_registry.md" ] && ! file_has_schema_value "$project_dir/agent_registry.md" "aiops.agent_registry.v1"; then
+    return 0
+  fi
+  if [ "$(missing_task_schema_count "$target")" -gt 0 ]; then
+    return 0
+  fi
+  if [ -f "$target/AGENTS.md" ] && [ -f "$target/.ai/templates/tool_adapters/codex/AGENTS.md" ] && ! same_file_content "$target/AGENTS.md" "$target/.ai/templates/tool_adapters/codex/AGENTS.md"; then
+    return 0
+  fi
+  if [ -f "$target/CLAUDE.md" ] && [ -f "$target/.ai/templates/tool_adapters/claude/CLAUDE.md" ] && ! same_file_content "$target/CLAUDE.md" "$target/.ai/templates/tool_adapters/claude/CLAUDE.md"; then
+    return 0
+  fi
+
+  return 1
+}
+
 update_operating_model_core_version() {
   operating_model="$1"
   current_version="$2"
@@ -988,6 +1045,10 @@ print_migration_lists() {
       safe_count=$((safe_count + 1))
     fi
   done
+  if [ ! -d "$target/.ai_project/handoffs" ]; then
+    info "  - .ai_project/handoffs"
+    safe_count=$((safe_count + 1))
+  fi
   for file in "$target/.ai_project/ops_migration_plan.md" "$target/.ai_project/ops_decisions.md" "$target/.ai_project/ops_issues.md"; do
     if [ ! -f "$file" ]; then
       info "  - ${file#$target/}"
@@ -997,28 +1058,49 @@ print_migration_lists() {
   if [ ! -d "$target/.ai_knowledge" ]; then
     info "  - .ai_knowledge minimal workspace"
     safe_count=$((safe_count + 1))
+  elif [ ! -d "$target/.ai_knowledge/context_packs" ]; then
+    info "  - .ai_knowledge/context_packs"
+    safe_count=$((safe_count + 1))
+  elif [ ! -f "$target/.ai_knowledge/context_packs/_template.md" ]; then
+    info "  - .ai_knowledge/context_packs/_template.md"
+    safe_count=$((safe_count + 1))
   fi
   if [ "$safe_count" -eq 0 ]; then
     info "  - none"
   fi
 
   info "needs_user_decision:"
+  decision_count=0
+  if [ -f "$operating_model" ] && ! file_has_schema_value "$operating_model" "aiops.operating_model.v1"; then
+    info "  - operating_model.md schema front matter adoption"
+    decision_count=$((decision_count + 1))
+  fi
+  if [ -f "$target/.ai_project/agent_registry.md" ] && ! file_has_schema_value "$target/.ai_project/agent_registry.md" "aiops.agent_registry.v1"; then
+    info "  - agent_registry.md schema front matter adoption"
+    decision_count=$((decision_count + 1))
+  fi
+  task_schema_missing="$(missing_task_schema_count "$target")"
+  if [ "$task_schema_missing" -gt 0 ]; then
+    info "  - Task schema/front matter adoption ($task_schema_missing files)"
+    decision_count=$((decision_count + 1))
+  fi
   if [ -f "$target/AGENTS.md" ] && [ -f "$target/.ai/templates/tool_adapters/codex/AGENTS.md" ] && ! same_file_content "$target/AGENTS.md" "$target/.ai/templates/tool_adapters/codex/AGENTS.md"; then
     info "  - AGENTS.md adapter update"
-  else
-    info "  - none_detected_for_codex_adapter"
+    decision_count=$((decision_count + 1))
   fi
   if [ -f "$target/CLAUDE.md" ] && [ -f "$target/.ai/templates/tool_adapters/claude/CLAUDE.md" ] && ! same_file_content "$target/CLAUDE.md" "$target/.ai/templates/tool_adapters/claude/CLAUDE.md"; then
     info "  - CLAUDE.md adapter update"
-  else
-    info "  - none_detected_for_claude_adapter"
+    decision_count=$((decision_count + 1))
   fi
-  info "  - source_of_truth changes require user decision"
-  info "  - Task metadata auto-fill requires user decision"
+  if [ "$decision_count" -eq 0 ]; then
+    info "  - none"
+  fi
 
   info "manual_only:"
   info "  - product code"
   info "  - product Docs"
+  info "  - source_of_truth changes"
+  info "  - Task metadata auto-fill"
   info "  - Task status"
   info "  - Role / Agent mapping"
   info "  - branch / PR strategy"
@@ -1032,6 +1114,7 @@ print_migration_lists() {
     info "  - .ai_project/ops_decisions.md"
     info "  - .ai_project/ops_issues.md"
     info "  - .ai_project/tasks/"
+    info "  - .ai_project/handoffs/"
     info "  - .ai_knowledge/"
   fi
 }
@@ -1082,6 +1165,13 @@ cmd_migrate_verify() {
     fi
   done
 
+  if [ -d "$target/.ai_project/handoffs" ]; then
+    info "ok: .ai_project/handoffs"
+  else
+    info "missing: .ai_project/handoffs"
+    failed=1
+  fi
+
   for file in "$target/.ai_project/ops_migration_plan.md" "$target/.ai_project/ops_decisions.md" "$target/.ai_project/ops_issues.md"; do
     if [ -f "$file" ]; then
       info "ok: ${file#$target/}"
@@ -1098,7 +1188,31 @@ cmd_migrate_verify() {
     info "needs_user_decision: CLAUDE.md adapter update"
   fi
 
+  if [ -f "$operating_model" ] && ! file_has_schema_value "$operating_model" "aiops.operating_model.v1"; then
+    info "needs_user_decision: operating_model.md schema front matter adoption"
+  fi
+  if [ -f "$target/.ai_project/agent_registry.md" ] && ! file_has_schema_value "$target/.ai_project/agent_registry.md" "aiops.agent_registry.v1"; then
+    info "needs_user_decision: agent_registry.md schema front matter adoption"
+  fi
+  task_schema_missing="$(missing_task_schema_count "$target")"
+  if [ "$task_schema_missing" -gt 0 ]; then
+    info "needs_user_decision: Task schema/front matter adoption ($task_schema_missing files)"
+  fi
+
   cmd_knowledge lint --target "$target" || failed=1
+
+  if [ -d "$target/.ai_knowledge/context_packs" ]; then
+    info "ok: .ai_knowledge/context_packs"
+  else
+    info "missing: .ai_knowledge/context_packs"
+    failed=1
+  fi
+  if [ -f "$target/.ai_knowledge/context_packs/_template.md" ]; then
+    info "ok: .ai_knowledge/context_packs/_template.md"
+  else
+    info "missing: .ai_knowledge/context_packs/_template.md"
+    failed=1
+  fi
 
   [ "$failed" -eq 0 ] || return 1
   info "verification: passed"
@@ -1160,7 +1274,15 @@ cmd_migrate() {
     for file in "$target/.ai_project/ops_migration_plan.md" "$target/.ai_project/ops_decisions.md" "$target/.ai_project/ops_issues.md"; do
       [ -f "$file" ] || status="migration_needed"
     done
+    [ -d "$target/.ai_project/handoffs" ] || status="migration_needed"
     [ -d "$target/.ai_knowledge" ] || status="migration_needed"
+    if [ -d "$target/.ai_knowledge" ]; then
+      [ -d "$target/.ai_knowledge/context_packs" ] || status="migration_needed"
+      [ -f "$target/.ai_knowledge/context_packs/_template.md" ] || status="migration_needed"
+    fi
+    if [ "$status" = "up_to_date" ] && project_needs_review_decision "$target"; then
+      status="review_needed"
+    fi
   fi
 
   info "AI Ops migrate"
@@ -1203,9 +1325,14 @@ cmd_migrate() {
   [ -f "$target/.ai_project/operating_model.md" ] || die ".ai_project/operating_model.md missing"
   [ "$current_version" != "unknown" ] || die ".ai/VERSION missing"
 
-  if [ "$status" = "up_to_date" ]; then
+  if [ "$status" = "up_to_date" ] || [ "$status" = "review_needed" ]; then
     info ""
-    info "No migration changes needed."
+    if [ "$status" = "review_needed" ]; then
+      info "No safe migration changes needed."
+      info "User decision items remain; see migration verify output."
+    else
+      info "No migration changes needed."
+    fi
     info "No files changed."
     info ""
     info "Verifying migration state..."
@@ -1224,6 +1351,8 @@ cmd_migrate() {
 
   mkdir -p "$target/.ai_project/tasks/active" "$target/.ai_project/tasks/backlog" "$target/.ai_project/tasks/archive"
   info "ensured: .ai_project/tasks/active backlog archive"
+  mkdir -p "$target/.ai_project/handoffs"
+  info "ensured: .ai_project/handoffs"
 
   if [ ! -f "$target/.ai_project/ops_migration_plan.md" ]; then
     {
@@ -1237,6 +1366,8 @@ cmd_migrate() {
       printf '| core_version | %s |\n' "$current_version"
       printf '| core_source | %s |\n' "$core_source"
       printf '| apply_scope | safe_auto_fix |\n'
+      printf '| safe_fixes | core_version, tasks directories, handoffs directory, ops records, knowledge context packs |\n'
+      printf '| review_scope | schema front matter, adapter drift, source_of_truth, Task metadata |\n'
     } > "$target/.ai_project/ops_migration_plan.md"
     info "created: .ai_project/ops_migration_plan.md"
   else
@@ -1247,6 +1378,8 @@ cmd_migrate() {
       printf '| core_version | %s |\n' "$current_version"
       printf '| core_source | %s |\n' "$core_source"
       printf '| apply_scope | safe_auto_fix |\n'
+      printf '| safe_fixes | core_version, tasks directories, handoffs directory, ops records, knowledge context packs |\n'
+      printf '| review_scope | schema front matter, adapter drift, source_of_truth, Task metadata |\n'
     } >> "$target/.ai_project/ops_migration_plan.md"
     info "updated: .ai_project/ops_migration_plan.md"
   fi
@@ -1265,7 +1398,8 @@ cmd_migrate() {
     printf '|---|---|\n'
     printf '| core_version | %s |\n' "$current_version"
     printf '| apply_scope | safe_auto_fix only |\n'
-    printf '| manual_only | product code, product Docs, Task status, Role mapping, branch/PR, commit/push/deploy |\n'
+    printf '| manual_only | product code, product Docs, source_of_truth, Task metadata/status, Role mapping, branch/PR, commit/push/deploy |\n'
+    printf '| review_needed | schema front matter and adapter drift are reported but not rewritten automatically |\n'
   } >> "$target/.ai_project/ops_decisions.md"
   info "updated: .ai_project/ops_decisions.md"
 
@@ -1287,6 +1421,14 @@ cmd_migrate() {
     info "created: .ai_knowledge minimal workspace"
   else
     info "ok: .ai_knowledge exists"
+    if [ ! -d "$target/.ai_knowledge/context_packs" ]; then
+      mkdir -p "$target/.ai_knowledge/context_packs"
+      info "created: .ai_knowledge/context_packs"
+    fi
+    if [ ! -f "$target/.ai_knowledge/context_packs/_template.md" ]; then
+      render_template_file "$target/.ai/templates/ai_knowledge/context_packs/_template.md" "$target/.ai_knowledge/context_packs/_template.md" "$date_value" "$project_name"
+      info "created: .ai_knowledge/context_packs/_template.md"
+    fi
   fi
 
   info ""
