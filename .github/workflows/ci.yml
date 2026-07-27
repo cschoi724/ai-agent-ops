@@ -45,6 +45,7 @@ jobs:
 
           bin/aiops seed --target "$tmpdir" --adapter both --mode link --core "$PWD"
           cp -R templates/ai_project/fast_track "$tmpdir/.ai_project"
+          perl -0pi -e 's/\{\{START_CONTEXT\}\}/ops_setup_only/g; s/\{\{READINESS_LEVEL\}\}/ops_only/g' "$tmpdir/.ai_project/operating_model.md"
           mkdir -p \
             "$tmpdir/.ai_project/tasks/active" \
             "$tmpdir/.ai_project/tasks/backlog" \
