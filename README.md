@@ -2,19 +2,21 @@
 
 AI Agent Ops is an **AI Agent Operating Harness**.
 
-Codex, Claude 같은 AI Agent가 프로젝트 안에서 역할, 절차, 검증, 인계, 상태 관리를 지키며 협업하도록 만드는 운영 하네스다.
+Codex, Claude 같은 AI Agent가 프로젝트 안에서 역할, 상태, 승인, 검증, 인계를 남기며 팀처럼 일하도록 만드는 운영 하네스다.
 
-AI Agent Ops는 Codex 전용 플러그인이나 Claude 전용 프롬프트 팩이 아니다. 여러 Agent 환경에 프로젝트 지침을 심고, 프로젝트별 운영 상태와 지식 계층을 일관된 방식으로 관리한다.
+AI Agent Ops는 특정 Agent 전용 프롬프트 팩이 아니다. 프로젝트에 공통 운영 코어를 연결하고, 실제 프로젝트별 상태는 `.ai_project/`에 남긴다.
 
 License: MIT
 
-## What It Provides
+## Why
 
-- `.ai/`: 공통 운영 헌법, Role, Workflow, Policy, Template
-- `.ai_project/`: 프로젝트별 운영 상태, Task, Board, Report, QA
-- `.ai_knowledge/`: 선택 가능한 LLM Wiki 기반 Agent 온보딩 지식 계층
-- `aiops`: seed, doctor, migrate, validate, knowledge, update, release-check CLI
-- Codex / Claude adapter templates
+AI Agent에게 바로 구현을 맡기면 범위, 책임, 검증, 인계가 흐려지기 쉽다.
+
+AI Agent Ops는 아래 흐름을 강제 가능한 형태로 가까이 가져간다.
+
+```text
+seed -> bootstrap -> task -> execution -> verification -> completion
+```
 
 ## Install
 
@@ -25,123 +27,84 @@ brew install ai-agent-ops
 aiops version
 ```
 
-자세한 설치 방식은 [docs/installation.md](docs/installation.md)를 확인한다.
+다른 설치 방식은 [docs/installation.md](docs/installation.md)를 확인한다.
 
-## 5-Minute Start
+## Quick Start
 
 AI Ops를 적용할 프로젝트로 이동한다.
 
 ```bash
 cd /path/to/YourProject
-```
-
-Codex와 Claude를 모두 준비하려면:
-
-```bash
 aiops seed --adapter both
 aiops doctor --strict
 aiops bootstrap-guide
 ```
 
-그 다음 새 Codex 또는 Claude 세션에서 말한다.
+그 다음 Codex 또는 Claude 새 세션에서 말한다.
 
 ```text
 AI Ops bootstrap 시작해줘.
 ```
 
-Bootstrap은 Discovery Phase에서 파일을 수정하지 않는다. Agent가 질문을 하나씩 하고 Decision Stack을 쌓은 뒤, 최종 Operating Model Draft와 Apply 범위를 제안한다. 승인 후에만 `.ai_project/`와 선택 시 `.ai_knowledge/`를 생성한다.
+처음 사용한다면 전체 절차는 [QUICKSTART.md](QUICKSTART.md)를 따라가면 된다.
 
-초보자용 전체 절차는 [QUICKSTART.md](QUICKSTART.md)를 확인한다.
-
-## Main Commands
-
-| Command | Purpose |
-|---|---|
-| `aiops seed --adapter codex` | `.ai`와 `AGENTS.md` 구성 |
-| `aiops seed --adapter claude` | `.ai`와 `CLAUDE.md` 구성 |
-| `aiops seed --adapter both` | Codex / Claude 둘 다 구성 |
-| `aiops doctor --strict` | AI Ops 구성 strict 점검 |
-| `aiops migrate --plan` | 기존 프로젝트 운영모델 갱신 계획 확인 |
-| `aiops migrate --apply` | 승인된 안전 범위만 운영모델 마이그레이션 적용 |
-| `aiops bootstrap-guide` | 현재 상태에 맞는 다음 Agent 입력 안내 |
-| `aiops session-guide` | Role Session 구성과 시작 명령 안내 |
-| `aiops role prompt ROLE --task TASK_ID` | 새 Role Session 시작 문구 생성 |
-| `aiops validate --strict` | 현재 프로젝트 운영 schema 검증 |
-| `aiops validate task FILE --strict` | Task front matter schema 검증 |
-| `aiops task create --title TITLE` | 새 Task 생성 |
-| `aiops task status TASK_ID` | Task 상태 확인 |
-| `aiops task transition TASK_ID --to STATUS --role ROLE` | 허용된 상태 전이 적용 |
-| `aiops task lock/unlock TASK_ID --by AGENT` | Task 작업 lock 관리 |
-| `aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT` | Role 간 인계 문서 생성 |
-| `aiops handoff validate FILE --strict` | 인계 문서 schema 검증 |
-| `aiops knowledge init --mode minimal` | `.ai_knowledge/` 최소 workspace 생성 |
-| `aiops knowledge pack TOPIC --create` | 작업별 context pack 생성 |
-| `aiops knowledge lint` | Knowledge workspace 점검 |
-| `aiops ci init` | 프로젝트용 GitHub Actions AI Ops 검증 workflow 생성 |
-| `aiops export runtime` | 외부 runtime adapter용 Task/Role/Handoff JSON snapshot 생성 |
-| `aiops update --check` | core 업데이트 가능 여부 확인 |
-| `aiops release-check --strict` | 배포 전 필수 문서와 Formula 상태 점검 |
-
-## Project Layout
-
-적용 대상 프로젝트의 기본 구조:
+## What Gets Added
 
 ```text
 YourProject/
-  .ai/            # AI Agent Ops core 또는 symlink
+  .ai/            # AI Ops core symlink 또는 copy
   AGENTS.md       # Codex adapter
   CLAUDE.md       # Claude adapter
   .ai_project/    # 프로젝트별 운영 상태
-  .ai_knowledge/  # 선택: Agent 온보딩용 LLM Wiki
+  .ai_knowledge/  # 선택: Agent 온보딩용 지식 계층
 ```
 
-역할:
+`.ai/`는 공통 운영 코어다. 프로젝트별 결정, Task, 진행 상태는 `.ai_project/`에 기록한다.
 
-| Path | Role |
+## Core Commands
+
+| Command | Purpose |
 |---|---|
-| `.ai/` | 운영 헌법과 공통 규칙 |
-| `.ai_project/` | 실제 프로젝트 운영 상태와 Task |
-| `.ai_knowledge/` | source of truth가 아닌 지식 요약/탐색 지도 |
-| 프로젝트 `Docs/`와 코드 | 제품/기술 source of truth |
+| `aiops seed --adapter both` | 프로젝트에 AI Ops core와 Agent adapter 연결 |
+| `aiops doctor --strict` | 설치와 운영 구성을 엄격 점검 |
+| `aiops bootstrap-guide` | 현재 상태에 맞는 다음 Agent 입력 안내 |
+| `aiops migrate --plan` | 기존 운영 프로젝트 업데이트 영향 확인 |
+| `aiops migrate --apply` | 승인된 안전 범위만 마이그레이션 |
+| `aiops validate --strict` | `.ai_project/` schema 검증 |
+| `aiops task create --title TITLE` | Task 생성 |
+| `aiops task transition TASK_ID --to STATUS --role ROLE` | 상태 전이 |
+| `aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT` | Role 인계 |
+| `aiops knowledge init --mode minimal` | `.ai_knowledge/` 생성 |
+| `aiops ci init` | 프로젝트용 GitHub Actions 생성 |
+| `aiops export runtime` | 외부 runtime adapter용 JSON export |
 
-## Core Safety Rules
+전체 명령은 `aiops help`를 확인한다.
 
-- `.ai/` core는 적용 대상 프로젝트에서 임의 수정하지 않는다.
-- `.ai_project/`는 프로젝트별 상태만 기록한다.
-- `.ai_knowledge/`는 source of truth가 아니다.
+## Safety Rules
+
+- `.ai/`는 일반 사용자가 직접 수정하지 않는다.
+- 프로젝트별 운영 상태는 `.ai_project/`에 남긴다.
 - 승인 없는 코드 수정, commit, push, PR, merge, 배포를 하지 않는다.
 - Execution Role은 승인된 Task 밖 구현을 하지 않는다.
 - Verification Role은 자기 작업을 검증하지 않는다.
-- AI Ops Agent는 제품 Task 실행 라인 밖에서 운영모델을 점검한다.
+- AI Ops Agent는 제품 구현 대신 운영모델을 점검한다.
 
-## Documentation
+## More Docs
 
-처음 읽을 문서:
-
-1. [QUICKSTART.md](QUICKSTART.md)
-2. [docs/installation.md](docs/installation.md)
-3. [bootstrap/bootstrap_runbook.md](bootstrap/bootstrap_runbook.md)
-4. [core/constitution.md](core/constitution.md)
-
-상세 문서:
-
-- [CHANGELOG.md](CHANGELOG.md): 버전별 패치노트
+- [QUICKSTART.md](QUICKSTART.md): 처음 실행 절차
+- [docs/installation.md](docs/installation.md): 설치 방식
 - [docs/distribution.md](docs/distribution.md): 배포와 Homebrew 기준
-- [bootstrap/bootstrap_reference.md](bootstrap/bootstrap_reference.md): bootstrap 상세 질문과 선택지
-- [bootstrap/migration_runbook.md](bootstrap/migration_runbook.md): 기존 프로젝트 운영모델 갱신 절차
-- [models/role_model.md](models/role_model.md): Role 책임 경계
-- [models/knowledge_model.md](models/knowledge_model.md): `.ai_knowledge/` 모델
-- [runtime/workflow.md](runtime/workflow.md): workflow 상태 모델
-- [runtime/task_queue.md](runtime/task_queue.md): Task Queue 기준
-- [adapters/README.md](adapters/README.md): 외부 runtime adapter export 계약
-- [policies/versioning_policy.md](policies/versioning_policy.md): core version 기록과 update risk
-- [policies/migration_policy.md](policies/migration_policy.md): migration 적용 범위와 금지 범위
-- [policies/session_orchestration_policy.md](policies/session_orchestration_policy.md): Agent 세션 분리와 보조 위임 기준
+- [bootstrap/bootstrap_runbook.md](bootstrap/bootstrap_runbook.md): bootstrap 실행 흐름
+- [bootstrap/migration_runbook.md](bootstrap/migration_runbook.md): 기존 프로젝트 마이그레이션
+- [core/constitution.md](core/constitution.md): 운영 헌법
+- [models/role_model.md](models/role_model.md): Role 책임
+- [runtime/workflow.md](runtime/workflow.md): 상태 모델
+- [runtime/task_queue.md](runtime/task_queue.md): Task 운영 기준
+- [adapters/README.md](adapters/README.md): 외부 runtime adapter 계약
+- [CHANGELOG.md](CHANGELOG.md): 변경 이력
 
 ## Status
 
 Current version: `0.6.4`
 
-Homebrew release: `v0.6.4`
-
-AI Agent Ops는 현재 베타 하네스다. 운영 철학과 문서 모델에 더해 CLI 검증, E2E 테스트, CI, Knowledge workspace가 추가되었지만, Git 권한이나 배포 권한 같은 물리적 통제는 프로젝트 환경에서 별도로 유지해야 한다.
+AI Agent Ops는 베타 하네스다. CLI 검증과 CI는 강화되어 있지만, Git 권한이나 배포 권한 같은 물리적 통제는 각 프로젝트 환경에서 별도로 유지해야 한다.

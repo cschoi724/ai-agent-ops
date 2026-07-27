@@ -22,6 +22,7 @@
 - 저장소 CI를 E2E 테스트, release safety, project CI template 검증 job으로 분리
 - `aiops release-check --strict`가 shell/schema 구문과 seed된 샘플 프로젝트의 doctor/validate/migrate/knowledge gate를 확인하도록 강화
 - Formula 설치 대상에 `adapters/` 포함
+- README와 QUICKSTART를 첫 실행 중심으로 단순화하고 상세 설명은 링크 문서로 분리
 
 ## 0.6.4 - 2026-07-23
 
