@@ -26,7 +26,7 @@
 | 영역 | 최종 기준 | 보조 기준 | 충돌 시 처리 |
 |---|---|---|---|
 | Agent 운영 원칙 | `.ai/` | `.ai_project/` | 운영 원칙은 `.ai/` 우선 |
-| 프로젝트 운영 구성 | `.ai_project/operating_model.md` | `.ai/bootstrap/project_bootstrap_policy.md`, `.ai/core/constitution.md` | 프로젝트별 선택값은 `.ai_project/operating_model.md` 우선 |
+| 프로젝트 운영 구성 | `.ai_project/operating_model.md` | `.ai/bootstrap/bootstrap_reference.md`, `.ai/runtime/bootstrap_options.json`, `.ai/core/constitution.md` | 프로젝트별 선택값은 `.ai_project/operating_model.md` 우선 |
 | Agent 구성 | `.ai_project/agent_registry.md` | `.ai/models/agent_registry.md` | 프로젝트 활성 구성은 `.ai_project/` 우선 |
 | Agent 실행 Task | `.ai_project/tasks/` | `.ai_project/task_board.md`, report/QA 문서 | Task 파일 우선 |
 | Agent 작업 상태 요약 | `.ai_project/task_board.md` | `.ai_project/tasks/` | 충돌 시 Task 파일 기준으로 보드 갱신 |

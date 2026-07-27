@@ -122,7 +122,7 @@
 - 병렬 작업, dependency, rework, blocked 조율 문서 `coordination_policy.md` 추가
 - project board / team board 기준 문서 `board_model.md` 추가
 - Git branch / commit / PR / merge 일반 정책 문서 `branch_pr_policy.md` 추가
-- 프로젝트별 운영체계 구성 선택 정책 문서 `project_bootstrap_policy.md` 추가
+- 프로젝트별 운영체계 구성 선택 정책 문서 추가
 - 프로젝트 bootstrap 실행 절차 문서 `bootstrap_runbook.md` 추가
 - 실제 프로젝트에 `.ai/` 운영체계 템플릿을 설치하는 `install_runbook.md` 추가
 - `.ai/`가 없는 프로젝트 최초 1회용 `cold_start_prompt.md` 추가
@@ -143,7 +143,7 @@
 - `aiops doctor`에 strict 모드, adapter drift, `.ai_project` 필수 문서, Task 검증 상태 점검 추가
 - 문서 읽기 순서에서 `constitution.md`를 최우선 기준으로 추가
 - `org_model.md`를 Division과 조직 책임 중심으로 정리하고 Team 상세 구성은 `team_model.md`로 분리
-- `project_bootstrap_policy.md`에 단계별 질문 형식, 선택값 기록 규칙, bootstrap 완료 기준 추가
+- 프로젝트별 bootstrap 정책에 단계별 질문 형식, 선택값 기록 규칙, bootstrap 완료 기준 추가
 - `bootstrap_runbook.md`에 짧은 bootstrap trigger와 템플릿 저장소/대상 프로젝트 구분 기준 추가
 - `install_runbook.md`와 `bootstrap_runbook.md`를 별도 실행 단계로 분리
 - 시드 구성 단계의 산출물에 루트 `AGENTS.md` 생성을 명시

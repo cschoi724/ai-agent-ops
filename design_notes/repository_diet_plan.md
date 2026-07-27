@@ -23,7 +23,7 @@ Agent는 실행 중 필요한 최소 runbook과 schema만 읽으면 되어야 �
 | 파일 | 대략 줄 수 | 문제 |
 |---|---:|---|
 | `bootstrap/bootstrap_reference.md` | 1500+ | 질문, 선택지, 예시가 한 파일에 집중 |
-| `bootstrap/project_bootstrap_policy.md` | 760+ | `bootstrap_reference.md`와 역할이 겹침 |
+| 삭제된 legacy bootstrap policy | 760+ | `bootstrap_reference.md`와 역할이 겹침 |
 | `policies/branch_pr_policy.md` | 400+ | 일반 정책과 프로젝트 선택지가 섞임 |
 | `runtime/task_queue.md` | 400+ | 상태/큐/Role 라우팅 설명이 많음 |
 | `models/team_model.md` | 440+ | 예시와 정책이 섞임 |
@@ -105,20 +105,20 @@ tests/                    # E2E 검증
 
 ## Phase 2. Bootstrap 문서 압축
 
-목표: `bootstrap_reference.md`와 `project_bootstrap_policy.md` 중복 제거.
+목표: `bootstrap_reference.md`와 legacy bootstrap policy 중복 제거.
 
 작업:
 
 - `bootstrap/bootstrap_runbook.md`는 실행용 짧은 문서로 유지
 - `bootstrap/bootstrap_reference.md`는 상세 reference 하나로 통합
-- `bootstrap/project_bootstrap_policy.md`의 고유 내용만 reference 또는 schema 후보로 이전
+- legacy bootstrap policy의 고유 내용만 reference 또는 schema 후보로 이전
 - adapter와 template의 참조 경로 갱신
 
 검토 기준:
 
 - AI Ops bootstrap 시작 시 Agent가 먼저 읽는 문서는 `bootstrap_runbook.md`
 - 세부 선택지가 필요할 때만 `bootstrap_reference.md`
-- `project_bootstrap_policy.md` 삭제 여부는 참조 경로 전환 후 결정
+- legacy bootstrap policy 삭제 여부는 참조 경로 전환 후 결정
 
 완료 기준:
 
@@ -244,7 +244,7 @@ runtime/bootstrap_options.json
 
 | 파일 | 선행 조건 |
 |---|---|
-| `bootstrap/project_bootstrap_policy.md` | 고유 내용을 `bootstrap_reference.md` 또는 schema로 이전 |
+| legacy bootstrap policy | 고유 내용을 `bootstrap_reference.md` 또는 schema로 이전 |
 | `design_notes/repository_diet_plan.md` | 다이어트 작업 완료 |
 
 ### 유지 후보
@@ -326,7 +326,7 @@ chore: 저장소 임시 파일 정리
 
 목표:
 
-- `bootstrap_reference.md`와 `project_bootstrap_policy.md` 중 어느 내용이 중복이고 어느 내용이 고유한지 표로 분리한다.
+- `bootstrap_reference.md`와 legacy bootstrap policy 중 어느 내용이 중복이고 어느 내용이 고유한지 표로 분리한다.
 
 수정 범위:
 
@@ -338,13 +338,13 @@ design_notes/repository_diet_plan.md
 
 1. 두 파일의 heading 목록을 비교한다.
 2. 중복 항목을 표시한다.
-3. `project_bootstrap_policy.md`에서 반드시 보존할 고유 항목을 표시한다.
+3. legacy bootstrap policy에서 반드시 보존할 고유 항목을 표시한다.
 4. 삭제 전에 옮겨야 할 내용을 결정한다.
 
 검증:
 
 ```bash
-rg -n "project_bootstrap_policy|bootstrap_reference" .
+rg -n "legacy bootstrap policy|bootstrap_reference" .
 ```
 
 커밋 메시지:
@@ -366,25 +366,25 @@ docs: bootstrap 문서 다이어트 감사 기록
 
 ```text
 bootstrap/bootstrap_reference.md
-bootstrap/project_bootstrap_policy.md
+legacy bootstrap policy
 ```
 
 현재 직접 참조:
 
 | 참조 위치 | 현재 참조 | 판단 |
 |---|---|---|
-| `bootstrap/bootstrap_reference.md` | `project_bootstrap_policy.md` | Step 4에서 자기완결 reference로 바꾸기 |
-| `bootstrap/README.md` | `project_bootstrap_policy.md` | Step 4에서 삭제 또는 `bootstrap_reference.md`로 교체 |
-| `bootstrap/install_runbook.md` | `project_bootstrap_policy.md` | 설치 preflight 기준. Step 4에서 `bootstrap_reference.md` 또는 `bootstrap_runbook.md`로 교체 |
-| `templates/ai_project/guided_full/source_of_truth.md` | `project_bootstrap_policy.md` | source reference를 `bootstrap_reference.md`로 교체 |
-| `workflows/ops_migration.md` | `project_bootstrap_policy.md` | 운영 구성 선택 기준을 `bootstrap_reference.md` 또는 structured data로 교체 |
+| `bootstrap/bootstrap_reference.md` | legacy bootstrap policy | Step 4에서 자기완결 reference로 바꾸기 |
+| `bootstrap/README.md` | legacy bootstrap policy | Step 4에서 삭제 또는 `bootstrap_reference.md`로 교체 |
+| `bootstrap/install_runbook.md` | legacy bootstrap policy | 설치 preflight 기준. Step 4에서 `bootstrap_reference.md` 또는 `bootstrap_runbook.md`로 교체 |
+| `templates/ai_project/guided_full/source_of_truth.md` | legacy bootstrap policy | source reference를 `bootstrap_reference.md`로 교체 |
+| `workflows/ops_migration.md` | legacy bootstrap policy | 운영 구성 선택 기준을 `bootstrap_reference.md` 또는 structured data로 교체 |
 | `templates/tool_adapters/codex/AGENTS.md` | `bootstrap_reference.md` | 유지 |
 | `templates/tool_adapters/claude/CLAUDE.md` | `bootstrap_reference.md` | 유지 |
 | `bootstrap/bootstrap_runbook.md` | `bootstrap_reference.md` | 유지 |
 
 중복/고유 분류:
 
-| 영역 | `project_bootstrap_policy.md` | `bootstrap_reference.md` | 판정 | 다음 처리 |
+| 영역 | legacy bootstrap policy | `bootstrap_reference.md` | 판정 | 다음 처리 |
 |---|---|---|---|---|
 | 목적/원칙 | 1~2장 | 1~3장 | 중복 | `bootstrap_reference.md`의 실행 원칙으로 통합 |
 | 구성 산출물 | 3장 | 2장, 22장 | 일부 고유 | 생성 대상과 template source만 `bootstrap_reference.md` 22장에 병합 |
@@ -412,11 +412,11 @@ bootstrap/project_bootstrap_policy.md
 
 | 내용 | 현재 위치 | 이전 대상 |
 |---|---|---|
-| `.ai_project/operating_model.md`가 프로젝트별 선택값 인덱스라는 설명 | `project_bootstrap_policy.md` 3장, 19장 | `bootstrap_reference.md` 2장 또는 20장 |
-| Fast Track / Guided Full 생성 산출물 구분 | `project_bootstrap_policy.md` 3장, 17장 | `bootstrap_reference.md` 22장 |
-| Team별 `.ai_project/teams/<team_id>/` 확장 후보 | `project_bootstrap_policy.md` 3장 | `bootstrap_reference.md` 22장 |
-| 선택값 기록 위치 표 | `project_bootstrap_policy.md` 19장 | `bootstrap_reference.md` 신규 `Decision Recording Rules` |
-| Bootstrap 완료 기준 중 active Team, branch/PR 또는 Git 비사용 정책 기록 기준 | `project_bootstrap_policy.md` 20장 | `bootstrap_reference.md` 28장 |
+| `.ai_project/operating_model.md`가 프로젝트별 선택값 인덱스라는 설명 | legacy policy 3장, 19장 | `bootstrap_reference.md` 2장 또는 20장 |
+| Fast Track / Guided Full 생성 산출물 구분 | legacy policy 3장, 17장 | `bootstrap_reference.md` 22장 |
+| Team별 `.ai_project/teams/<team_id>/` 확장 후보 | legacy policy 3장 | `bootstrap_reference.md` 22장 |
+| 선택값 기록 위치 표 | legacy policy 19장 | `bootstrap_reference.md` 신규 `Decision Recording Rules` |
+| Bootstrap 완료 기준 중 active Team, branch/PR 또는 Git 비사용 정책 기록 기준 | legacy policy 20장 | `bootstrap_reference.md` 28장 |
 
 삭제 전 필요한 참조 교체:
 
@@ -431,8 +431,8 @@ bootstrap/bootstrap_reference.md
 Step 4 예상 결론:
 
 - `bootstrap/bootstrap_runbook.md`: 유지. 실행용 짧은 문서.
-- `bootstrap/bootstrap_reference.md`: 유지. 상세 reference이자 `project_bootstrap_policy.md` 고유 내용 흡수 대상.
-- `bootstrap/project_bootstrap_policy.md`: Step 4에서 삭제 후보.
+- `bootstrap/bootstrap_reference.md`: 유지. 상세 reference이자 legacy policy 고유 내용 흡수 대상.
+- legacy bootstrap policy: Step 4에서 삭제 후보.
 - `runtime/bootstrap_options.json`: Step 3에서 선택 후보를 구조화한 뒤 reference가 이 파일을 참조하도록 전환.
 
 ## Step 3. Bootstrap Options Structured Data
@@ -488,7 +488,7 @@ feat: bootstrap options structured data 추가
 ```text
 bootstrap/bootstrap_runbook.md
 bootstrap/bootstrap_reference.md
-bootstrap/project_bootstrap_policy.md
+legacy bootstrap policy
 templates/tool_adapters/codex/AGENTS.md
 templates/tool_adapters/claude/CLAUDE.md
 templates/ai_project/guided_full/source_of_truth.md
@@ -499,15 +499,15 @@ bin/aiops
 작업:
 
 1. `bootstrap_runbook.md`는 실행 순서 중심으로 유지한다.
-2. `project_bootstrap_policy.md`의 고유 내용을 `bootstrap_reference.md` 또는 `runtime/bootstrap_options.json`으로 옮긴다.
+2. legacy bootstrap policy의 고유 내용을 `bootstrap_reference.md` 또는 `runtime/bootstrap_options.json`으로 옮긴다.
 3. 모든 참조 경로를 `bootstrap_reference.md` 기준으로 갱신한다.
-4. `project_bootstrap_policy.md`를 삭제한다.
+4. legacy bootstrap policy를 삭제한다.
 5. `release-check` required file 목록에서 삭제된 파일이 있으면 갱신한다.
 
 검증:
 
 ```bash
-rg -n "project_bootstrap_policy" .
+rg -n "<removed bootstrap policy filename>" .
 sh scripts/test.sh
 bin/aiops release-check --strict --allow-pending-release
 ```
@@ -520,7 +520,7 @@ docs: bootstrap reference 통합
 
 완료 판단:
 
-- `project_bootstrap_policy` 참조가 남지 않는다.
+- 삭제된 bootstrap policy 파일명의 직접 참조가 남지 않는다.
 - bootstrap 관련 문서 총량이 줄어든다.
 - adapter 지시가 여전히 명확하다.
 
@@ -684,7 +684,7 @@ README.md
 
 ```bash
 find . -name .DS_Store
-rg -n "repository_diet_plan|control_plane_improvement_plan|project_bootstrap_policy" .
+rg -n "repository_diet_plan|control_plane_improvement_plan|<removed bootstrap policy filename>" .
 sh scripts/test.sh
 bin/aiops release-check --strict --allow-pending-release
 ```

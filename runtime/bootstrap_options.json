@@ -3,7 +3,6 @@
   "version": "1",
   "generated_from": [
     "bootstrap/bootstrap_reference.md",
-    "bootstrap/project_bootstrap_policy.md",
     "schemas/operating_model.schema.json"
   ],
   "categories": {

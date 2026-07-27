@@ -122,8 +122,9 @@ install_method_candidates:
 
 - `core/constitution.md`가 있다.
 - `models/role_model.md`가 있다.
-- `bootstrap/project_bootstrap_policy.md`가 있다.
 - `bootstrap/bootstrap_runbook.md`가 있다.
+- `bootstrap/bootstrap_reference.md`가 있다.
+- `runtime/bootstrap_options.json`이 있다.
 - `templates/ai_project/`가 있다.
 
 ## 5. 설치 방식
@@ -274,9 +275,10 @@ claude:
 ```text
 .ai/README.md
 .ai/core/constitution.md
-.ai/bootstrap/project_bootstrap_policy.md
 .ai/bootstrap/bootstrap_runbook.md
+.ai/bootstrap/bootstrap_reference.md
 .ai/bootstrap/install_runbook.md
+.ai/runtime/bootstrap_options.json
 .ai/templates/ai_project/
 AGENTS.md
 CLAUDE.md, if Claude adapter is selected
