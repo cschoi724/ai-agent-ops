@@ -54,9 +54,9 @@ CLI는 front matter를 읽어 schema로 검증하고, 본문은 사람이 읽는
 
 ## 단계별 적용
 
-1단계에서는 schema와 template front matter만 추가한다.
+1단계에서는 schema와 template front matter를 추가했다.
 
-2단계에서 `aiops validate`가 이 schema를 실제 검사에 사용한다.
+2단계부터 `aiops validate`가 이 schema 기준의 필수 필드와 허용 값을 검사한다.
 
 3단계 이후 `aiops task transition`, `aiops handoff validate`가 같은 schema를 상태 전이 guardrail로 사용한다.
 

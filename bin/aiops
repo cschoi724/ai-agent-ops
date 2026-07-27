@@ -10,7 +10,8 @@ Usage:
   aiops doctor [--target DIR] [--strict]
   aiops migrate [--target DIR] [--plan|--apply]
   aiops bootstrap-guide [--target DIR]
-  aiops validate task FILE
+  aiops validate [project] [--target DIR] [--strict]
+  aiops validate task FILE [--strict]
   aiops knowledge init [--target DIR] [--mode minimal|full] [--force]
   aiops knowledge lint [--target DIR]
   aiops knowledge status [--target DIR]
@@ -31,6 +32,8 @@ Examples:
   aiops seed --adapter both --mode copy
   aiops doctor
   aiops migrate --plan
+  aiops validate --strict
+  aiops validate project --target /path/to/project --strict
   aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
   aiops knowledge init --mode minimal
   aiops knowledge lint
@@ -121,9 +124,280 @@ task_has_field() {
   grep -q "^$field:" "$file"
 }
 
+validate_front_matter() {
+  subject="$1"
+  file="$2"
+  strict="${3:-no}"
+
+  ruby -ryaml -rdate -e '
+    subject = ARGV[0]
+    path = ARGV[1]
+    strict = ARGV[2] == "yes"
+
+    statuses = %w[
+      proposed scoped approved in_progress verification_ready
+      verification_in_progress verification_passed completion_review done
+      blocked rework_requested cancelled
+    ]
+    roles = [
+      "Direction Role", "Lead Role", "Execution Role", "Verification Role",
+      "Completion Role", "Release Role", "Ops Governance Role", "Product Owner",
+      "any", nil
+    ]
+    task_id_pattern = /\AT-[0-9]{8}-[0-9]{3,}\z/
+
+    def say(message)
+      STDOUT.puts(message)
+    end
+
+    def fail_with(message)
+      STDOUT.puts(message)
+      exit 1
+    end
+
+    def extract_front_matter(path)
+      text = File.read(path)
+      return [nil, text] unless text.start_with?("---\n")
+      lines = text.lines
+      closing = nil
+      lines[1..].each_with_index do |line, idx|
+        if line.strip == "---"
+          closing = idx + 1
+          break
+        end
+      end
+      return [nil, text] unless closing
+      [lines[1...closing].join, lines[(closing + 1)..]&.join.to_s]
+    end
+
+    def parse_yaml_map(source, path)
+      data = YAML.safe_load(source, permitted_classes: [Date, Time, Symbol], aliases: true)
+      return {} if data.nil?
+      return data if data.is_a?(Hash)
+      fail_with("schema_error: front matter is not a mapping: #{path}")
+    rescue Psych::SyntaxError => e
+      fail_with("schema_error: invalid YAML front matter: #{path}: #{e.message.lines.first.to_s.strip}")
+    end
+
+    def scalar_present?(value)
+      !value.nil? && !(value.respond_to?(:empty?) && value.empty?)
+    end
+
+    def array_present?(value)
+      value.is_a?(Array) && value.any?
+    end
+
+    front, body = extract_front_matter(path)
+    if front
+      data = parse_yaml_map(front, path)
+    else
+      # Backward compatibility for older task files that were plain metadata
+      # lines without YAML front matter.
+      data = parse_yaml_map(body, path)
+      say("note: YAML front matter missing; legacy metadata mode")
+    end
+
+    failed = false
+
+    case subject
+    when "task"
+      required = %w[id status workflow target_role required_capabilities]
+      if front
+        required = ["schema"] + required
+      end
+      required.each do |field|
+        ok =
+          if field == "required_capabilities"
+            array_present?(data[field])
+          else
+            scalar_present?(data[field])
+          end
+        if ok
+          say("ok: #{field}")
+        else
+          say("missing: #{field}")
+          failed = true
+        end
+      end
+
+      if front && data["schema"] && data["schema"] != "aiops.task.v1"
+        say("schema_error: schema must be aiops.task.v1")
+        failed = true
+      end
+      if data["id"] && data["id"] !~ task_id_pattern
+        say("schema_error: invalid id #{data["id"]}")
+        failed = true
+      end
+      if data["status"] && !statuses.include?(data["status"])
+        say("schema_error: invalid status #{data["status"]}")
+        failed = true
+      end
+      if data["target_role"] && !roles.include?(data["target_role"])
+        say("schema_error: invalid target_role #{data["target_role"]}")
+        failed = true
+      end
+      if data.key?("required_capabilities") && !array_present?(data["required_capabilities"])
+        say("schema_error: required_capabilities must be a non-empty list")
+        failed = true
+      end
+
+      case data["status"]
+      when "approved", "in_progress"
+        %w[allowed_paths source_of_truth report_to].each do |field|
+          ok = field == "report_to" ? scalar_present?(data[field]) : array_present?(data[field])
+          if ok
+            say("ok: #{field}")
+          else
+            say("missing: #{field} required for status #{data["status"]}")
+            failed = true
+          end
+        end
+      when "verification_ready", "verification_in_progress", "verification_passed"
+        if scalar_present?(data["qa_to"])
+          say("ok: qa_to")
+        else
+          say("missing: qa_to required for status #{data["status"]}")
+          failed = true
+        end
+      when "blocked"
+        %w[blocker next_decision].each do |field|
+          if scalar_present?(data[field])
+            say("ok: #{field}")
+          else
+            say("missing: #{field} required for status blocked")
+            failed = true
+          end
+        end
+      end
+    when "operating_model"
+      required = %w[
+        schema project bootstrap_mode core_version start_context readiness_level
+        operating_mode team_pattern workflow_policy ownership_model coordination
+        board_model knowledge_mode
+      ]
+      required.each do |field|
+        if scalar_present?(data[field])
+          say("ok: #{field}")
+        else
+          say("missing: #{field}")
+          failed = true
+        end
+      end
+
+      enums = {
+        "schema" => ["aiops.operating_model.v1"],
+        "bootstrap_mode" => %w[fast_track guided_full manual migrated],
+        "start_context" => %w[
+          new_project_with_requirement assigned_or_existing_project blank_slate_discovery
+          rescue_or_recovery migration_or_modernization ops_setup_only
+          scale_up_existing_ops custom_start_context
+        ],
+        "readiness_level" => %w[
+          idea_only idea_structured planning_ready implementation_ready
+          existing_project_scan_required discovery_required recovery_required ops_only
+        ],
+        "operating_mode" => %w[solo_light team_basic team_pr multi_team enterprise],
+        "team_pattern" => %w[single_team functional_teams platform_teams cross_functional custom],
+        "workflow_policy" => %w[standard_vnext skip_scoped_for_simple_tasks custom],
+        "ownership_model" => %w[path_only path_plus_domain document_ownership strict_parallel_control custom],
+        "coordination" => %w[single_active_task parallel_with_locks team_board_coordination custom],
+        "board_model" => %w[project_board_only project_plus_team_board custom_views],
+        "knowledge_mode" => %w[minimal indexed context_packs external_source_of_truth custom]
+      }
+      enums.each do |field, allowed|
+        next unless data[field]
+        next if allowed.include?(data[field])
+        say("schema_error: invalid #{field} #{data[field]}")
+        failed = true
+      end
+    when "agent_registry"
+      %w[schema project agents].each do |field|
+        ok = field == "agents" ? array_present?(data[field]) : scalar_present?(data[field])
+        if ok
+          say("ok: #{field}")
+        else
+          say("missing: #{field}")
+          failed = true
+        end
+      end
+      if data["schema"] && data["schema"] != "aiops.agent_registry.v1"
+        say("schema_error: schema must be aiops.agent_registry.v1")
+        failed = true
+      end
+      if data["agents"].is_a?(Array)
+        data["agents"].each_with_index do |agent, idx|
+          unless agent.is_a?(Hash)
+            say("schema_error: agents[#{idx}] must be a mapping")
+            failed = true
+            next
+          end
+          %w[agent status roles].each do |field|
+            ok = field == "roles" ? array_present?(agent[field]) : scalar_present?(agent[field])
+            unless ok
+              say("missing: agents[#{idx}].#{field}")
+              failed = true
+            end
+          end
+          if agent["roles"].is_a?(Array)
+            agent["roles"].each do |role|
+              next if roles.include?(role) && role != "Product Owner" && role != "any"
+              say("schema_error: invalid agents[#{idx}].roles #{role}")
+              failed = true
+            end
+          end
+        end
+      end
+    when "handoff"
+      required = %w[
+        schema task_id from_role to_role current_status next_action
+        source_of_truth allowed_paths
+      ]
+      required.each do |field|
+        ok =
+          case field
+          when "source_of_truth", "allowed_paths" then array_present?(data[field])
+          else scalar_present?(data[field])
+          end
+        if ok
+          say("ok: #{field}")
+        else
+          say("missing: #{field}")
+          failed = true
+        end
+      end
+      if data["schema"] && data["schema"] != "aiops.handoff.v1"
+        say("schema_error: schema must be aiops.handoff.v1")
+        failed = true
+      end
+      if data["task_id"] && data["task_id"] !~ task_id_pattern
+        say("schema_error: invalid task_id #{data["task_id"]}")
+        failed = true
+      end
+      if data["current_status"] && !statuses.include?(data["current_status"])
+        say("schema_error: invalid current_status #{data["current_status"]}")
+        failed = true
+      end
+      %w[from_role to_role].each do |field|
+        next unless data[field]
+        next if roles.include?(data[field]) && data[field] != "any"
+        say("schema_error: invalid #{field} #{data[field]}")
+        failed = true
+      end
+    else
+      fail_with("schema_error: unknown validate subject #{subject}")
+    end
+
+    if strict && front.nil?
+      say("schema_error: YAML front matter required in strict mode")
+      failed = true
+    end
+
+    exit(failed ? 1 : 0)
+  ' "$subject" "$file" "$strict"
+}
+
 validate_task_file() {
   task="$1"
-  failed=0
 
   [ -f "$task" ] || {
     info "missing: $task"
@@ -133,54 +407,105 @@ validate_task_file() {
   info "AI Ops task validate"
   info "task: $task"
 
-  for field in id status workflow target_role required_capabilities; do
-    if task_has_field "$task" "$field"; then
-      info "ok: $field"
+  validate_front_matter task "$task" no || return 1
+  info "ok: task metadata"
+}
+
+validate_project() {
+  target="$1"
+  strict="$2"
+  failed=0
+
+  target="$(abs_path "$target")"
+  project_dir="$target/.ai_project"
+
+  info "AI Ops project validate"
+  info "target: $target"
+  info "strict: $strict"
+
+  if [ ! -d "$project_dir" ]; then
+    info "missing: .ai_project"
+    return 1
+  fi
+  info "ok: .ai_project"
+
+  mode="$(detect_ai_project_mode "$project_dir")"
+  info "mode: $mode"
+
+  operating_model="$project_dir/operating_model.md"
+  agent_registry="$project_dir/agent_registry.md"
+
+  if [ -f "$operating_model" ]; then
+    info ""
+    info "validate: operating_model"
+    validate_front_matter operating_model "$operating_model" "$strict" || failed=1
+  else
+    info "missing: .ai_project/operating_model.md"
+    failed=1
+  fi
+
+  if [ -f "$agent_registry" ]; then
+    info ""
+    info "validate: agent_registry"
+    validate_front_matter agent_registry "$agent_registry" "$strict" || failed=1
+  else
+    info "missing: .ai_project/agent_registry.md"
+    failed=1
+  fi
+
+  for required in \
+    "$project_dir/current_context.md" \
+    "$project_dir/source_of_truth.md" \
+    "$project_dir/task_board.md" \
+    "$project_dir/ops_decisions.md" \
+    "$project_dir/ops_issues.md" \
+    "$project_dir/tasks"
+  do
+    if [ -d "$required" ]; then
+      check_required_dir "$required" "${required#$target/}" || failed=1
     else
-      info "missing: $field"
-      failed=1
+      check_required_file "$required" "${required#$target/}" || failed=1
     fi
   done
 
-  status="$(task_field_value "$task" "status")"
-  case "$status" in
-    approved|in_progress)
-      for field in allowed_paths source_of_truth report_to; do
-        if task_has_field "$task" "$field"; then
-          info "ok: $field"
-        else
-          info "missing: $field required for status $status"
-          failed=1
-        fi
-      done
-      ;;
-    verification_ready|verification_in_progress|verification_passed)
-      if task_has_field "$task" "qa_to"; then
-        info "ok: qa_to"
+  if [ "$mode" = "guided_full" ]; then
+    for required in \
+      "$project_dir/branch_pr_strategy.md" \
+      "$project_dir/workflow_overrides.md" \
+      "$project_dir/ops_migration_plan.md"
+    do
+      check_required_file "$required" "${required#$target/}" || failed=1
+    done
+  else
+    for optional in \
+      "$project_dir/branch_pr_strategy.md" \
+      "$project_dir/workflow_overrides.md" \
+      "$project_dir/ops_migration_plan.md"
+    do
+      if [ -e "$optional" ]; then
+        info "ok: optional ${optional#$target/}"
       else
-        info "missing: qa_to required for status $status"
-        failed=1
+        info "note: optional for fast_track missing ${optional#$target/}"
       fi
-      ;;
-    blocked)
-      for field in blocker next_decision; do
-        if task_has_field "$task" "$field"; then
-          info "ok: $field"
-        else
-          info "missing: $field required for status blocked"
-          failed=1
-        fi
-      done
-      ;;
-    "")
-      ;;
-    *)
-      info "note: no status-specific checks for $status"
-      ;;
-  esac
+    done
+  fi
+
+  for task_dir in "$project_dir/tasks/active" "$project_dir/tasks/backlog" "$project_dir/tasks/archive"; do
+    check_required_dir "$task_dir" "${task_dir#$target/}" || failed=1
+  done
+
+  if [ -d "$project_dir/tasks" ]; then
+    found_tasks="no"
+    find "$project_dir/tasks" -type f -name '*.md' | while IFS= read -r task; do
+      found_tasks="yes"
+      info ""
+      validate_task_file "$task" || exit 1
+    done || failed=1
+  fi
 
   [ "$failed" -eq 0 ] || return 1
-  info "ok: task metadata"
+  info ""
+  info "ok: project validate"
 }
 
 render_template_file() {
@@ -1071,13 +1396,73 @@ cmd_doctor() {
 
 cmd_validate() {
   subject="${1:-}"
-  [ "$#" -gt 0 ] || die "validate requires a subject: task"
-  shift
+  if [ "$#" -eq 0 ] || [ "${subject#-}" != "$subject" ]; then
+    subject="project"
+  else
+    shift
+  fi
 
   case "$subject" in
     task)
-      [ "$#" -eq 1 ] || die "validate task requires exactly one FILE"
-      validate_task_file "$1"
+      strict="no"
+      file=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --strict)
+            strict="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          -*)
+            die "unknown validate task option: $1"
+            ;;
+          *)
+            [ -z "$file" ] || die "validate task requires exactly one FILE"
+            file="$1"
+            ;;
+        esac
+        shift
+      done
+      [ -n "$file" ] || die "validate task requires exactly one FILE"
+      if [ "$strict" = "yes" ]; then
+        [ -f "$file" ] || {
+          info "missing: $file"
+          return 1
+        }
+        info "AI Ops task validate"
+        info "task: $file"
+        validate_front_matter task "$file" yes
+        info "ok: task metadata"
+      else
+        validate_task_file "$file"
+      fi
+      ;;
+    project)
+      target="$(pwd)"
+      strict="no"
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --strict)
+            strict="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown validate project option: $1"
+            ;;
+        esac
+        shift
+      done
+      validate_project "$target" "$strict"
       ;;
     *)
       die "unknown validate subject: $subject"

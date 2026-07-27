@@ -8,7 +8,7 @@ class AiAgentOps < Formula
     libexec.install "VERSION"
     libexec.install "README.md", "QUICKSTART.md", "CHANGELOG.md", "LICENSE"
     libexec.install "agents", "bin", "bootstrap", "core", "docs", "models"
-    libexec.install "policies", "runtime", "templates", "workflows"
+    libexec.install "policies", "runtime", "schemas", "templates", "workflows"
 
     (bin/"aiops").write <<~EOS
       #!/bin/sh

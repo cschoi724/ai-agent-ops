@@ -64,7 +64,8 @@ Bootstrap은 Discovery Phase에서 파일을 수정하지 않는다. Agent가 �
 | `aiops migrate --plan` | 기존 프로젝트 운영모델 갱신 계획 확인 |
 | `aiops migrate --apply` | 승인된 안전 범위만 운영모델 마이그레이션 적용 |
 | `aiops bootstrap-guide` | 현재 상태에 맞는 다음 Agent 입력 안내 |
-| `aiops validate task FILE` | Task metadata 검증 |
+| `aiops validate --strict` | 현재 프로젝트 운영 schema 검증 |
+| `aiops validate task FILE --strict` | Task front matter schema 검증 |
 | `aiops knowledge init --mode minimal` | `.ai_knowledge/` 최소 workspace 생성 |
 | `aiops knowledge lint` | Knowledge workspace 점검 |
 | `aiops update --check` | core 업데이트 가능 여부 확인 |
