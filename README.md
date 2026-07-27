@@ -98,6 +98,7 @@ YourProject/
 - [bootstrap/migration_runbook.md](bootstrap/migration_runbook.md): 기존 프로젝트 마이그레이션
 - [core/constitution.md](core/constitution.md): 운영 헌법
 - [models/role_model.md](models/role_model.md): Role 책임
+- [runtime/bootstrap_options.json](runtime/bootstrap_options.json): bootstrap 선택 후보 catalog
 - [runtime/workflow.md](runtime/workflow.md): 상태 모델
 - [runtime/task_queue.md](runtime/task_queue.md): Task 운영 기준
 - [adapters/README.md](adapters/README.md): 외부 runtime adapter 계약

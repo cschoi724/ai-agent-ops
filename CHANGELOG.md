@@ -16,6 +16,7 @@
 - AI Ops 프로젝트 CI 템플릿 `templates/ci/github-actions/aiops.yml` 추가
 - 외부 runtime 연결 준비를 위한 `adapters/` 문서 추가
 - `aiops export runtime` 명령과 `schemas/runtime_export.schema.json` 추가
+- Bootstrap 선택 후보 catalog `runtime/bootstrap_options.json`과 `schemas/bootstrap_options.schema.json` 추가
 
 ### Changed
 
@@ -23,6 +24,14 @@
 - `aiops release-check --strict`가 shell/schema 구문과 seed된 샘플 프로젝트의 doctor/validate/migrate/knowledge gate를 확인하도록 강화
 - Formula 설치 대상에 `adapters/` 포함
 - README와 QUICKSTART를 첫 실행 중심으로 단순화하고 상세 설명은 링크 문서로 분리
+- Bootstrap 선택 기준을 `bootstrap_reference.md`와 `runtime/bootstrap_options.json`으로 통합
+- Team/Role/Board/Coordination/Ownership/Branch 정책 문서를 slim reference로 압축
+- Guided Full, Task, Handoff 템플릿을 schema front matter와 필수 운영 필드 중심으로 경량화
+- Release package 포함/제외 범위와 `release-check` 필수 파일 기준 정리
+
+### Removed
+
+- 중복 bootstrap 정책 문서를 제거하고 `bootstrap_reference.md`와 structured data로 흡수
 
 ## 0.6.4 - 2026-07-23
 
