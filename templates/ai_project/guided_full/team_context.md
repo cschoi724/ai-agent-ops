@@ -1,17 +1,13 @@
 # Team Context
 
-작성일: {{DATE}}  
-프로젝트: {{PROJECT_NAME}}  
-Team: {{TEAM_NAME}}  
+작성일: {{DATE}}
+프로젝트: {{PROJECT_NAME}}
+Team: {{TEAM_NAME}}
 상태: Draft
 
-## 1. 목적
+Team 기준은 `.ai/models/team_model.md`를 따른다. 이 파일은 프로젝트별 선택값만 기록한다.
 
-이 문서는 현재 프로젝트에서 `{{TEAM_NAME}}`의 실제 운영 구성을 기록한다.
-
-Team 구성의 일반 기준은 `.ai/models/team_model.md`를 따른다. 이 문서는 프로젝트별 선택값만 기록한다.
-
-## 2. Team Identity
+## Identity
 
 | 항목 | 값 |
 |---|---|
@@ -21,54 +17,37 @@ Team 구성의 일반 기준은 `.ai/models/team_model.md`를 따른다. 이 문
 | Team Pattern | {{TEAM_PATTERN}} |
 | 상태 | active / planned / inactive |
 
-## 3. Role / Agent Mapping
+## Role / Agent
 
-| Role | Agent | Capabilities | 비고 |
-|---|---|---|---|
-| Lead Role | {{TEAM_LEAD_AGENT}} | team_coordination, ownership_review, dependency_management | |
-| Execution Role | {{EXECUTION_AGENT}} | implementation, developer_verification, task_reporting | |
-| Verification Role | {{VERIFICATION_AGENT}} | qa_review, pr_review, test_execution, risk_review | |
-| Completion Role | {{COMPLETION_AGENT}} | completion_review | Lead Role 겸임 가능 |
+| Role | Agent | Notes |
+|---|---|---|
+| Lead Role | {{TEAM_LEAD_AGENT}} | Coordination |
+| Execution Role | {{EXECUTION_AGENT}} | Build/report |
+| Verification Role | {{VERIFICATION_AGENT}} | QA/review |
+| Completion Role | {{COMPLETION_AGENT}} | Lead may own |
 
-## 4. Ownership
+## Ownership
 
-| 유형 | 값 | Owner / Reviewer |
+| 유형 | 값 | Owner |
 |---|---|---|
 | Path | {{OWNED_PATH}} | {{OWNER}} |
 | Domain | {{OWNED_DOMAIN}} | {{OWNER}} |
 | Document | {{OWNED_DOCUMENT}} | {{OWNER}} |
 
-## 5. Source of Truth
+## Operating Links
 
-| 영역 | 기준 문서 |
+| 항목 | 경로 |
 |---|---|
-| 현재 상태 | {{CURRENT_STATUS_DOC}} |
-| 구현 계획 | {{IMPLEMENTATION_PLAN_DOC}} |
-| 아키텍처 | {{ARCHITECTURE_DOC}} |
-| QA 기준 | {{QA_DOC}} |
-
-## 6. Board / Branch Strategy
-
-| 항목 | 값 |
-|---|---|
+| Source of truth | {{SOURCE_OF_TRUTH}} |
 | Team board | {{TEAM_BOARD_PATH}} |
-| Branch strategy | {{BRANCH_STRATEGY_PATH}} |
 | Project board | `.ai_project/task_board.md` |
-| Project branch strategy | `.ai_project/branch_pr_strategy.md` |
+| Branch strategy | {{BRANCH_STRATEGY_PATH}} |
 
-Team별 예외가 없으면 project board와 project branch strategy를 따른다.
-
-## 7. Escalation
+## Escalation
 
 | 상황 | 조율 주체 | 기록 위치 |
 |---|---|---|
-| ownership conflict | {{TEAM_LEAD_AGENT}} | Task 파일, `.ai_project/task_board.md` |
-| cross-team dependency | {{TEAM_LEAD_AGENT}} | Task 파일 |
-| blocked | 현재 담당 Role / Lead Role | Task 파일 |
+| ownership conflict | {{TEAM_LEAD_AGENT}} | Task, Board |
+| cross-team dependency | {{TEAM_LEAD_AGENT}} | Task |
+| blocked | Lead Role | Task |
 | workflow ambiguity | AI Ops Agent | `.ai_project/ops_issues.md` |
-
-## 8. 변경 이력
-
-| 날짜 | 변경 내용 |
-|---|---|
-| {{DATE}} | Team context 초기화 |
