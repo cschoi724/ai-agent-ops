@@ -358,6 +358,83 @@ docs: bootstrap 문서 다이어트 감사 기록
 - 어떤 내용을 남기고 옮길지 결정 가능한 audit table이 생긴다.
 - 아직 실제 bootstrap 문서는 삭제하지 않는다.
 
+## Step 2 Audit Result
+
+작성일: 2026-07-27
+
+대상:
+
+```text
+bootstrap/bootstrap_reference.md
+bootstrap/project_bootstrap_policy.md
+```
+
+현재 직접 참조:
+
+| 참조 위치 | 현재 참조 | 판단 |
+|---|---|---|
+| `bootstrap/bootstrap_reference.md` | `project_bootstrap_policy.md` | Step 4에서 자기완결 reference로 바꾸기 |
+| `bootstrap/README.md` | `project_bootstrap_policy.md` | Step 4에서 삭제 또는 `bootstrap_reference.md`로 교체 |
+| `bootstrap/install_runbook.md` | `project_bootstrap_policy.md` | 설치 preflight 기준. Step 4에서 `bootstrap_reference.md` 또는 `bootstrap_runbook.md`로 교체 |
+| `templates/ai_project/guided_full/source_of_truth.md` | `project_bootstrap_policy.md` | source reference를 `bootstrap_reference.md`로 교체 |
+| `workflows/ops_migration.md` | `project_bootstrap_policy.md` | 운영 구성 선택 기준을 `bootstrap_reference.md` 또는 structured data로 교체 |
+| `templates/tool_adapters/codex/AGENTS.md` | `bootstrap_reference.md` | 유지 |
+| `templates/tool_adapters/claude/CLAUDE.md` | `bootstrap_reference.md` | 유지 |
+| `bootstrap/bootstrap_runbook.md` | `bootstrap_reference.md` | 유지 |
+
+중복/고유 분류:
+
+| 영역 | `project_bootstrap_policy.md` | `bootstrap_reference.md` | 판정 | 다음 처리 |
+|---|---|---|---|---|
+| 목적/원칙 | 1~2장 | 1~3장 | 중복 | `bootstrap_reference.md`의 실행 원칙으로 통합 |
+| 구성 산출물 | 3장 | 2장, 22장 | 일부 고유 | 생성 대상과 template source만 `bootstrap_reference.md` 22장에 병합 |
+| Bootstrap 단계 | 4장 | 6장, 8~24장 | 중복 | `bootstrap_reference.md` phase 구조 유지 |
+| Bootstrap Mode | 4.1장 | 4.1장, 7장, 26.0장 | 중복 | structured data 후보. 설명은 `bootstrap_reference.md` 유지 |
+| Start Context | 5장 | 8장, 25장, 26.1장 | 중복 | 후보 목록은 `runtime/bootstrap_options.json`으로 이동 |
+| Project Scan | 6장 | 9장 | 중복 | `bootstrap_reference.md` 유지 |
+| Readiness | 7장 | 10장, 26.2장 | 중복 | 후보 목록은 structured data로 이동 |
+| Operating Mode | 8장 | 11장, 26.3장 | 중복 | 후보 목록은 structured data로 이동 |
+| Team 구성 | 9장 | 12장, 26.3장 | 중복 | 선택 후보는 structured data, 설명은 reference 유지 |
+| Role / Agent 매핑 | 10장 | 13장, 26.4장 | 중복 | Role 후보는 기존 `models/role_model.md`와 structured data에 연결 |
+| Workflow / State | 11장 | 14장, 26.4장 | 중복 | 상태값은 `schemas/workflow.schema.json` / runtime data 우선 |
+| Ownership / Coordination | 12장 | 15장, 26.5장 | 중복 | 옵션 후보는 structured data로 이동 |
+| Board | 13장 | 16장, 26.6장 | 중복 | 옵션 후보는 structured data로 이동 |
+| Branch / PR | 14장 | 17장, 26.7장 | 중복 | 자세한 정책은 `policies/branch_pr_policy.md`, 옵션은 structured data |
+| Source of Truth | 15장 | 18장, 26.6장 | 중복 | `bootstrap_reference.md` 유지 |
+| 적용 범위 승인 | 16장 | 21장 | 중복 | `bootstrap_reference.md` 유지 |
+| 문서 생성 | 17장 | 22장 | 중복 + 일부 고유 | Fast Track/Guided Full 생성 후보를 `bootstrap_reference.md` 하나로 정리 |
+| 질문 세트 | 18장 | 26장 | 중복 | `bootstrap_reference.md` 26장 유지 |
+| 선택값 기록 규칙 | 19장 | 일부 20~22장 | 고유 | `bootstrap_reference.md`에 `Decision Recording Rules`로 이전 |
+| 완료 기준 | 20장 | 28장 | 중복 + 일부 고유 | `bootstrap_reference.md` 28장에 병합 |
+| 금지사항 | 21장 | 27장 | 중복 | `bootstrap_reference.md` 유지 |
+
+보존해야 할 고유 내용:
+
+| 내용 | 현재 위치 | 이전 대상 |
+|---|---|---|
+| `.ai_project/operating_model.md`가 프로젝트별 선택값 인덱스라는 설명 | `project_bootstrap_policy.md` 3장, 19장 | `bootstrap_reference.md` 2장 또는 20장 |
+| Fast Track / Guided Full 생성 산출물 구분 | `project_bootstrap_policy.md` 3장, 17장 | `bootstrap_reference.md` 22장 |
+| Team별 `.ai_project/teams/<team_id>/` 확장 후보 | `project_bootstrap_policy.md` 3장 | `bootstrap_reference.md` 22장 |
+| 선택값 기록 위치 표 | `project_bootstrap_policy.md` 19장 | `bootstrap_reference.md` 신규 `Decision Recording Rules` |
+| Bootstrap 완료 기준 중 active Team, branch/PR 또는 Git 비사용 정책 기록 기준 | `project_bootstrap_policy.md` 20장 | `bootstrap_reference.md` 28장 |
+
+삭제 전 필요한 참조 교체:
+
+```text
+bootstrap/README.md
+bootstrap/install_runbook.md
+templates/ai_project/guided_full/source_of_truth.md
+workflows/ops_migration.md
+bootstrap/bootstrap_reference.md
+```
+
+Step 4 예상 결론:
+
+- `bootstrap/bootstrap_runbook.md`: 유지. 실행용 짧은 문서.
+- `bootstrap/bootstrap_reference.md`: 유지. 상세 reference이자 `project_bootstrap_policy.md` 고유 내용 흡수 대상.
+- `bootstrap/project_bootstrap_policy.md`: Step 4에서 삭제 후보.
+- `runtime/bootstrap_options.json`: Step 3에서 선택 후보를 구조화한 뒤 reference가 이 파일을 참조하도록 전환.
+
 ## Step 3. Bootstrap Options Structured Data
 
 목표:
