@@ -10,6 +10,8 @@ Usage:
   aiops doctor [--target DIR] [--strict]
   aiops migrate [--target DIR] [--plan|--apply]
   aiops bootstrap-guide [--target DIR]
+  aiops session-guide [--target DIR]
+  aiops role prompt ROLE [--target DIR] [--task TASK_ID] [--adapter codex|claude|generic] [--agent NAME]
   aiops validate [project] [--target DIR] [--strict]
   aiops validate task FILE [--strict]
   aiops validate handoff FILE [--strict]
@@ -50,6 +52,8 @@ Examples:
   aiops knowledge init --mode minimal
   aiops knowledge lint
   aiops bootstrap-guide
+  aiops session-guide
+  aiops role prompt execution --task T-YYYYMMDD-001 --adapter codex
   aiops update --check
   aiops release-check --strict
 EOF
@@ -739,6 +743,91 @@ handoff_find_file() {
   found="$(find "$handoff_dir" -type f -name "$value*.md" | sort | tail -n 1 || true)"
   [ -n "$found" ] || return 1
   printf '%s\n' "$found"
+}
+
+normalize_role_name() {
+  role="$(printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[ _-]/ /g; s/[[:space:]]\{1,\}/ /g; s/^ //; s/ $//')"
+  case "$role" in
+    direction|"direction role"|pm|product|"product owner") printf '%s\n' "Direction Role" ;;
+    lead|"lead role"|"team lead"|"pm lead") printf '%s\n' "Lead Role" ;;
+    execution|"execution role"|dev|developer|development|implementation) printf '%s\n' "Execution Role" ;;
+    verification|"verification role"|qa|test|review) printf '%s\n' "Verification Role" ;;
+    completion|"completion role"|complete|done) printf '%s\n' "Completion Role" ;;
+    release|"release role") printf '%s\n' "Release Role" ;;
+    ops|"ops governance"|"ops governance role"|"ai ops"|aiops) printf '%s\n' "Ops Governance Role" ;;
+    *) return 1 ;;
+  esac
+}
+
+role_default_agent() {
+  role="$1"
+  case "$role" in
+    "Direction Role") printf '%s\n' "PM Agent" ;;
+    "Lead Role") printf '%s\n' "Lead Agent" ;;
+    "Execution Role") printf '%s\n' "Development Agent" ;;
+    "Verification Role") printf '%s\n' "QA Agent" ;;
+    "Completion Role") printf '%s\n' "Completion Agent" ;;
+    "Release Role") printf '%s\n' "Release Agent" ;;
+    "Ops Governance Role") printf '%s\n' "AI Ops Agent" ;;
+    *) printf '%s\n' "AI Agent" ;;
+  esac
+}
+
+role_responsibility_text() {
+  role="$1"
+  case "$role" in
+    "Direction Role")
+      cat <<'EOF'
+- 요구를 Task 후보로 정리한다.
+- 우선순위, 승인 필요 여부, 성공 기준을 확인한다.
+- 사용자 승인 없이 Task를 approved로 넘기지 않는다.
+EOF
+      ;;
+    "Lead Role")
+      cat <<'EOF'
+- Task 범위, ownership, dependency, allowed_paths, source_of_truth를 조율한다.
+- 실행 가능한 Task를 Execution Role로 인계한다.
+- blocked/rework Task의 재조율을 담당한다.
+EOF
+      ;;
+    "Execution Role")
+      cat <<'EOF'
+- 승인된 Task만 실행한다.
+- allowed_paths 안에서만 파일을 수정한다.
+- 구현 후 자체 검증과 작업 보고를 남기고 Verification Role로 인계한다.
+- 독립 검증이나 완료 확정을 대신하지 않는다.
+EOF
+      ;;
+    "Verification Role")
+      cat <<'EOF'
+- verification_ready Task만 독립적으로 검증한다.
+- PASS, PASS_WITH_RISK, FAIL, BLOCKED 결과를 명확히 기록한다.
+- 수정 필요 시 rework_requested로 Lead Role에게 넘긴다.
+- Completion 판단을 대신하지 않는다.
+EOF
+      ;;
+    "Completion Role")
+      cat <<'EOF'
+- verification_passed Task의 완료 확정 여부를 판단한다.
+- 잔여 리스크, 후속 Task, release 영향을 확인한다.
+- 완료 가능할 때만 done으로 전환한다.
+EOF
+      ;;
+    "Release Role")
+      cat <<'EOF'
+- 배포 준비, release gate, rollback/운영 인계를 확인한다.
+- 실제 release workflow가 활성화된 Task만 다룬다.
+- 사용자 승인 없이 배포하지 않는다.
+EOF
+      ;;
+    "Ops Governance Role")
+      cat <<'EOF'
+- AI Ops 운영모델, migration, 정책 충돌, adapter 상태를 점검한다.
+- 제품 Task 실행 라인의 구현/검증/완료 판단을 대신하지 않는다.
+- .ai/ 코어 수정은 운영자 승인 후에만 진행한다.
+EOF
+      ;;
+  esac
 }
 
 render_template_file() {
@@ -2453,6 +2542,236 @@ $qa_report"
   esac
 }
 
+cmd_session_guide() {
+  target="$(pwd)"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --target)
+        shift
+        [ "$#" -gt 0 ] || die "--target requires a value"
+        target="$1"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "unknown session-guide option: $1"
+        ;;
+    esac
+    shift
+  done
+
+  target="$(abs_path "$target")"
+
+  info "AI Ops session guide"
+  info "target: $target"
+  info ""
+
+  if [ ! -d "$target/.ai_project" ]; then
+    info "missing: .ai_project"
+    info "먼저 AI Ops bootstrap을 완료하세요."
+    return 1
+  fi
+
+  info "세션 유형:"
+  info "  - orchestration_session: Lead/Direction이 Task와 인계를 조율"
+  info "  - role_session: 특정 Role 책임을 맡은 독립 Agent 세션"
+  info "  - delegated_worker: 현재 세션 안의 좁은 보조 작업자"
+  info ""
+  info "기본 원칙:"
+  info "  - Execution과 Verification은 가능하면 별도 Role Session으로 분리합니다."
+  info "  - delegated_worker는 독립 Verification/Completion을 대체하지 않습니다."
+  info "  - 세션 전환은 Task status, target_role, lock, handoff로 기록합니다."
+  info ""
+
+  info "활성 Agent / Role 후보:"
+  if [ -f "$target/.ai_project/agent_registry.md" ]; then
+    print_agent_registry_rows "$target/.ai_project/agent_registry.md"
+  else
+    info "      - .ai_project/agent_registry.md 없음"
+  fi
+  info ""
+
+  info "Role Session 시작 문구 생성:"
+  info "  aiops role prompt lead --target \"$target\""
+  info "  aiops role prompt execution --target \"$target\" --task TASK_ID"
+  info "  aiops role prompt verification --target \"$target\" --task TASK_ID"
+  info "  aiops role prompt completion --target \"$target\" --task TASK_ID"
+  info "  aiops role prompt ops --target \"$target\""
+  info ""
+  info "Codex / Claude 지정 예시:"
+  info "  aiops role prompt execution --adapter codex --task TASK_ID"
+  info "  aiops role prompt verification --adapter claude --task TASK_ID"
+}
+
+cmd_role() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "role requires an action: prompt"
+  shift
+
+  case "$action" in
+    prompt)
+      role_input="${1:-}"
+      [ "$#" -gt 0 ] || die "role prompt requires ROLE"
+      shift
+
+      role="$(normalize_role_name "$role_input")" || die "unknown role: $role_input"
+      target="$(pwd)"
+      task_id=""
+      adapter="generic"
+      agent=""
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --task)
+            shift
+            [ "$#" -gt 0 ] || die "--task requires a value"
+            task_id="$1"
+            ;;
+          --adapter)
+            shift
+            [ "$#" -gt 0 ] || die "--adapter requires a value"
+            adapter="$1"
+            ;;
+          --agent)
+            shift
+            [ "$#" -gt 0 ] || die "--agent requires a value"
+            agent="$1"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown role prompt option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      case "$adapter" in codex|claude|generic) ;; *) die "--adapter must be codex, claude, or generic" ;; esac
+
+      target="$(abs_path "$target")"
+      [ -n "$agent" ] || agent="$(role_default_agent "$role")"
+
+      task_file=""
+      if [ -n "$task_id" ]; then
+        task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+      fi
+
+      info "AI Ops role prompt"
+      info "target: $target"
+      info "adapter: $adapter"
+      info "role: $role"
+      info "agent: $agent"
+      [ -z "$task_file" ] || info "task: ${task_file#$target/}"
+      info ""
+      info "아래 문구를 새 Agent 세션의 첫 메시지로 사용하세요."
+      info ""
+      info "----- ROLE SESSION PROMPT START -----"
+      info "너는 이 프로젝트의 $agent / $role 세션이야."
+      info ""
+      info "먼저 다음 문서를 확인해줘."
+      info "- .ai/runtime/workflow.md"
+      info "- .ai/runtime/task_queue.md"
+      info "- .ai/runtime/role_handoff.md"
+      info "- .ai/policies/session_orchestration_policy.md"
+      info "- .ai_project/operating_model.md"
+      info "- .ai_project/agent_registry.md"
+      info "- .ai_project/current_context.md"
+      info "- .ai_project/task_board.md"
+      info "- .ai_project/source_of_truth.md"
+      info ""
+      info "세션 규칙:"
+      info "- 현재 세션은 role_session이다."
+      info "- 한 세션이 여러 Role을 연속 수행하려면 workflow 또는 사용자 명시 승인이 필요하다."
+      info "- delegated_worker를 사용할 수 있어도 독립 Role Session을 대체하지 않는다."
+      info "- 상태 전이, lock, handoff는 aiops CLI 명령으로 처리한다."
+      info "- 사용자 승인 없이 commit, push, merge, deploy를 진행하지 않는다."
+      info ""
+      info "이 Role의 책임:"
+      role_responsibility_text "$role"
+      info ""
+
+      if [ -n "$task_file" ]; then
+        status="$(task_yaml_field "$task_file" status)"
+        target_role="$(task_yaml_field "$task_file" target_role)"
+        allowed_paths="$(task_yaml_field "$task_file" allowed_paths)"
+        source_of_truth="$(task_yaml_field "$task_file" source_of_truth)"
+        locked_by="$(task_yaml_field "$task_file" locked_by)"
+
+        info "대상 Task:"
+        info "- task_id: $task_id"
+        info "- task_file: ${task_file#$target/}"
+        info "- current_status: $status"
+        info "- target_role: $target_role"
+        info "- allowed_paths: $allowed_paths"
+        info "- source_of_truth: $source_of_truth"
+        info "- locked_by: $locked_by"
+        info ""
+        info "작업 시작 전 확인:"
+        info "- aiops task status $task_id --target \"$target\""
+        info "- 현재 Role이 Task의 status/target_role과 맞는지 확인한다."
+        info "- allowed_paths 밖 파일은 수정하지 않는다."
+        info ""
+
+        case "$role" in
+          "Execution Role")
+            info "Execution 진행 기준:"
+            info "- 실행 가능하면 aiops task transition $task_id --target \"$target\" --to in_progress --role \"Execution Role\" --by \"$agent\""
+            info "- 완료 후 aiops handoff create $task_id --target \"$target\" --from \"Execution Role\" --to \"Verification Role\" --next-action \"작업 결과 독립 검증\""
+            info "- 인계 검증 후 aiops task transition $task_id --target \"$target\" --to verification_ready --role \"Execution Role\" --by \"$agent\""
+            ;;
+          "Verification Role")
+            info "Verification 진행 기준:"
+            info "- 검증 시작 시 aiops task transition $task_id --target \"$target\" --to verification_in_progress --role \"Verification Role\" --by \"$agent\""
+            info "- 통과 시 Completion 인계를 만들고 verification_passed로 전환한다."
+            info "- 실패 또는 차단 시 Lead Role로 rework/blocked 인계를 남긴다."
+            ;;
+          "Completion Role")
+            info "Completion 진행 기준:"
+            info "- 검증 결과와 남은 리스크를 확인한다."
+            info "- 완료 가능하면 completion_review를 거쳐 done으로 전환한다."
+            info "- 완료가 어렵다면 Lead Role로 rework/blocked 인계를 남긴다."
+            ;;
+          "Lead Role")
+            info "Lead 진행 기준:"
+            info "- Task 범위와 ownership을 정리한다."
+            info "- 승인된 실행 Task는 Execution Role로 인계한다."
+            ;;
+        esac
+        info ""
+      fi
+
+      case "$adapter" in
+        codex)
+          info "Codex 참고:"
+          info "- AGENTS.md의 AI Ops 지침을 우선 확인한다."
+          ;;
+        claude)
+          info "Claude 참고:"
+          info "- CLAUDE.md의 AI Ops 지침을 우선 확인한다."
+          ;;
+        generic)
+          info "Adapter 참고:"
+          info "- Codex면 AGENTS.md, Claude면 CLAUDE.md를 확인한다."
+          ;;
+      esac
+      info "----- ROLE SESSION PROMPT END -----"
+      ;;
+    *)
+      die "unknown role action: $action"
+      ;;
+  esac
+}
+
 cmd_knowledge() {
   action="${1:-}"
   [ "$#" -gt 0 ] || die "knowledge requires an action: init, lint, status"
@@ -2960,6 +3279,8 @@ main() {
     doctor) cmd_doctor "$@" ;;
     migrate) cmd_migrate "$@" ;;
     bootstrap-guide) cmd_bootstrap_guide "$@" ;;
+    session-guide) cmd_session_guide "$@" ;;
+    role) cmd_role "$@" ;;
     validate) cmd_validate "$@" ;;
     task) cmd_task "$@" ;;
     handoff) cmd_handoff "$@" ;;

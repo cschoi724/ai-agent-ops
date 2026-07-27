@@ -64,6 +64,8 @@ Bootstrap은 Discovery Phase에서 파일을 수정하지 않는다. Agent가 �
 | `aiops migrate --plan` | 기존 프로젝트 운영모델 갱신 계획 확인 |
 | `aiops migrate --apply` | 승인된 안전 범위만 운영모델 마이그레이션 적용 |
 | `aiops bootstrap-guide` | 현재 상태에 맞는 다음 Agent 입력 안내 |
+| `aiops session-guide` | Role Session 구성과 시작 명령 안내 |
+| `aiops role prompt ROLE --task TASK_ID` | 새 Role Session 시작 문구 생성 |
 | `aiops validate --strict` | 현재 프로젝트 운영 schema 검증 |
 | `aiops validate task FILE --strict` | Task front matter schema 검증 |
 | `aiops task create --title TITLE` | 새 Task 생성 |
