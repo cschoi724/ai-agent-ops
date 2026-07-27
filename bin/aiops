@@ -3608,6 +3608,7 @@ cmd_release_check() {
     "$core/schemas/handoff.schema.json" \
     "$core/schemas/agent_registry.schema.json" \
     "$core/schemas/operating_model.schema.json" \
+    "$core/schemas/bootstrap_options.schema.json" \
     "$core/schemas/runtime_export.schema.json" \
     "$core/adapters/README.md" \
     "$core/adapters/langgraph/README.md" \
@@ -3623,6 +3624,7 @@ cmd_release_check() {
     "$core/policies/versioning_policy.md" \
     "$core/runtime/workflow.md" \
     "$core/runtime/task_queue.md" \
+    "$core/runtime/bootstrap_options.json" \
     "$core/templates/ci/github-actions/aiops.yml" \
     "$core/templates/tool_adapters/codex/AGENTS.md" \
     "$core/templates/tool_adapters/claude/CLAUDE.md"
@@ -3707,6 +3709,15 @@ cmd_release_check() {
       info "warn: Formula missing adapters install"
       warnings=$((warnings + 1))
     fi
+
+    for formula_dir in bootstrap core models policies runtime schemas templates workflows; do
+      if grep -q "libexec.install.*\"$formula_dir\"" "$formula"; then
+        info "ok: Formula installs $formula_dir"
+      else
+        info "warn: Formula missing $formula_dir install"
+        warnings=$((warnings + 1))
+      fi
+    done
 
     if grep -q 'REPLACE_WITH_RELEASE_SHA256' "$formula"; then
       if [ "$allow_pending_release" = "yes" ]; then

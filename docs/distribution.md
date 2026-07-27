@@ -111,6 +111,48 @@ $(brew --prefix)/opt/ai-agent-ops/libexec/
 $(brew --prefix)/opt/ai-agent-ops/libexec/adapters/
 ```
 
+Formula 설치 대상:
+
+```text
+VERSION, README.md, QUICKSTART.md, CHANGELOG.md, LICENSE
+adapters/
+agents/
+bin/
+bootstrap/
+core/
+docs/
+models/
+policies/
+runtime/
+schemas/
+templates/
+workflows/
+```
+
+Formula 설치 제외:
+
+```text
+.git/
+.ai_project/
+design_notes/
+tests/
+scripts/
+Formula/
+개발 중 임시 파일
+```
+
+`tests/`, `scripts/`, `Formula/`는 개발 저장소의 release safety 용도다. `aiops release-check`는 릴리스 소스 체크아웃에서 실행한다.
+
+Homebrew 설치 후 사용자가 실행해야 하는 프로젝트 검증은 아래 명령이 담당한다.
+
+```bash
+aiops doctor --target ./YourProject --strict
+aiops validate --target ./YourProject --strict
+aiops migrate --target ./YourProject --plan
+aiops knowledge lint --target ./YourProject
+aiops export runtime --target ./YourProject
+```
+
 대상 프로젝트 seed 결과:
 
 ```text
