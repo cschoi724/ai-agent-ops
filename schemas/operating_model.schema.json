@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/operating_model.schema.json",
+  "title": "AI Ops Project Operating Model",
+  "description": "Schema for project operating model metadata.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema",
+    "project",
+    "bootstrap_mode",
+    "core_version",
+    "start_context",
+    "readiness_level",
+    "operating_mode",
+    "team_pattern",
+    "workflow_policy",
+    "ownership_model",
+    "coordination",
+    "board_model",
+    "knowledge_mode"
+  ],
+  "properties": {
+    "schema": {
+      "const": "aiops.operating_model.v1"
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bootstrap_mode": {
+      "type": "string",
+      "enum": [
+        "fast_track",
+        "guided_full",
+        "manual",
+        "migrated"
+      ]
+    },
+    "core_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "core_source": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "core_update_policy": {
+      "type": "string",
+      "enum": [
+        "manual_review",
+        "pinned",
+        "auto_minor_with_review",
+        "custom"
+      ]
+    },
+    "start_context": {
+      "type": "string",
+      "enum": [
+        "new_project_with_requirement",
+        "assigned_or_existing_project",
+        "blank_slate_discovery",
+        "rescue_or_recovery",
+        "migration_or_modernization",
+        "ops_setup_only",
+        "scale_up_existing_ops",
+        "custom_start_context"
+      ]
+    },
+    "readiness_level": {
+      "type": "string",
+      "enum": [
+        "idea_only",
+        "idea_structured",
+        "planning_ready",
+        "implementation_ready",
+        "existing_project_scan_required",
+        "discovery_required",
+        "recovery_required",
+        "ops_only"
+      ]
+    },
+    "operating_mode": {
+      "type": "string",
+      "enum": [
+        "solo_light",
+        "team_basic",
+        "team_pr",
+        "multi_team",
+        "enterprise"
+      ]
+    },
+    "team_pattern": {
+      "type": "string",
+      "enum": [
+        "single_team",
+        "functional_teams",
+        "platform_teams",
+        "cross_functional",
+        "custom"
+      ]
+    },
+    "workflow_policy": {
+      "type": "string",
+      "enum": [
+        "standard_vnext",
+        "skip_scoped_for_simple_tasks",
+        "custom"
+      ]
+    },
+    "ownership_model": {
+      "type": "string",
+      "enum": [
+        "path_only",
+        "path_plus_domain",
+        "document_ownership",
+        "strict_parallel_control",
+        "custom"
+      ]
+    },
+    "coordination": {
+      "type": "string",
+      "enum": [
+        "single_active_task",
+        "parallel_with_locks",
+        "team_board_coordination",
+        "custom"
+      ]
+    },
+    "board_model": {
+      "type": "string",
+      "enum": [
+        "project_board_only",
+        "project_plus_team_board",
+        "custom_views"
+      ]
+    },
+    "branch_pr": {
+      "type": "string",
+      "enum": [
+        "pending_decision",
+        "simple_safe",
+        "branch_per_task",
+        "pr_required",
+        "custom"
+      ]
+    },
+    "knowledge_mode": {
+      "type": "string",
+      "enum": [
+        "minimal",
+        "indexed",
+        "context_packs",
+        "external_source_of_truth",
+        "custom"
+      ]
+    },
+    "release_role": {
+      "type": "string",
+      "enum": [
+        "active",
+        "deferred",
+        "inactive"
+      ]
+    },
+    "active_roles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/roleName"
+      },
+      "uniqueItems": true
+    },
+    "deferred_roles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/roleName"
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "roleName": {
+      "type": "string",
+      "enum": [
+        "Direction Role",
+        "Lead Role",
+        "Execution Role",
+        "Verification Role",
+        "Completion Role",
+        "Release Role",
+        "Ops Governance Role"
+      ]
+    }
+  }
+}

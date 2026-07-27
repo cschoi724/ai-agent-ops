@@ -1,0 +1,382 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/task.schema.json",
+  "title": "AI Ops Task Front Matter",
+  "description": "Schema for YAML front matter in .ai_project task Markdown files.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema",
+    "id",
+    "title",
+    "status",
+    "workflow",
+    "target_role",
+    "required_capabilities"
+  ],
+  "properties": {
+    "schema": {
+      "const": "aiops.task.v1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^T-[0-9]{8}-[0-9]{3,}$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "$ref": "#/$defs/taskStatus"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "feature",
+        "bugfix",
+        "docs",
+        "ops_migration",
+        "research",
+        "refactor",
+        "test",
+        "release",
+        "custom"
+      ]
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "deferred"
+      ]
+    },
+    "priority_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "org_unit": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "team": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "team_lead": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "workflow": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_agent": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "target_role": {
+      "$ref": "#/$defs/roleName"
+    },
+    "required_capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "ownership": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "paths": {
+          "$ref": "#/$defs/stringList"
+        },
+        "domains": {
+          "$ref": "#/$defs/stringList"
+        },
+        "documents": {
+          "$ref": "#/$defs/stringList"
+        }
+      }
+    },
+    "ownership_review": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "reviewer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "depends_on": {
+      "$ref": "#/$defs/taskIdList"
+    },
+    "blocks": {
+      "$ref": "#/$defs/taskIdList"
+    },
+    "parallel_group": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "allowed_paths": {
+      "$ref": "#/$defs/stringList"
+    },
+    "source_of_truth": {
+      "$ref": "#/$defs/stringList"
+    },
+    "created_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "approved_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "locked_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "locked_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "lock_session": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "lock_timeout_minutes": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "created_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "updated_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "report_to": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "qa_to": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "branch": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "base": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "pr": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            null,
+            "not_opened",
+            "opened",
+            "closed",
+            "merged"
+          ]
+        }
+      }
+    },
+    "blocker": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "next_decision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "approved",
+              "in_progress"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "allowed_paths",
+          "source_of_truth",
+          "report_to"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "verification_ready",
+              "verification_in_progress",
+              "verification_passed"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "qa_to"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "blocked"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "blocker",
+          "next_decision"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "taskStatus": {
+      "type": "string",
+      "enum": [
+        "proposed",
+        "scoped",
+        "approved",
+        "in_progress",
+        "verification_ready",
+        "verification_in_progress",
+        "verification_passed",
+        "completion_review",
+        "done",
+        "blocked",
+        "rework_requested",
+        "cancelled"
+      ]
+    },
+    "roleName": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "Direction Role",
+        "Lead Role",
+        "Execution Role",
+        "Verification Role",
+        "Completion Role",
+        "Release Role",
+        "Ops Governance Role",
+        "any"
+      ]
+    },
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "taskIdList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^T-[0-9]{8}-[0-9]{3,}$"
+      },
+      "uniqueItems": true
+    }
+  }
+}

@@ -10,10 +10,24 @@ Usage:
   aiops doctor [--target DIR] [--strict]
   aiops migrate [--target DIR] [--plan|--apply]
   aiops bootstrap-guide [--target DIR]
-  aiops validate task FILE
+  aiops session-guide [--target DIR]
+  aiops role prompt ROLE [--target DIR] [--task TASK_ID] [--adapter codex|claude|generic] [--agent NAME]
+  aiops validate [project] [--target DIR] [--strict]
+  aiops validate task FILE [--strict]
+  aiops validate handoff FILE [--strict]
+  aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
+  aiops task status TASK_ID [--target DIR]
+  aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT]
+  aiops task lock TASK_ID --by AGENT [--target DIR] [--role ROLE] [--session ID]
+  aiops task unlock TASK_ID --by AGENT [--target DIR]
+  aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT [--target DIR]
+  aiops handoff validate FILE|TASK_ID [--target DIR] [--strict]
   aiops knowledge init [--target DIR] [--mode minimal|full] [--force]
+  aiops knowledge pack TOPIC [--target DIR] [--create] [--task TASK_ID] [--source PATH] [--purpose TEXT]
   aiops knowledge lint [--target DIR]
   aiops knowledge status [--target DIR]
+  aiops ci init [--target DIR] [--provider github] [--force]
+  aiops export runtime [--target DIR] [--output FILE]
   aiops version [--core DIR]
   aiops update [--core DIR] [--check]
   aiops release-check [--core DIR] [--strict] [--allow-pending-release]
@@ -31,10 +45,21 @@ Examples:
   aiops seed --adapter both --mode copy
   aiops doctor
   aiops migrate --plan
+  aiops validate --strict
+  aiops validate project --target /path/to/project --strict
   aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
+  aiops validate handoff .ai_project/handoffs/T-YYYYMMDD-001_execution_to_verification.md --strict
+  aiops task create --title "로그인 화면 구현" --workflow feature --role "Lead Role"
+  aiops task transition T-YYYYMMDD-001 --to approved --role "Direction Role"
+  aiops handoff create T-YYYYMMDD-001 --from "Execution Role" --to "Verification Role" --next-action "변경 결과 검증"
   aiops knowledge init --mode minimal
+  aiops knowledge pack ios_login --create --task T-YYYYMMDD-001
   aiops knowledge lint
+  aiops ci init
+  aiops export runtime
   aiops bootstrap-guide
+  aiops session-guide
+  aiops role prompt execution --task T-YYYYMMDD-001 --adapter codex
   aiops update --check
   aiops release-check --strict
 EOF
@@ -121,9 +146,286 @@ task_has_field() {
   grep -q "^$field:" "$file"
 }
 
+validate_front_matter() {
+  subject="$1"
+  file="$2"
+  strict="${3:-no}"
+
+  ruby -ryaml -rdate -e '
+    subject = ARGV[0]
+    path = ARGV[1]
+    strict = ARGV[2] == "yes"
+
+    statuses = %w[
+      proposed scoped approved in_progress verification_ready
+      verification_in_progress verification_passed completion_review done
+      blocked rework_requested cancelled
+    ]
+    roles = [
+      "Direction Role", "Lead Role", "Execution Role", "Verification Role",
+      "Completion Role", "Release Role", "Ops Governance Role", "Product Owner",
+      "any", nil
+    ]
+    task_id_pattern = /\AT-[0-9]{8}-[0-9]{3,}\z/
+
+    def say(message)
+      STDOUT.puts(message)
+    end
+
+    def fail_with(message)
+      STDOUT.puts(message)
+      exit 1
+    end
+
+    def extract_front_matter(path)
+      text = File.read(path)
+      return [nil, text] unless text.start_with?("---\n")
+      lines = text.lines
+      closing = nil
+      lines[1..].each_with_index do |line, idx|
+        if line.strip == "---"
+          closing = idx + 1
+          break
+        end
+      end
+      return [nil, text] unless closing
+      [lines[1...closing].join, lines[(closing + 1)..]&.join.to_s]
+    end
+
+    def parse_yaml_map(source, path)
+      data = YAML.safe_load(source, permitted_classes: [Date, Time, Symbol], aliases: true)
+      return {} if data.nil?
+      return data if data.is_a?(Hash)
+      fail_with("schema_error: front matter is not a mapping: #{path}")
+    rescue Psych::SyntaxError => e
+      fail_with("schema_error: invalid YAML front matter: #{path}: #{e.message.lines.first.to_s.strip}")
+    end
+
+    def scalar_present?(value)
+      !value.nil? && !(value.respond_to?(:empty?) && value.empty?)
+    end
+
+    def array_present?(value)
+      value.is_a?(Array) && value.any?
+    end
+
+    front, body = extract_front_matter(path)
+    if front
+      data = parse_yaml_map(front, path)
+    else
+      # Backward compatibility for older task files that were plain metadata
+      # lines without YAML front matter.
+      data = parse_yaml_map(body, path)
+      say("note: YAML front matter missing; legacy metadata mode")
+    end
+
+    failed = false
+
+    case subject
+    when "task"
+      required = %w[id status workflow target_role required_capabilities]
+      if front
+        required = ["schema"] + required
+      end
+      required.each do |field|
+        ok =
+          if field == "required_capabilities"
+            array_present?(data[field])
+          elsif field == "target_role"
+            data.key?(field)
+          else
+            scalar_present?(data[field])
+          end
+        if ok
+          say("ok: #{field}")
+        else
+          say("missing: #{field}")
+          failed = true
+        end
+      end
+
+      if front && data["schema"] && data["schema"] != "aiops.task.v1"
+        say("schema_error: schema must be aiops.task.v1")
+        failed = true
+      end
+      if data["id"] && data["id"] !~ task_id_pattern
+        say("schema_error: invalid id #{data["id"]}")
+        failed = true
+      end
+      if data["status"] && !statuses.include?(data["status"])
+        say("schema_error: invalid status #{data["status"]}")
+        failed = true
+      end
+      if data["target_role"] && !roles.include?(data["target_role"])
+        say("schema_error: invalid target_role #{data["target_role"]}")
+        failed = true
+      end
+      if !%w[done cancelled].include?(data["status"]) && !scalar_present?(data["target_role"])
+        say("schema_error: target_role required for status #{data["status"]}")
+        failed = true
+      end
+      if data.key?("required_capabilities") && !array_present?(data["required_capabilities"])
+        say("schema_error: required_capabilities must be a non-empty list")
+        failed = true
+      end
+
+      case data["status"]
+      when "approved", "in_progress"
+        %w[allowed_paths source_of_truth report_to].each do |field|
+          ok = field == "report_to" ? scalar_present?(data[field]) : array_present?(data[field])
+          if ok
+            say("ok: #{field}")
+          else
+            say("missing: #{field} required for status #{data["status"]}")
+            failed = true
+          end
+        end
+      when "verification_ready", "verification_in_progress", "verification_passed"
+        if scalar_present?(data["qa_to"])
+          say("ok: qa_to")
+        else
+          say("missing: qa_to required for status #{data["status"]}")
+          failed = true
+        end
+      when "blocked"
+        %w[blocker next_decision].each do |field|
+          if scalar_present?(data[field])
+            say("ok: #{field}")
+          else
+            say("missing: #{field} required for status blocked")
+            failed = true
+          end
+        end
+      end
+    when "operating_model"
+      required = %w[
+        schema project bootstrap_mode core_version start_context readiness_level
+        operating_mode team_pattern workflow_policy ownership_model coordination
+        board_model knowledge_mode
+      ]
+      required.each do |field|
+        if scalar_present?(data[field])
+          say("ok: #{field}")
+        else
+          say("missing: #{field}")
+          failed = true
+        end
+      end
+
+      enums = {
+        "schema" => ["aiops.operating_model.v1"],
+        "bootstrap_mode" => %w[fast_track guided_full manual migrated],
+        "start_context" => %w[
+          new_project_with_requirement assigned_or_existing_project blank_slate_discovery
+          rescue_or_recovery migration_or_modernization ops_setup_only
+          scale_up_existing_ops custom_start_context
+        ],
+        "readiness_level" => %w[
+          idea_only idea_structured planning_ready implementation_ready
+          existing_project_scan_required discovery_required recovery_required ops_only
+        ],
+        "operating_mode" => %w[solo_light team_basic team_pr multi_team enterprise],
+        "team_pattern" => %w[single_team functional_teams platform_teams cross_functional custom],
+        "workflow_policy" => %w[standard_vnext skip_scoped_for_simple_tasks custom],
+        "ownership_model" => %w[path_only path_plus_domain document_ownership strict_parallel_control custom],
+        "coordination" => %w[single_active_task parallel_with_locks team_board_coordination custom],
+        "board_model" => %w[project_board_only project_plus_team_board custom_views],
+        "knowledge_mode" => %w[minimal indexed context_packs external_source_of_truth custom]
+      }
+      enums.each do |field, allowed|
+        next unless data[field]
+        next if allowed.include?(data[field])
+        say("schema_error: invalid #{field} #{data[field]}")
+        failed = true
+      end
+    when "agent_registry"
+      %w[schema project agents].each do |field|
+        ok = field == "agents" ? array_present?(data[field]) : scalar_present?(data[field])
+        if ok
+          say("ok: #{field}")
+        else
+          say("missing: #{field}")
+          failed = true
+        end
+      end
+      if data["schema"] && data["schema"] != "aiops.agent_registry.v1"
+        say("schema_error: schema must be aiops.agent_registry.v1")
+        failed = true
+      end
+      if data["agents"].is_a?(Array)
+        data["agents"].each_with_index do |agent, idx|
+          unless agent.is_a?(Hash)
+            say("schema_error: agents[#{idx}] must be a mapping")
+            failed = true
+            next
+          end
+          %w[agent status roles].each do |field|
+            ok = field == "roles" ? array_present?(agent[field]) : scalar_present?(agent[field])
+            unless ok
+              say("missing: agents[#{idx}].#{field}")
+              failed = true
+            end
+          end
+          if agent["roles"].is_a?(Array)
+            agent["roles"].each do |role|
+              next if roles.include?(role) && role != "Product Owner" && role != "any"
+              say("schema_error: invalid agents[#{idx}].roles #{role}")
+              failed = true
+            end
+          end
+        end
+      end
+    when "handoff"
+      required = %w[
+        schema task_id from_role to_role current_status next_action
+        source_of_truth allowed_paths
+      ]
+      required.each do |field|
+        ok =
+          case field
+          when "source_of_truth", "allowed_paths" then array_present?(data[field])
+          else scalar_present?(data[field])
+          end
+        if ok
+          say("ok: #{field}")
+        else
+          say("missing: #{field}")
+          failed = true
+        end
+      end
+      if data["schema"] && data["schema"] != "aiops.handoff.v1"
+        say("schema_error: schema must be aiops.handoff.v1")
+        failed = true
+      end
+      if data["task_id"] && data["task_id"] !~ task_id_pattern
+        say("schema_error: invalid task_id #{data["task_id"]}")
+        failed = true
+      end
+      if data["current_status"] && !statuses.include?(data["current_status"])
+        say("schema_error: invalid current_status #{data["current_status"]}")
+        failed = true
+      end
+      %w[from_role to_role].each do |field|
+        next unless data[field]
+        next if roles.include?(data[field]) && data[field] != "any"
+        say("schema_error: invalid #{field} #{data[field]}")
+        failed = true
+      end
+    else
+      fail_with("schema_error: unknown validate subject #{subject}")
+    end
+
+    if strict && front.nil?
+      say("schema_error: YAML front matter required in strict mode")
+      failed = true
+    end
+
+    exit(failed ? 1 : 0)
+  ' "$subject" "$file" "$strict"
+}
+
 validate_task_file() {
   task="$1"
-  failed=0
 
   [ -f "$task" ] || {
     info "missing: $task"
@@ -133,54 +435,405 @@ validate_task_file() {
   info "AI Ops task validate"
   info "task: $task"
 
-  for field in id status workflow target_role required_capabilities; do
-    if task_has_field "$task" "$field"; then
-      info "ok: $field"
+  validate_front_matter task "$task" no || return 1
+  info "ok: task metadata"
+}
+
+validate_project() {
+  target="$1"
+  strict="$2"
+  failed=0
+
+  target="$(abs_path "$target")"
+  project_dir="$target/.ai_project"
+
+  info "AI Ops project validate"
+  info "target: $target"
+  info "strict: $strict"
+
+  if [ ! -d "$project_dir" ]; then
+    info "missing: .ai_project"
+    return 1
+  fi
+  info "ok: .ai_project"
+
+  mode="$(detect_ai_project_mode "$project_dir")"
+  info "mode: $mode"
+
+  operating_model="$project_dir/operating_model.md"
+  agent_registry="$project_dir/agent_registry.md"
+
+  if [ -f "$operating_model" ]; then
+    info ""
+    info "validate: operating_model"
+    validate_front_matter operating_model "$operating_model" "$strict" || failed=1
+  else
+    info "missing: .ai_project/operating_model.md"
+    failed=1
+  fi
+
+  if [ -f "$agent_registry" ]; then
+    info ""
+    info "validate: agent_registry"
+    validate_front_matter agent_registry "$agent_registry" "$strict" || failed=1
+  else
+    info "missing: .ai_project/agent_registry.md"
+    failed=1
+  fi
+
+  for required in \
+    "$project_dir/current_context.md" \
+    "$project_dir/source_of_truth.md" \
+    "$project_dir/task_board.md" \
+    "$project_dir/ops_decisions.md" \
+    "$project_dir/ops_issues.md" \
+    "$project_dir/tasks"
+  do
+    if [ -d "$required" ]; then
+      check_required_dir "$required" "${required#$target/}" || failed=1
     else
-      info "missing: $field"
-      failed=1
+      check_required_file "$required" "${required#$target/}" || failed=1
     fi
   done
 
-  status="$(task_field_value "$task" "status")"
-  case "$status" in
-    approved|in_progress)
-      for field in allowed_paths source_of_truth report_to; do
-        if task_has_field "$task" "$field"; then
-          info "ok: $field"
-        else
-          info "missing: $field required for status $status"
-          failed=1
-        fi
-      done
-      ;;
-    verification_ready|verification_in_progress|verification_passed)
-      if task_has_field "$task" "qa_to"; then
-        info "ok: qa_to"
+  if [ "$mode" = "guided_full" ]; then
+    for required in \
+      "$project_dir/branch_pr_strategy.md" \
+      "$project_dir/workflow_overrides.md" \
+      "$project_dir/ops_migration_plan.md"
+    do
+      check_required_file "$required" "${required#$target/}" || failed=1
+    done
+  else
+    for optional in \
+      "$project_dir/branch_pr_strategy.md" \
+      "$project_dir/workflow_overrides.md" \
+      "$project_dir/ops_migration_plan.md"
+    do
+      if [ -e "$optional" ]; then
+        info "ok: optional ${optional#$target/}"
       else
-        info "missing: qa_to required for status $status"
-        failed=1
+        info "note: optional for fast_track missing ${optional#$target/}"
       fi
-      ;;
-    blocked)
-      for field in blocker next_decision; do
-        if task_has_field "$task" "$field"; then
-          info "ok: $field"
-        else
-          info "missing: $field required for status blocked"
-          failed=1
-        fi
-      done
-      ;;
-    "")
-      ;;
-    *)
-      info "note: no status-specific checks for $status"
+    done
+  fi
+
+  for task_dir in "$project_dir/tasks/active" "$project_dir/tasks/backlog" "$project_dir/tasks/archive"; do
+    check_required_dir "$task_dir" "${task_dir#$target/}" || failed=1
+  done
+
+  if [ -d "$project_dir/tasks" ]; then
+    found_tasks="no"
+    find "$project_dir/tasks" -type f -name '*.md' | while IFS= read -r task; do
+      found_tasks="yes"
+      info ""
+      validate_task_file "$task" || exit 1
+    done || failed=1
+  fi
+
+  [ "$failed" -eq 0 ] || return 1
+  info ""
+  info "ok: project validate"
+}
+
+task_find_file() {
+  target="$1"
+  task_id="$2"
+  task_dir="$target/.ai_project/tasks"
+
+  [ -d "$task_dir" ] || return 1
+
+  if [ -f "$task_dir/active/$task_id.md" ]; then
+    printf '%s\n' "$task_dir/active/$task_id.md"
+    return 0
+  fi
+  if [ -f "$task_dir/backlog/$task_id.md" ]; then
+    printf '%s\n' "$task_dir/backlog/$task_id.md"
+    return 0
+  fi
+  if [ -f "$task_dir/archive/$task_id.md" ]; then
+    printf '%s\n' "$task_dir/archive/$task_id.md"
+    return 0
+  fi
+
+  found="$(find "$task_dir" -type f -name "$task_id*.md" | sort | head -n 1 || true)"
+  [ -n "$found" ] || return 1
+  printf '%s\n' "$found"
+}
+
+task_next_id() {
+  target="$1"
+  date_compact="$2"
+
+  ruby -e '
+    root = ARGV[0]
+    date = ARGV[1]
+    max = 0
+    Dir.glob(File.join(root, ".ai_project/tasks/**/*")).each do |path|
+      name = File.basename(path, ".md")
+      match = name.match(/\AT-#{Regexp.escape(date)}-(\d{3,})/)
+      max = [max, match[1].to_i].max if match
+    end
+    puts format("T-%s-%03d", date, max + 1)
+  ' "$target" "$date_compact"
+}
+
+task_yaml_field() {
+  file="$1"
+  field="$2"
+
+  ruby -ryaml -rdate -e '
+    path = ARGV[0]
+    field = ARGV[1]
+    text = File.read(path)
+    front = nil
+    if text.start_with?("---\n")
+      lines = text.lines
+      closing = nil
+      lines[1..].each_with_index do |line, idx|
+        if line.strip == "---"
+          closing = idx + 1
+          break
+        end
+      end
+      front = lines[1...closing].join if closing
+    else
+      front = text
+    end
+    data = front ? YAML.safe_load(front, permitted_classes: [Date, Time, Symbol], aliases: true) : {}
+    data = {} unless data.is_a?(Hash)
+    value = data[field]
+    if value.is_a?(Array)
+      puts value.join(", ")
+    elsif value.nil?
+      puts ""
+    else
+      puts value
+    end
+  ' "$file" "$field"
+}
+
+task_update_front_matter() {
+  file="$1"
+  shift
+
+  ruby -ryaml -rdate -e '
+    path = ARGV.shift
+    updates = {}
+    ARGV.each do |pair|
+      key, value = pair.split("=", 2)
+      updates[key] = value == "__AIOPS_NULL__" ? nil : value
+    end
+
+    text = File.read(path)
+    unless text.start_with?("---\n")
+      STDERR.puts("error: YAML front matter required: #{path}")
+      exit 1
+    end
+
+    lines = text.lines
+    closing = nil
+    lines[1..].each_with_index do |line, idx|
+      if line.strip == "---"
+        closing = idx + 1
+        break
+      end
+    end
+    unless closing
+      STDERR.puts("error: YAML front matter closing marker missing: #{path}")
+      exit 1
+    end
+
+    front = lines[1...closing].join
+    body = lines[(closing + 1)..]&.join.to_s
+    data = YAML.safe_load(front, permitted_classes: [Date, Time, Symbol], aliases: true)
+    data = {} unless data.is_a?(Hash)
+    updates.each { |key, value| data[key] = value }
+    File.write(path, YAML.dump(data) + "---\n" + body)
+  ' "$file" "$@"
+}
+
+task_append_event() {
+  file="$1"
+  event="$2"
+  actor="$3"
+  reason="$4"
+  date_value="$(date +%Y-%m-%d)"
+
+  if ! grep -q '^## AI Ops CLI 기록' "$file"; then
+    {
+      printf '\n## AI Ops CLI 기록\n\n'
+      printf '| 날짜 | Actor | Event | Reason |\n'
+      printf '|---|---|---|---|\n'
+    } >> "$file"
+  fi
+  printf '| %s | %s | %s | %s |\n' "$date_value" "$actor" "$event" "$reason" >> "$file"
+}
+
+task_next_role_for_status() {
+  status="$1"
+  case "$status" in
+    proposed) printf '%s\n' "Lead Role" ;;
+    scoped) printf '%s\n' "Direction Role" ;;
+    approved) printf '%s\n' "Execution Role" ;;
+    in_progress) printf '%s\n' "Execution Role" ;;
+    verification_ready) printf '%s\n' "Verification Role" ;;
+    verification_in_progress) printf '%s\n' "Verification Role" ;;
+    verification_passed) printf '%s\n' "Completion Role" ;;
+    completion_review) printf '%s\n' "Completion Role" ;;
+    rework_requested) printf '%s\n' "Lead Role" ;;
+    blocked) printf '%s\n' "Lead Role" ;;
+    done|cancelled) printf '%s\n' "" ;;
+    *) printf '%s\n' "" ;;
+  esac
+}
+
+task_transition_allowed() {
+  from="$1"
+  to="$2"
+  role="$3"
+
+  case "$from:$to:$role" in
+    proposed:scoped:"Lead Role"|proposed:scoped:"Direction Role") return 0 ;;
+    proposed:approved:"Direction Role"|proposed:approved:"Lead Role"|proposed:approved:"Product Owner") return 0 ;;
+    proposed:cancelled:"Direction Role"|proposed:cancelled:"Product Owner"|proposed:blocked:*) return 0 ;;
+    scoped:approved:"Direction Role"|scoped:approved:"Lead Role"|scoped:approved:"Product Owner") return 0 ;;
+    scoped:cancelled:"Direction Role"|scoped:cancelled:"Product Owner"|scoped:blocked:*) return 0 ;;
+    approved:in_progress:"Execution Role"|approved:cancelled:"Direction Role"|approved:cancelled:"Product Owner"|approved:blocked:*) return 0 ;;
+    in_progress:verification_ready:"Execution Role"|in_progress:blocked:*) return 0 ;;
+    verification_ready:verification_in_progress:"Verification Role"|verification_ready:blocked:*) return 0 ;;
+    verification_in_progress:verification_passed:"Verification Role"|verification_in_progress:rework_requested:"Verification Role"|verification_in_progress:blocked:*) return 0 ;;
+    verification_passed:completion_review:"Completion Role"|verification_passed:blocked:*) return 0 ;;
+    completion_review:done:"Completion Role"|completion_review:done:"Lead Role"|completion_review:done:"Product Owner") return 0 ;;
+    completion_review:rework_requested:"Completion Role"|completion_review:rework_requested:"Lead Role"|completion_review:blocked:*) return 0 ;;
+    rework_requested:scoped:"Lead Role"|rework_requested:approved:"Lead Role"|rework_requested:approved:"Direction Role"|rework_requested:blocked:*) return 0 ;;
+    blocked:scoped:"Lead Role"|blocked:approved:"Lead Role"|blocked:in_progress:"Execution Role"|blocked:cancelled:"Direction Role"|blocked:cancelled:"Product Owner") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+task_require_project() {
+  target="$1"
+  [ -d "$target/.ai_project/tasks" ] || die ".ai_project/tasks missing; bootstrap or migrate project first"
+  mkdir -p "$target/.ai_project/tasks/active" "$target/.ai_project/tasks/backlog" "$target/.ai_project/tasks/archive"
+}
+
+role_slug() {
+  printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/ role$//; s/[^a-z0-9]/_/g; s/_\{2,\}/_/g; s/^_//; s/_$//'
+}
+
+handoff_find_file() {
+  target="$1"
+  value="$2"
+
+  if [ -f "$value" ]; then
+    abs_path "$value"
+    return 0
+  fi
+
+  case "$value" in
+    /*)
+      [ -f "$value" ] || return 1
+      printf '%s\n' "$value"
+      return 0
       ;;
   esac
 
-  [ "$failed" -eq 0 ] || return 1
-  info "ok: task metadata"
+  if [ -f "$target/$value" ]; then
+    printf '%s\n' "$target/$value"
+    return 0
+  fi
+
+  handoff_dir="$target/.ai_project/handoffs"
+  [ -d "$handoff_dir" ] || return 1
+  found="$(find "$handoff_dir" -type f -name "$value*.md" | sort | tail -n 1 || true)"
+  [ -n "$found" ] || return 1
+  printf '%s\n' "$found"
+}
+
+normalize_role_name() {
+  role="$(printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[ _-]/ /g; s/[[:space:]]\{1,\}/ /g; s/^ //; s/ $//')"
+  case "$role" in
+    direction|"direction role"|pm|product|"product owner") printf '%s\n' "Direction Role" ;;
+    lead|"lead role"|"team lead"|"pm lead") printf '%s\n' "Lead Role" ;;
+    execution|"execution role"|dev|developer|development|implementation) printf '%s\n' "Execution Role" ;;
+    verification|"verification role"|qa|test|review) printf '%s\n' "Verification Role" ;;
+    completion|"completion role"|complete|done) printf '%s\n' "Completion Role" ;;
+    release|"release role") printf '%s\n' "Release Role" ;;
+    ops|"ops governance"|"ops governance role"|"ai ops"|aiops) printf '%s\n' "Ops Governance Role" ;;
+    *) return 1 ;;
+  esac
+}
+
+role_default_agent() {
+  role="$1"
+  case "$role" in
+    "Direction Role") printf '%s\n' "PM Agent" ;;
+    "Lead Role") printf '%s\n' "Lead Agent" ;;
+    "Execution Role") printf '%s\n' "Development Agent" ;;
+    "Verification Role") printf '%s\n' "QA Agent" ;;
+    "Completion Role") printf '%s\n' "Completion Agent" ;;
+    "Release Role") printf '%s\n' "Release Agent" ;;
+    "Ops Governance Role") printf '%s\n' "AI Ops Agent" ;;
+    *) printf '%s\n' "AI Agent" ;;
+  esac
+}
+
+role_responsibility_text() {
+  role="$1"
+  case "$role" in
+    "Direction Role")
+      cat <<'EOF'
+- 요구를 Task 후보로 정리한다.
+- 우선순위, 승인 필요 여부, 성공 기준을 확인한다.
+- 사용자 승인 없이 Task를 approved로 넘기지 않는다.
+EOF
+      ;;
+    "Lead Role")
+      cat <<'EOF'
+- Task 범위, ownership, dependency, allowed_paths, source_of_truth를 조율한다.
+- 실행 가능한 Task를 Execution Role로 인계한다.
+- blocked/rework Task의 재조율을 담당한다.
+EOF
+      ;;
+    "Execution Role")
+      cat <<'EOF'
+- 승인된 Task만 실행한다.
+- allowed_paths 안에서만 파일을 수정한다.
+- 구현 후 자체 검증과 작업 보고를 남기고 Verification Role로 인계한다.
+- 독립 검증이나 완료 확정을 대신하지 않는다.
+EOF
+      ;;
+    "Verification Role")
+      cat <<'EOF'
+- verification_ready Task만 독립적으로 검증한다.
+- PASS, PASS_WITH_RISK, FAIL, BLOCKED 결과를 명확히 기록한다.
+- 수정 필요 시 rework_requested로 Lead Role에게 넘긴다.
+- Completion 판단을 대신하지 않는다.
+EOF
+      ;;
+    "Completion Role")
+      cat <<'EOF'
+- verification_passed Task의 완료 확정 여부를 판단한다.
+- 잔여 리스크, 후속 Task, release 영향을 확인한다.
+- 완료 가능할 때만 done으로 전환한다.
+EOF
+      ;;
+    "Release Role")
+      cat <<'EOF'
+- 배포 준비, release gate, rollback/운영 인계를 확인한다.
+- 실제 release workflow가 활성화된 Task만 다룬다.
+- 사용자 승인 없이 배포하지 않는다.
+EOF
+      ;;
+    "Ops Governance Role")
+      cat <<'EOF'
+- AI Ops 운영모델, migration, 정책 충돌, adapter 상태를 점검한다.
+- 제품 Task 실행 라인의 구현/검증/완료 판단을 대신하지 않는다.
+- .ai/ 코어 수정은 운영자 승인 후에만 진행한다.
+EOF
+      ;;
+  esac
 }
 
 render_template_file() {
@@ -271,6 +924,63 @@ project_needs_core_version_update() {
   esac
 }
 
+file_has_schema_value() {
+  file="$1"
+  expected="$2"
+
+  [ -f "$file" ] || return 1
+  awk -v expected="$expected" '
+    NR == 1 && $0 == "---" { in_front_matter=1; next }
+    in_front_matter && $0 == "---" { exit }
+    in_front_matter && $1 == "schema:" {
+      if ($2 == expected) {
+        found=1
+      }
+      exit
+    }
+    END { exit(found ? 0 : 1) }
+  ' "$file"
+}
+
+missing_task_schema_count() {
+  target="$1"
+  task_root="$target/.ai_project/tasks"
+
+  [ -d "$task_root" ] || {
+    printf '%s\n' "0"
+    return 0
+  }
+
+  find "$task_root" -type f -name '*.md' -print | while IFS= read -r task_file; do
+    if ! file_has_schema_value "$task_file" "aiops.task.v1"; then
+      printf '%s\n' "$task_file"
+    fi
+  done | wc -l | tr -d ' '
+}
+
+project_needs_review_decision() {
+  target="$1"
+  project_dir="$target/.ai_project"
+
+  if [ -f "$project_dir/operating_model.md" ] && ! file_has_schema_value "$project_dir/operating_model.md" "aiops.operating_model.v1"; then
+    return 0
+  fi
+  if [ -f "$project_dir/agent_registry.md" ] && ! file_has_schema_value "$project_dir/agent_registry.md" "aiops.agent_registry.v1"; then
+    return 0
+  fi
+  if [ "$(missing_task_schema_count "$target")" -gt 0 ]; then
+    return 0
+  fi
+  if [ -f "$target/AGENTS.md" ] && [ -f "$target/.ai/templates/tool_adapters/codex/AGENTS.md" ] && ! same_file_content "$target/AGENTS.md" "$target/.ai/templates/tool_adapters/codex/AGENTS.md"; then
+    return 0
+  fi
+  if [ -f "$target/CLAUDE.md" ] && [ -f "$target/.ai/templates/tool_adapters/claude/CLAUDE.md" ] && ! same_file_content "$target/CLAUDE.md" "$target/.ai/templates/tool_adapters/claude/CLAUDE.md"; then
+    return 0
+  fi
+
+  return 1
+}
+
 update_operating_model_core_version() {
   operating_model="$1"
   current_version="$2"
@@ -280,6 +990,14 @@ update_operating_model_core_version() {
   if grep -q '|[[:space:]]*core_version[[:space:]]*|' "$operating_model"; then
     awk -F'|' -v version="$current_version" -v core_source="$core_source" '
       BEGIN { OFS="|" }
+      /^core_version:/ {
+        print "core_version: " version
+        next
+      }
+      /^core_source:/ {
+        print "core_source: " core_source
+        next
+      }
       $0 ~ /^\|/ {
         key=$2
         gsub(/^[ \t]+|[ \t]+$/, "", key)
@@ -331,6 +1049,10 @@ print_migration_lists() {
       safe_count=$((safe_count + 1))
     fi
   done
+  if [ ! -d "$target/.ai_project/handoffs" ]; then
+    info "  - .ai_project/handoffs"
+    safe_count=$((safe_count + 1))
+  fi
   for file in "$target/.ai_project/ops_migration_plan.md" "$target/.ai_project/ops_decisions.md" "$target/.ai_project/ops_issues.md"; do
     if [ ! -f "$file" ]; then
       info "  - ${file#$target/}"
@@ -340,28 +1062,49 @@ print_migration_lists() {
   if [ ! -d "$target/.ai_knowledge" ]; then
     info "  - .ai_knowledge minimal workspace"
     safe_count=$((safe_count + 1))
+  elif [ ! -d "$target/.ai_knowledge/context_packs" ]; then
+    info "  - .ai_knowledge/context_packs"
+    safe_count=$((safe_count + 1))
+  elif [ ! -f "$target/.ai_knowledge/context_packs/_template.md" ]; then
+    info "  - .ai_knowledge/context_packs/_template.md"
+    safe_count=$((safe_count + 1))
   fi
   if [ "$safe_count" -eq 0 ]; then
     info "  - none"
   fi
 
   info "needs_user_decision:"
+  decision_count=0
+  if [ -f "$operating_model" ] && ! file_has_schema_value "$operating_model" "aiops.operating_model.v1"; then
+    info "  - operating_model.md schema front matter adoption"
+    decision_count=$((decision_count + 1))
+  fi
+  if [ -f "$target/.ai_project/agent_registry.md" ] && ! file_has_schema_value "$target/.ai_project/agent_registry.md" "aiops.agent_registry.v1"; then
+    info "  - agent_registry.md schema front matter adoption"
+    decision_count=$((decision_count + 1))
+  fi
+  task_schema_missing="$(missing_task_schema_count "$target")"
+  if [ "$task_schema_missing" -gt 0 ]; then
+    info "  - Task schema/front matter adoption ($task_schema_missing files)"
+    decision_count=$((decision_count + 1))
+  fi
   if [ -f "$target/AGENTS.md" ] && [ -f "$target/.ai/templates/tool_adapters/codex/AGENTS.md" ] && ! same_file_content "$target/AGENTS.md" "$target/.ai/templates/tool_adapters/codex/AGENTS.md"; then
     info "  - AGENTS.md adapter update"
-  else
-    info "  - none_detected_for_codex_adapter"
+    decision_count=$((decision_count + 1))
   fi
   if [ -f "$target/CLAUDE.md" ] && [ -f "$target/.ai/templates/tool_adapters/claude/CLAUDE.md" ] && ! same_file_content "$target/CLAUDE.md" "$target/.ai/templates/tool_adapters/claude/CLAUDE.md"; then
     info "  - CLAUDE.md adapter update"
-  else
-    info "  - none_detected_for_claude_adapter"
+    decision_count=$((decision_count + 1))
   fi
-  info "  - source_of_truth changes require user decision"
-  info "  - Task metadata auto-fill requires user decision"
+  if [ "$decision_count" -eq 0 ]; then
+    info "  - none"
+  fi
 
   info "manual_only:"
   info "  - product code"
   info "  - product Docs"
+  info "  - source_of_truth changes"
+  info "  - Task metadata auto-fill"
   info "  - Task status"
   info "  - Role / Agent mapping"
   info "  - branch / PR strategy"
@@ -375,6 +1118,7 @@ print_migration_lists() {
     info "  - .ai_project/ops_decisions.md"
     info "  - .ai_project/ops_issues.md"
     info "  - .ai_project/tasks/"
+    info "  - .ai_project/handoffs/"
     info "  - .ai_knowledge/"
   fi
 }
@@ -425,6 +1169,13 @@ cmd_migrate_verify() {
     fi
   done
 
+  if [ -d "$target/.ai_project/handoffs" ]; then
+    info "ok: .ai_project/handoffs"
+  else
+    info "missing: .ai_project/handoffs"
+    failed=1
+  fi
+
   for file in "$target/.ai_project/ops_migration_plan.md" "$target/.ai_project/ops_decisions.md" "$target/.ai_project/ops_issues.md"; do
     if [ -f "$file" ]; then
       info "ok: ${file#$target/}"
@@ -441,7 +1192,31 @@ cmd_migrate_verify() {
     info "needs_user_decision: CLAUDE.md adapter update"
   fi
 
+  if [ -f "$operating_model" ] && ! file_has_schema_value "$operating_model" "aiops.operating_model.v1"; then
+    info "needs_user_decision: operating_model.md schema front matter adoption"
+  fi
+  if [ -f "$target/.ai_project/agent_registry.md" ] && ! file_has_schema_value "$target/.ai_project/agent_registry.md" "aiops.agent_registry.v1"; then
+    info "needs_user_decision: agent_registry.md schema front matter adoption"
+  fi
+  task_schema_missing="$(missing_task_schema_count "$target")"
+  if [ "$task_schema_missing" -gt 0 ]; then
+    info "needs_user_decision: Task schema/front matter adoption ($task_schema_missing files)"
+  fi
+
   cmd_knowledge lint --target "$target" || failed=1
+
+  if [ -d "$target/.ai_knowledge/context_packs" ]; then
+    info "ok: .ai_knowledge/context_packs"
+  else
+    info "missing: .ai_knowledge/context_packs"
+    failed=1
+  fi
+  if [ -f "$target/.ai_knowledge/context_packs/_template.md" ]; then
+    info "ok: .ai_knowledge/context_packs/_template.md"
+  else
+    info "missing: .ai_knowledge/context_packs/_template.md"
+    failed=1
+  fi
 
   [ "$failed" -eq 0 ] || return 1
   info "verification: passed"
@@ -503,7 +1278,15 @@ cmd_migrate() {
     for file in "$target/.ai_project/ops_migration_plan.md" "$target/.ai_project/ops_decisions.md" "$target/.ai_project/ops_issues.md"; do
       [ -f "$file" ] || status="migration_needed"
     done
+    [ -d "$target/.ai_project/handoffs" ] || status="migration_needed"
     [ -d "$target/.ai_knowledge" ] || status="migration_needed"
+    if [ -d "$target/.ai_knowledge" ]; then
+      [ -d "$target/.ai_knowledge/context_packs" ] || status="migration_needed"
+      [ -f "$target/.ai_knowledge/context_packs/_template.md" ] || status="migration_needed"
+    fi
+    if [ "$status" = "up_to_date" ] && project_needs_review_decision "$target"; then
+      status="review_needed"
+    fi
   fi
 
   info "AI Ops migrate"
@@ -546,9 +1329,14 @@ cmd_migrate() {
   [ -f "$target/.ai_project/operating_model.md" ] || die ".ai_project/operating_model.md missing"
   [ "$current_version" != "unknown" ] || die ".ai/VERSION missing"
 
-  if [ "$status" = "up_to_date" ]; then
+  if [ "$status" = "up_to_date" ] || [ "$status" = "review_needed" ]; then
     info ""
-    info "No migration changes needed."
+    if [ "$status" = "review_needed" ]; then
+      info "No safe migration changes needed."
+      info "User decision items remain; see migration verify output."
+    else
+      info "No migration changes needed."
+    fi
     info "No files changed."
     info ""
     info "Verifying migration state..."
@@ -567,6 +1355,8 @@ cmd_migrate() {
 
   mkdir -p "$target/.ai_project/tasks/active" "$target/.ai_project/tasks/backlog" "$target/.ai_project/tasks/archive"
   info "ensured: .ai_project/tasks/active backlog archive"
+  mkdir -p "$target/.ai_project/handoffs"
+  info "ensured: .ai_project/handoffs"
 
   if [ ! -f "$target/.ai_project/ops_migration_plan.md" ]; then
     {
@@ -580,6 +1370,8 @@ cmd_migrate() {
       printf '| core_version | %s |\n' "$current_version"
       printf '| core_source | %s |\n' "$core_source"
       printf '| apply_scope | safe_auto_fix |\n'
+      printf '| safe_fixes | core_version, tasks directories, handoffs directory, ops records, knowledge context packs |\n'
+      printf '| review_scope | schema front matter, adapter drift, source_of_truth, Task metadata |\n'
     } > "$target/.ai_project/ops_migration_plan.md"
     info "created: .ai_project/ops_migration_plan.md"
   else
@@ -590,6 +1382,8 @@ cmd_migrate() {
       printf '| core_version | %s |\n' "$current_version"
       printf '| core_source | %s |\n' "$core_source"
       printf '| apply_scope | safe_auto_fix |\n'
+      printf '| safe_fixes | core_version, tasks directories, handoffs directory, ops records, knowledge context packs |\n'
+      printf '| review_scope | schema front matter, adapter drift, source_of_truth, Task metadata |\n'
     } >> "$target/.ai_project/ops_migration_plan.md"
     info "updated: .ai_project/ops_migration_plan.md"
   fi
@@ -608,7 +1402,8 @@ cmd_migrate() {
     printf '|---|---|\n'
     printf '| core_version | %s |\n' "$current_version"
     printf '| apply_scope | safe_auto_fix only |\n'
-    printf '| manual_only | product code, product Docs, Task status, Role mapping, branch/PR, commit/push/deploy |\n'
+    printf '| manual_only | product code, product Docs, source_of_truth, Task metadata/status, Role mapping, branch/PR, commit/push/deploy |\n'
+    printf '| review_needed | schema front matter and adapter drift are reported but not rewritten automatically |\n'
   } >> "$target/.ai_project/ops_decisions.md"
   info "updated: .ai_project/ops_decisions.md"
 
@@ -630,6 +1425,14 @@ cmd_migrate() {
     info "created: .ai_knowledge minimal workspace"
   else
     info "ok: .ai_knowledge exists"
+    if [ ! -d "$target/.ai_knowledge/context_packs" ]; then
+      mkdir -p "$target/.ai_knowledge/context_packs"
+      info "created: .ai_knowledge/context_packs"
+    fi
+    if [ ! -f "$target/.ai_knowledge/context_packs/_template.md" ]; then
+      render_template_file "$target/.ai/templates/ai_knowledge/context_packs/_template.md" "$target/.ai_knowledge/context_packs/_template.md" "$date_value" "$project_name"
+      info "created: .ai_knowledge/context_packs/_template.md"
+    fi
   fi
 
   info ""
@@ -1063,13 +1866,105 @@ cmd_doctor() {
 
 cmd_validate() {
   subject="${1:-}"
-  [ "$#" -gt 0 ] || die "validate requires a subject: task"
-  shift
+  if [ "$#" -eq 0 ] || [ "${subject#-}" != "$subject" ]; then
+    subject="project"
+  else
+    shift
+  fi
 
   case "$subject" in
     task)
-      [ "$#" -eq 1 ] || die "validate task requires exactly one FILE"
-      validate_task_file "$1"
+      strict="no"
+      file=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --strict)
+            strict="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          -*)
+            die "unknown validate task option: $1"
+            ;;
+          *)
+            [ -z "$file" ] || die "validate task requires exactly one FILE"
+            file="$1"
+            ;;
+        esac
+        shift
+      done
+      [ -n "$file" ] || die "validate task requires exactly one FILE"
+      if [ "$strict" = "yes" ]; then
+        [ -f "$file" ] || {
+          info "missing: $file"
+          return 1
+        }
+        info "AI Ops task validate"
+        info "task: $file"
+        validate_front_matter task "$file" yes
+        info "ok: task metadata"
+      else
+        validate_task_file "$file"
+      fi
+      ;;
+    handoff)
+      strict="no"
+      file=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --strict)
+            strict="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          -*)
+            die "unknown validate handoff option: $1"
+            ;;
+          *)
+            [ -z "$file" ] || die "validate handoff requires exactly one FILE"
+            file="$1"
+            ;;
+        esac
+        shift
+      done
+      [ -n "$file" ] || die "validate handoff requires exactly one FILE"
+      [ -f "$file" ] || {
+        info "missing: $file"
+        return 1
+      }
+      info "AI Ops handoff validate"
+      info "handoff: $file"
+      validate_front_matter handoff "$file" "$strict"
+      info "ok: handoff metadata"
+      ;;
+    project)
+      target="$(pwd)"
+      strict="no"
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --strict)
+            strict="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown validate project option: $1"
+            ;;
+        esac
+        shift
+      done
+      validate_project "$target" "$strict"
       ;;
     *)
       die "unknown validate subject: $subject"
@@ -1077,15 +1972,969 @@ cmd_validate() {
   esac
 }
 
+cmd_task() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "task requires an action: create, status, transition, lock, unlock"
+  shift
+
+  case "$action" in
+    create)
+      target="$(pwd)"
+      title=""
+      workflow="feature"
+      role="Lead Role"
+      capability="planning"
+      queue="active"
+      status="proposed"
+      priority="medium"
+      allowed_path="."
+      source_of_truth=".ai_project/source_of_truth.md"
+      created_by="AI Ops CLI"
+      task_id=""
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --title)
+            shift
+            [ "$#" -gt 0 ] || die "--title requires a value"
+            title="$1"
+            ;;
+          --id)
+            shift
+            [ "$#" -gt 0 ] || die "--id requires a value"
+            task_id="$1"
+            ;;
+          --workflow)
+            shift
+            [ "$#" -gt 0 ] || die "--workflow requires a value"
+            workflow="$1"
+            ;;
+          --role)
+            shift
+            [ "$#" -gt 0 ] || die "--role requires a value"
+            role="$1"
+            ;;
+          --capability)
+            shift
+            [ "$#" -gt 0 ] || die "--capability requires a value"
+            capability="$1"
+            ;;
+          --queue)
+            shift
+            [ "$#" -gt 0 ] || die "--queue requires a value"
+            queue="$1"
+            ;;
+          --status)
+            shift
+            [ "$#" -gt 0 ] || die "--status requires a value"
+            status="$1"
+            ;;
+          --priority)
+            shift
+            [ "$#" -gt 0 ] || die "--priority requires a value"
+            priority="$1"
+            ;;
+          --allowed-path)
+            shift
+            [ "$#" -gt 0 ] || die "--allowed-path requires a value"
+            allowed_path="$1"
+            ;;
+          --source-of-truth)
+            shift
+            [ "$#" -gt 0 ] || die "--source-of-truth requires a value"
+            source_of_truth="$1"
+            ;;
+          --created-by)
+            shift
+            [ "$#" -gt 0 ] || die "--created-by requires a value"
+            created_by="$1"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown task create option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      [ -n "$title" ] || die "task create requires --title"
+      case "$queue" in active|backlog|archive) ;; *) die "task create --queue must be active, backlog, or archive" ;; esac
+
+      target="$(abs_path "$target")"
+      task_require_project "$target"
+
+      date_compact="$(date +%Y%m%d)"
+      date_value="$(date +%Y-%m-%d)"
+      [ -n "$task_id" ] || task_id="$(task_next_id "$target" "$date_compact")"
+      task_file="$target/.ai_project/tasks/$queue/$task_id.md"
+      [ ! -e "$task_file" ] || die "task already exists: ${task_file#$target/}"
+
+      cat > "$task_file" <<EOF
+---
+schema: aiops.task.v1
+id: $task_id
+title: $title
+status: $status
+type: $workflow
+priority: $priority
+priority_reason:
+org_unit:
+team:
+team_lead:
+workflow: $workflow
+target_agent:
+target_role: $role
+required_capabilities:
+  - $capability
+ownership:
+  paths: []
+  domains: []
+  documents: []
+ownership_review:
+  required: false
+  reviewer:
+depends_on: []
+blocks: []
+parallel_group:
+allowed_paths:
+  - $allowed_path
+source_of_truth:
+  - $source_of_truth
+created_by: $created_by
+approved_by:
+locked_by:
+locked_at:
+lock_session:
+lock_timeout_minutes: 240
+created_at: $date_value
+updated_at: $date_value
+report_to: .ai_project/reports/${task_id}_task-report.md
+qa_to: .ai_project/qa/${task_id}_qa-report.md
+branch:
+  name:
+  base:
+pr:
+  url:
+  status:
+---
+
+# $title
+
+## 배경
+
+## 작업 범위
+
+## 완료 조건
+
+## AI Ops CLI 기록
+
+| 날짜 | Actor | Event | Reason |
+|---|---|---|---|
+| $date_value | $created_by | created: $status | task create |
+EOF
+
+      validate_front_matter task "$task_file" yes >/dev/null || {
+        rm -f "$task_file"
+        die "created task failed schema validation"
+      }
+
+      info "AI Ops task create"
+      info "created: ${task_file#$target/}"
+      info "task_id: $task_id"
+      info "status: $status"
+      info "target_role: $role"
+      ;;
+
+    status)
+      target="$(pwd)"
+      task_id=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          -*)
+            die "unknown task status option: $1"
+            ;;
+          *)
+            [ -z "$task_id" ] || die "task status requires exactly one TASK_ID"
+            task_id="$1"
+            ;;
+        esac
+        shift
+      done
+      [ -n "$task_id" ] || die "task status requires TASK_ID"
+      target="$(abs_path "$target")"
+      task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+
+      info "AI Ops task status"
+      info "task: ${task_file#$target/}"
+      for field in id title status workflow target_role target_agent locked_by lock_session updated_at; do
+        info "$field: $(task_yaml_field "$task_file" "$field")"
+      done
+      ;;
+
+    transition)
+      target="$(pwd)"
+      task_id=""
+      to_status=""
+      role=""
+      actor=""
+      reason="task transition"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --to)
+            shift
+            [ "$#" -gt 0 ] || die "--to requires a value"
+            to_status="$1"
+            ;;
+          --role)
+            shift
+            [ "$#" -gt 0 ] || die "--role requires a value"
+            role="$1"
+            ;;
+          --by)
+            shift
+            [ "$#" -gt 0 ] || die "--by requires a value"
+            actor="$1"
+            ;;
+          --reason)
+            shift
+            [ "$#" -gt 0 ] || die "--reason requires a value"
+            reason="$1"
+            ;;
+          -*)
+            die "unknown task transition option: $1"
+            ;;
+          *)
+            [ -z "$task_id" ] || die "task transition requires exactly one TASK_ID"
+            task_id="$1"
+            ;;
+        esac
+        shift
+      done
+
+      [ -n "$task_id" ] || die "task transition requires TASK_ID"
+      [ -n "$to_status" ] || die "task transition requires --to"
+      [ -n "$role" ] || die "task transition requires --role"
+
+      target="$(abs_path "$target")"
+      task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+      from_status="$(task_yaml_field "$task_file" status)"
+      locked_by="$(task_yaml_field "$task_file" locked_by)"
+
+      if [ -n "$locked_by" ]; then
+        if [ -z "$actor" ] || [ "$actor" != "$locked_by" ]; then
+          die "task is locked by $locked_by; transition denied"
+        fi
+      fi
+
+      if ! task_transition_allowed "$from_status" "$to_status" "$role"; then
+        die "invalid transition: $from_status -> $to_status by $role"
+      fi
+
+      next_role="$(task_next_role_for_status "$to_status")"
+      date_value="$(date +%Y-%m-%d)"
+      actor_label="${actor:-$role}"
+
+      case "$to_status" in
+        in_progress)
+          task_update_front_matter "$task_file" \
+            "status=$to_status" \
+            "target_role=$next_role" \
+            "updated_at=$date_value" \
+            "locked_by=${actor_label}" \
+            "locked_at=$date_value"
+          ;;
+        *)
+          task_update_front_matter "$task_file" \
+            "status=$to_status" \
+            "target_role=${next_role:-__AIOPS_NULL__}" \
+            "updated_at=$date_value" \
+            "locked_by=__AIOPS_NULL__" \
+            "locked_at=__AIOPS_NULL__" \
+            "lock_session=__AIOPS_NULL__"
+          ;;
+      esac
+
+      task_append_event "$task_file" "transition: $from_status -> $to_status" "$actor_label" "$reason"
+      validate_front_matter task "$task_file" yes >/dev/null || die "transition produced invalid task metadata"
+
+      info "AI Ops task transition"
+      info "task_id: $task_id"
+      info "from: $from_status"
+      info "to: $to_status"
+      info "role: $role"
+      info "next_role: $next_role"
+      ;;
+
+    lock)
+      target="$(pwd)"
+      task_id=""
+      actor=""
+      role=""
+      session=""
+      reason="task lock"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --by)
+            shift
+            [ "$#" -gt 0 ] || die "--by requires a value"
+            actor="$1"
+            ;;
+          --role)
+            shift
+            [ "$#" -gt 0 ] || die "--role requires a value"
+            role="$1"
+            ;;
+          --session)
+            shift
+            [ "$#" -gt 0 ] || die "--session requires a value"
+            session="$1"
+            ;;
+          --reason)
+            shift
+            [ "$#" -gt 0 ] || die "--reason requires a value"
+            reason="$1"
+            ;;
+          -*)
+            die "unknown task lock option: $1"
+            ;;
+          *)
+            [ -z "$task_id" ] || die "task lock requires exactly one TASK_ID"
+            task_id="$1"
+            ;;
+        esac
+        shift
+      done
+
+      [ -n "$task_id" ] || die "task lock requires TASK_ID"
+      [ -n "$actor" ] || die "task lock requires --by"
+      target="$(abs_path "$target")"
+      task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+      locked_by="$(task_yaml_field "$task_file" locked_by)"
+      if [ -n "$locked_by" ] && [ "$locked_by" != "$actor" ]; then
+        die "task is already locked by $locked_by"
+      fi
+
+      date_value="$(date +%Y-%m-%d)"
+      task_update_front_matter "$task_file" \
+        "locked_by=$actor" \
+        "locked_at=$date_value" \
+        "lock_session=${session:-__AIOPS_NULL__}" \
+        "updated_at=$date_value"
+      task_append_event "$task_file" "lock" "$actor" "$reason"
+
+      info "AI Ops task lock"
+      info "task_id: $task_id"
+      info "locked_by: $actor"
+      [ -z "$role" ] || info "role: $role"
+      [ -z "$session" ] || info "session: $session"
+      ;;
+
+    unlock)
+      target="$(pwd)"
+      task_id=""
+      actor=""
+      reason="task unlock"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --by)
+            shift
+            [ "$#" -gt 0 ] || die "--by requires a value"
+            actor="$1"
+            ;;
+          --reason)
+            shift
+            [ "$#" -gt 0 ] || die "--reason requires a value"
+            reason="$1"
+            ;;
+          -*)
+            die "unknown task unlock option: $1"
+            ;;
+          *)
+            [ -z "$task_id" ] || die "task unlock requires exactly one TASK_ID"
+            task_id="$1"
+            ;;
+        esac
+        shift
+      done
+
+      [ -n "$task_id" ] || die "task unlock requires TASK_ID"
+      [ -n "$actor" ] || die "task unlock requires --by"
+      target="$(abs_path "$target")"
+      task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+      locked_by="$(task_yaml_field "$task_file" locked_by)"
+      if [ -n "$locked_by" ] && [ "$locked_by" != "$actor" ]; then
+        die "task is locked by $locked_by; unlock denied"
+      fi
+
+      date_value="$(date +%Y-%m-%d)"
+      task_update_front_matter "$task_file" \
+        "locked_by=__AIOPS_NULL__" \
+        "locked_at=__AIOPS_NULL__" \
+        "lock_session=__AIOPS_NULL__" \
+        "updated_at=$date_value"
+      task_append_event "$task_file" "unlock" "$actor" "$reason"
+
+      info "AI Ops task unlock"
+      info "task_id: $task_id"
+      info "unlocked_by: $actor"
+      ;;
+
+    *)
+      die "unknown task action: $action"
+      ;;
+  esac
+}
+
+cmd_handoff() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "handoff requires an action: create, validate"
+  shift
+
+  case "$action" in
+    create)
+      target="$(pwd)"
+      task_id=""
+      from_role=""
+      to_role=""
+      from_agent=""
+      to_agent=""
+      next_action=""
+      summary="handoff created"
+      validation_result="not_run"
+      force="no"
+      report_paths=""
+      changed_paths=""
+      risks=""
+      blockers=""
+      open_questions=""
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --from)
+            shift
+            [ "$#" -gt 0 ] || die "--from requires a value"
+            from_role="$1"
+            ;;
+          --to)
+            shift
+            [ "$#" -gt 0 ] || die "--to requires a value"
+            to_role="$1"
+            ;;
+          --from-agent)
+            shift
+            [ "$#" -gt 0 ] || die "--from-agent requires a value"
+            from_agent="$1"
+            ;;
+          --to-agent)
+            shift
+            [ "$#" -gt 0 ] || die "--to-agent requires a value"
+            to_agent="$1"
+            ;;
+          --next-action)
+            shift
+            [ "$#" -gt 0 ] || die "--next-action requires a value"
+            next_action="$1"
+            ;;
+          --summary)
+            shift
+            [ "$#" -gt 0 ] || die "--summary requires a value"
+            summary="$1"
+            ;;
+          --report)
+            shift
+            [ "$#" -gt 0 ] || die "--report requires a value"
+            report_paths="${report_paths}
+$1"
+            ;;
+          --changed-path)
+            shift
+            [ "$#" -gt 0 ] || die "--changed-path requires a value"
+            changed_paths="${changed_paths}
+$1"
+            ;;
+          --risk)
+            shift
+            [ "$#" -gt 0 ] || die "--risk requires a value"
+            risks="${risks}
+$1"
+            ;;
+          --blocker)
+            shift
+            [ "$#" -gt 0 ] || die "--blocker requires a value"
+            blockers="${blockers}
+$1"
+            ;;
+          --open-question)
+            shift
+            [ "$#" -gt 0 ] || die "--open-question requires a value"
+            open_questions="${open_questions}
+$1"
+            ;;
+          --validation-result)
+            shift
+            [ "$#" -gt 0 ] || die "--validation-result requires a value"
+            validation_result="$1"
+            ;;
+          --force)
+            force="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          -*)
+            die "unknown handoff create option: $1"
+            ;;
+          *)
+            [ -z "$task_id" ] || die "handoff create requires exactly one TASK_ID"
+            task_id="$1"
+            ;;
+        esac
+        shift
+      done
+
+      [ -n "$task_id" ] || die "handoff create requires TASK_ID"
+      [ -n "$from_role" ] || die "handoff create requires --from"
+      [ -n "$to_role" ] || die "handoff create requires --to"
+      [ -n "$next_action" ] || die "handoff create requires --next-action"
+
+      target="$(abs_path "$target")"
+      task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+      handoff_dir="$target/.ai_project/handoffs"
+      mkdir -p "$handoff_dir"
+
+      current_status="$(task_yaml_field "$task_file" status)"
+      source_of_truth="$(task_yaml_field "$task_file" source_of_truth)"
+      allowed_paths="$(task_yaml_field "$task_file" allowed_paths)"
+      task_report="$(task_yaml_field "$task_file" report_to)"
+      qa_report="$(task_yaml_field "$task_file" qa_to)"
+      date_value="$(date +%Y-%m-%d)"
+      from_slug="$(role_slug "$from_role")"
+      to_slug="$(role_slug "$to_role")"
+      handoff_file="$handoff_dir/${task_id}_${from_slug}_to_${to_slug}.md"
+
+      if [ -e "$handoff_file" ] && [ "$force" != "yes" ]; then
+        die "handoff already exists: ${handoff_file#$target/}; use --force to replace"
+      fi
+
+      if [ -z "$report_paths" ]; then
+        [ -z "$task_report" ] || report_paths="${report_paths}
+$task_report"
+        [ -z "$qa_report" ] || report_paths="${report_paths}
+$qa_report"
+      fi
+
+      ruby -ryaml -e '
+        path = ARGV[0]
+        task_id = ARGV[1]
+        from_role = ARGV[2]
+        to_role = ARGV[3]
+        from_agent = ARGV[4]
+        to_agent = ARGV[5]
+        current_status = ARGV[6]
+        next_action = ARGV[7]
+        source_of_truth = ARGV[8]
+        allowed_paths = ARGV[9]
+        report_paths = ARGV[10]
+        changed_paths = ARGV[11]
+        validation_result = ARGV[12]
+        risks = ARGV[13]
+        blockers = ARGV[14]
+        open_questions = ARGV[15]
+        created_at = ARGV[16]
+        summary = ARGV[17]
+
+        def list(value)
+          value.to_s.lines.map(&:strip).reject(&:empty?).flat_map { |line| line.split(",").map(&:strip) }.reject(&:empty?)
+        end
+
+        data = {
+          "schema" => "aiops.handoff.v1",
+          "task_id" => task_id,
+          "from_role" => from_role,
+          "to_role" => to_role,
+          "from_agent" => from_agent.empty? ? nil : from_agent,
+          "to_agent" => to_agent.empty? ? nil : to_agent,
+          "current_status" => current_status,
+          "next_action" => next_action,
+          "source_of_truth" => list(source_of_truth),
+          "allowed_paths" => list(allowed_paths),
+          "report_paths" => list(report_paths),
+          "changed_or_affected_paths" => list(changed_paths),
+          "validation_result" => validation_result,
+          "risks" => list(risks),
+          "blockers" => list(blockers),
+          "open_questions" => list(open_questions),
+          "created_at" => created_at,
+          "created_by" => from_agent.empty? ? from_role : from_agent
+        }
+
+        body = <<~MD
+          # Handoff: #{task_id}
+
+          ## 다음 Agent에게 전달할 말
+
+          너는 #{to_agent.empty? ? "다음 Agent" : to_agent} / #{to_role}이야.
+          Task #{task_id}를 이어서 처리해줘.
+
+          - 현재 상태: #{current_status}
+          - 다음에 해야 할 일: #{next_action}
+          - 기준 문서: #{data["source_of_truth"].join(", ")}
+          - 허용 경로: #{data["allowed_paths"].join(", ")}
+          - 참고 산출물: #{data["report_paths"].empty? ? "없음" : data["report_paths"].join(", ")}
+          - 변경/검토 대상: #{data["changed_or_affected_paths"].empty? ? "미기록" : data["changed_or_affected_paths"].join(", ")}
+          - 남은 리스크: #{data["risks"].empty? ? "없음" : data["risks"].join(", ")}
+          - 차단/결정 필요: #{data["blockers"].empty? ? "없음" : data["blockers"].join(", ")}
+          - 주의: 현재 Task의 workflow, status, target_agent, target_role이 네 Role과 맞는지 먼저 확인해줘.
+
+          ## 인계 기록
+
+          | 날짜 | From | To | 상태 | 요약 |
+          |---|---|---|---|---|
+          | #{created_at} | #{from_role} | #{to_role} | #{current_status} | #{summary} |
+        MD
+
+        File.write(path, YAML.dump(data) + "---\n\n" + body)
+      ' "$handoff_file" "$task_id" "$from_role" "$to_role" "$from_agent" "$to_agent" "$current_status" "$next_action" "$source_of_truth" "$allowed_paths" "$report_paths" "$changed_paths" "$validation_result" "$risks" "$blockers" "$open_questions" "$date_value" "$summary"
+
+      validate_front_matter handoff "$handoff_file" yes >/dev/null || {
+        rm -f "$handoff_file"
+        die "created handoff failed schema validation"
+      }
+      task_append_event "$task_file" "handoff: $from_role -> $to_role" "${from_agent:-$from_role}" "$summary"
+
+      info "AI Ops handoff create"
+      info "created: ${handoff_file#$target/}"
+      info "task_id: $task_id"
+      info "from_role: $from_role"
+      info "to_role: $to_role"
+      info "current_status: $current_status"
+      ;;
+
+    validate)
+      target="$(pwd)"
+      value=""
+      strict="no"
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --strict)
+            strict="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          -*)
+            die "unknown handoff validate option: $1"
+            ;;
+          *)
+            [ -z "$value" ] || die "handoff validate requires exactly one FILE or TASK_ID"
+            value="$1"
+            ;;
+        esac
+        shift
+      done
+      [ -n "$value" ] || die "handoff validate requires FILE or TASK_ID"
+      target="$(abs_path "$target")"
+      handoff_file="$(handoff_find_file "$target" "$value")" || die "handoff not found: $value"
+      info "AI Ops handoff validate"
+      info "handoff: ${handoff_file#$target/}"
+      validate_front_matter handoff "$handoff_file" "$strict"
+      info "ok: handoff metadata"
+      ;;
+
+    *)
+      die "unknown handoff action: $action"
+      ;;
+  esac
+}
+
+cmd_session_guide() {
+  target="$(pwd)"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --target)
+        shift
+        [ "$#" -gt 0 ] || die "--target requires a value"
+        target="$1"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "unknown session-guide option: $1"
+        ;;
+    esac
+    shift
+  done
+
+  target="$(abs_path "$target")"
+
+  info "AI Ops session guide"
+  info "target: $target"
+  info ""
+
+  if [ ! -d "$target/.ai_project" ]; then
+    info "missing: .ai_project"
+    info "먼저 AI Ops bootstrap을 완료하세요."
+    return 1
+  fi
+
+  info "세션 유형:"
+  info "  - orchestration_session: Lead/Direction이 Task와 인계를 조율"
+  info "  - role_session: 특정 Role 책임을 맡은 독립 Agent 세션"
+  info "  - delegated_worker: 현재 세션 안의 좁은 보조 작업자"
+  info ""
+  info "기본 원칙:"
+  info "  - Execution과 Verification은 가능하면 별도 Role Session으로 분리합니다."
+  info "  - delegated_worker는 독립 Verification/Completion을 대체하지 않습니다."
+  info "  - 세션 전환은 Task status, target_role, lock, handoff로 기록합니다."
+  info ""
+
+  info "활성 Agent / Role 후보:"
+  if [ -f "$target/.ai_project/agent_registry.md" ]; then
+    print_agent_registry_rows "$target/.ai_project/agent_registry.md"
+  else
+    info "      - .ai_project/agent_registry.md 없음"
+  fi
+  info ""
+
+  info "Role Session 시작 문구 생성:"
+  info "  aiops role prompt lead --target \"$target\""
+  info "  aiops role prompt execution --target \"$target\" --task TASK_ID"
+  info "  aiops role prompt verification --target \"$target\" --task TASK_ID"
+  info "  aiops role prompt completion --target \"$target\" --task TASK_ID"
+  info "  aiops role prompt ops --target \"$target\""
+  info ""
+  info "Codex / Claude 지정 예시:"
+  info "  aiops role prompt execution --adapter codex --task TASK_ID"
+  info "  aiops role prompt verification --adapter claude --task TASK_ID"
+}
+
+cmd_role() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "role requires an action: prompt"
+  shift
+
+  case "$action" in
+    prompt)
+      role_input="${1:-}"
+      [ "$#" -gt 0 ] || die "role prompt requires ROLE"
+      shift
+
+      role="$(normalize_role_name "$role_input")" || die "unknown role: $role_input"
+      target="$(pwd)"
+      task_id=""
+      adapter="generic"
+      agent=""
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --task)
+            shift
+            [ "$#" -gt 0 ] || die "--task requires a value"
+            task_id="$1"
+            ;;
+          --adapter)
+            shift
+            [ "$#" -gt 0 ] || die "--adapter requires a value"
+            adapter="$1"
+            ;;
+          --agent)
+            shift
+            [ "$#" -gt 0 ] || die "--agent requires a value"
+            agent="$1"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown role prompt option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      case "$adapter" in codex|claude|generic) ;; *) die "--adapter must be codex, claude, or generic" ;; esac
+
+      target="$(abs_path "$target")"
+      [ -n "$agent" ] || agent="$(role_default_agent "$role")"
+
+      task_file=""
+      if [ -n "$task_id" ]; then
+        task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+      fi
+
+      info "AI Ops role prompt"
+      info "target: $target"
+      info "adapter: $adapter"
+      info "role: $role"
+      info "agent: $agent"
+      [ -z "$task_file" ] || info "task: ${task_file#$target/}"
+      info ""
+      info "아래 문구를 새 Agent 세션의 첫 메시지로 사용하세요."
+      info ""
+      info "----- ROLE SESSION PROMPT START -----"
+      info "너는 이 프로젝트의 $agent / $role 세션이야."
+      info ""
+      info "먼저 다음 문서를 확인해줘."
+      info "- .ai/runtime/workflow.md"
+      info "- .ai/runtime/task_queue.md"
+      info "- .ai/runtime/role_handoff.md"
+      info "- .ai/policies/session_orchestration_policy.md"
+      info "- .ai_project/operating_model.md"
+      info "- .ai_project/agent_registry.md"
+      info "- .ai_project/current_context.md"
+      info "- .ai_project/task_board.md"
+      info "- .ai_project/source_of_truth.md"
+      info "- 필요한 경우 .ai_knowledge/context_packs/"
+      info ""
+      info "세션 규칙:"
+      info "- 현재 세션은 role_session이다."
+      info "- 한 세션이 여러 Role을 연속 수행하려면 workflow 또는 사용자 명시 승인이 필요하다."
+      info "- delegated_worker를 사용할 수 있어도 독립 Role Session을 대체하지 않는다."
+      info "- 상태 전이, lock, handoff는 aiops CLI 명령으로 처리한다."
+      info "- 사용자 승인 없이 commit, push, merge, deploy를 진행하지 않는다."
+      info ""
+      info "이 Role의 책임:"
+      role_responsibility_text "$role"
+      info ""
+
+      if [ -n "$task_file" ]; then
+        status="$(task_yaml_field "$task_file" status)"
+        target_role="$(task_yaml_field "$task_file" target_role)"
+        allowed_paths="$(task_yaml_field "$task_file" allowed_paths)"
+        source_of_truth="$(task_yaml_field "$task_file" source_of_truth)"
+        locked_by="$(task_yaml_field "$task_file" locked_by)"
+
+        info "대상 Task:"
+        info "- task_id: $task_id"
+        info "- task_file: ${task_file#$target/}"
+        info "- current_status: $status"
+        info "- target_role: $target_role"
+        info "- allowed_paths: $allowed_paths"
+        info "- source_of_truth: $source_of_truth"
+        info "- locked_by: $locked_by"
+        info ""
+        info "작업 시작 전 확인:"
+        info "- aiops task status $task_id --target \"$target\""
+        info "- 현재 Role이 Task의 status/target_role과 맞는지 확인한다."
+        info "- allowed_paths 밖 파일은 수정하지 않는다."
+        info ""
+
+        case "$role" in
+          "Execution Role")
+            info "Execution 진행 기준:"
+            info "- 실행 가능하면 aiops task transition $task_id --target \"$target\" --to in_progress --role \"Execution Role\" --by \"$agent\""
+            info "- 완료 후 aiops handoff create $task_id --target \"$target\" --from \"Execution Role\" --to \"Verification Role\" --next-action \"작업 결과 독립 검증\""
+            info "- 인계 검증 후 aiops task transition $task_id --target \"$target\" --to verification_ready --role \"Execution Role\" --by \"$agent\""
+            ;;
+          "Verification Role")
+            info "Verification 진행 기준:"
+            info "- 검증 시작 시 aiops task transition $task_id --target \"$target\" --to verification_in_progress --role \"Verification Role\" --by \"$agent\""
+            info "- 통과 시 Completion 인계를 만들고 verification_passed로 전환한다."
+            info "- 실패 또는 차단 시 Lead Role로 rework/blocked 인계를 남긴다."
+            ;;
+          "Completion Role")
+            info "Completion 진행 기준:"
+            info "- 검증 결과와 남은 리스크를 확인한다."
+            info "- 완료 가능하면 completion_review를 거쳐 done으로 전환한다."
+            info "- 완료가 어렵다면 Lead Role로 rework/blocked 인계를 남긴다."
+            ;;
+          "Lead Role")
+            info "Lead 진행 기준:"
+            info "- Task 범위와 ownership을 정리한다."
+            info "- 승인된 실행 Task는 Execution Role로 인계한다."
+            ;;
+        esac
+        info ""
+      fi
+
+      case "$adapter" in
+        codex)
+          info "Codex 참고:"
+          info "- AGENTS.md의 AI Ops 지침을 우선 확인한다."
+          ;;
+        claude)
+          info "Claude 참고:"
+          info "- CLAUDE.md의 AI Ops 지침을 우선 확인한다."
+          ;;
+        generic)
+          info "Adapter 참고:"
+          info "- Codex면 AGENTS.md, Claude면 CLAUDE.md를 확인한다."
+          ;;
+      esac
+      info "----- ROLE SESSION PROMPT END -----"
+      ;;
+    *)
+      die "unknown role action: $action"
+      ;;
+  esac
+}
+
 cmd_knowledge() {
   action="${1:-}"
-  [ "$#" -gt 0 ] || die "knowledge requires an action: init, lint, status"
+  [ "$#" -gt 0 ] || die "knowledge requires an action: init, pack, lint, status"
   shift
 
   target="$(pwd)"
   mode="minimal"
   force="no"
   core="$(default_core_dir)"
+  pack_topic=""
+  pack_create="no"
+  pack_task=""
+  pack_source=".ai_project/source_of_truth.md"
+  pack_purpose=""
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -1102,12 +2951,34 @@ cmd_knowledge() {
       --force)
         force="yes"
         ;;
+      --create)
+        pack_create="yes"
+        ;;
+      --task)
+        shift
+        [ "$#" -gt 0 ] || die "--task requires a value"
+        pack_task="$1"
+        ;;
+      --source)
+        shift
+        [ "$#" -gt 0 ] || die "--source requires a value"
+        pack_source="$1"
+        ;;
+      --purpose)
+        shift
+        [ "$#" -gt 0 ] || die "--purpose requires a value"
+        pack_purpose="$1"
+        ;;
       -h|--help)
         usage
         exit 0
         ;;
       *)
-        die "unknown knowledge option: $1"
+        if [ "$action" = "pack" ] && [ -z "$pack_topic" ]; then
+          pack_topic="$1"
+        else
+          die "unknown knowledge option: $1"
+        fi
         ;;
     esac
     shift
@@ -1142,6 +3013,8 @@ cmd_knowledge() {
       for file in README.md index.md log.md project_brief.md; do
         render_template_file "$core/templates/ai_knowledge/$file" "$knowledge_dir/$file" "$date_value" "$project_name"
       done
+      mkdir -p "$knowledge_dir/context_packs"
+      render_template_file "$core/templates/ai_knowledge/context_packs/_template.md" "$knowledge_dir/context_packs/_template.md" "$date_value" "$project_name"
 
       if [ "$mode" = "full" ]; then
         for dir in concepts decisions architecture open_questions; do
@@ -1152,6 +3025,79 @@ cmd_knowledge() {
 
       info "created: $knowledge_dir"
       info "mode: $mode"
+      ;;
+    pack)
+      [ -n "$pack_topic" ] || die "knowledge pack requires TOPIC"
+      [ -d "$knowledge_dir" ] || die ".ai_knowledge missing; run aiops knowledge init first"
+
+      safe_topic="$(printf '%s\n' "$pack_topic" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/_/g; s/_\{2,\}/_/g; s/^_//; s/_$//')"
+      [ -n "$safe_topic" ] || die "invalid pack topic: $pack_topic"
+      pack_dir="$knowledge_dir/context_packs"
+      pack_file="$pack_dir/$safe_topic.md"
+
+      if [ "$pack_create" = "yes" ]; then
+        mkdir -p "$pack_dir"
+        date_value="$(date +%Y-%m-%d)"
+        project_name="$(basename "$target")"
+        [ -n "$pack_purpose" ] || pack_purpose="Task 또는 주제 '$pack_topic' 작업에 필요한 최소 지식 묶음"
+
+        cat > "$pack_file" <<EOF
+# Context Pack: $pack_topic
+
+작성일: $date_value
+프로젝트: $project_name
+
+## 목적
+
+$pack_purpose
+
+## 언제 읽는가
+
+- 관련 Task를 시작하기 전
+- Role Session을 새로 열 때
+- source of truth와 작업 범위를 빠르게 확인해야 할 때
+
+## 관련 Task
+
+- ${pack_task:-미지정}
+
+## 먼저 확인할 원본
+
+| 원본 | 확인할 내용 |
+|---|---|
+| $pack_source | 현재 작업 기준 |
+
+## 필요한 Wiki 항목
+
+- \`project_brief.md\`
+- \`index.md\`
+
+## 작업 전 확인할 미결정 사항
+
+- 미작성
+
+## 주의
+
+이 context pack은 원본 문서를 대체하지 않는다. 구현, 검증, 완료 판단 전에는 반드시 source of truth를 확인한다.
+EOF
+
+        {
+          printf '\n| %s | AI Ops CLI / Ops Governance Role | context_packs/%s.md | %s | context pack 생성 | |\n' "$date_value" "$safe_topic" "$pack_source"
+        } >> "$knowledge_dir/log.md"
+
+        info "AI Ops knowledge pack"
+        info "created: .ai_knowledge/context_packs/$safe_topic.md"
+        info "topic: $pack_topic"
+        [ -z "$pack_task" ] || info "task: $pack_task"
+        return 0
+      fi
+
+      [ -f "$pack_file" ] || die "context pack not found: $safe_topic; use --create"
+      info "AI Ops knowledge pack"
+      info "topic: $pack_topic"
+      info "file: .ai_knowledge/context_packs/$safe_topic.md"
+      info ""
+      sed -n '1,220p' "$pack_file"
       ;;
     lint)
       failed=0
@@ -1167,6 +3113,11 @@ cmd_knowledge() {
       for file in README.md index.md log.md project_brief.md; do
         knowledge_required_file "$target" "$file" || failed=1
       done
+      if [ -d "$knowledge_dir/context_packs" ]; then
+        info "ok: .ai_knowledge/context_packs"
+      else
+        info "note: .ai_knowledge/context_packs missing"
+      fi
 
       [ "$failed" -eq 0 ] || exit 1
       info "ok: knowledge workspace"
@@ -1181,6 +3132,12 @@ cmd_knowledge() {
             info "  - $file"
           fi
         done
+        if [ -d "$knowledge_dir/context_packs" ]; then
+          info "context packs:"
+          find "$knowledge_dir/context_packs" -maxdepth 1 -type f -name '*.md' | sort | while IFS= read -r pack; do
+            info "  - context_packs/$(basename "$pack")"
+          done
+        fi
       else
         info "missing: .ai_knowledge"
         info "Next: aiops knowledge init --target \"$target\" --mode minimal"
@@ -1188,6 +3145,281 @@ cmd_knowledge() {
       ;;
     *)
       die "unknown knowledge action: $action"
+      ;;
+  esac
+}
+
+cmd_ci() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "ci requires an action: init"
+  shift
+
+  case "$action" in
+    init)
+      target="$(pwd)"
+      provider="github"
+      force="no"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --provider)
+            shift
+            [ "$#" -gt 0 ] || die "--provider requires a value"
+            provider="$1"
+            ;;
+          --force)
+            force="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown ci init option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      [ "$provider" = "github" ] || die "unsupported ci provider: $provider"
+
+      target="$(abs_path "$target")"
+      [ -d "$target" ] || die "target directory not found: $target"
+
+      if [ -d "$target/.ai" ] || [ -L "$target/.ai" ]; then
+        core="$target/.ai"
+      else
+        core="$(default_core_dir)"
+      fi
+
+      template="$core/templates/ci/github-actions/aiops.yml"
+      [ -f "$template" ] || die "CI template not found: $template"
+
+      workflow_dir="$target/.github/workflows"
+      workflow_file="$workflow_dir/aiops.yml"
+      mkdir -p "$workflow_dir"
+
+      if [ -e "$workflow_file" ] && [ "$force" != "yes" ]; then
+        info "AI Ops CI init"
+        info "target: $target"
+        info "provider: github"
+        info "skip: .github/workflows/aiops.yml already exists"
+        info "Use --force to replace it."
+        return 0
+      fi
+
+      cp "$template" "$workflow_file"
+
+      info "AI Ops CI init"
+      info "target: $target"
+      info "provider: github"
+      info "created: .github/workflows/aiops.yml"
+      info ""
+      info "CI checks:"
+      info "  - aiops doctor --strict"
+      info "  - aiops validate --strict when .ai_project exists"
+      info "  - aiops migrate --plan when .ai_project exists"
+      info "  - aiops knowledge lint when .ai_knowledge exists"
+      ;;
+    -h|--help)
+      usage
+      ;;
+    *)
+      die "unknown ci action: $action"
+      ;;
+  esac
+}
+
+cmd_export() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "export requires an action: runtime"
+  shift
+
+  case "$action" in
+    runtime)
+      target="$(pwd)"
+      output=""
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --output)
+            shift
+            [ "$#" -gt 0 ] || die "--output requires a value"
+            output="$1"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown export runtime option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      target="$(abs_path "$target")"
+      [ -d "$target/.ai_project" ] || die ".ai_project missing; bootstrap project first"
+      [ -f "$target/.ai_project/operating_model.md" ] || die ".ai_project/operating_model.md missing"
+
+      if [ -n "$output" ]; then
+        output="$(abs_path "$output")"
+        output_dir="$(dirname "$output")"
+        [ -d "$output_dir" ] || die "output directory not found: $output_dir"
+      fi
+
+      if command -v ruby >/dev/null 2>&1; then
+        ruby -ryaml -rjson -rtime -rdate -rfind -e '
+          target = ARGV[0]
+          output = ARGV[1].to_s
+
+          def front_matter(path)
+            return {} unless File.file?(path)
+            text = File.read(path)
+            return {} unless text.start_with?("---\n")
+            lines = text.lines
+            closing = nil
+            lines[1..].each_with_index do |line, idx|
+              if line.strip == "---"
+                closing = idx + 1
+                break
+              end
+            end
+            return {} unless closing
+            YAML.safe_load(lines[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+          rescue Psych::SyntaxError
+            {}
+          end
+
+          def files_under(path, pattern)
+            return [] unless Dir.exist?(path)
+            files = []
+            Find.find(path) do |entry|
+              next unless File.file?(entry)
+              files << entry if File.fnmatch(pattern, File.basename(entry))
+            end
+            files.sort
+          end
+
+          project_dir = File.join(target, ".ai_project")
+          operating_model = front_matter(File.join(project_dir, "operating_model.md"))
+          agent_registry = front_matter(File.join(project_dir, "agent_registry.md"))
+
+          tasks = files_under(File.join(project_dir, "tasks"), "*.md").map do |path|
+            data = front_matter(path)
+            {
+              "id" => data["id"] || File.basename(path, ".md"),
+              "title" => data["title"],
+              "status" => data["status"],
+              "workflow" => data["workflow"],
+              "target_role" => data["target_role"],
+              "target_agent" => data["target_agent"],
+              "required_capabilities" => data["required_capabilities"] || [],
+              "allowed_paths" => data["allowed_paths"] || [],
+              "source_of_truth" => data["source_of_truth"] || [],
+              "depends_on" => data["depends_on"] || [],
+              "blocks" => data["blocks"] || [],
+              "locked_by" => data["locked_by"],
+              "lock_session" => data["lock_session"],
+              "report_to" => data["report_to"],
+              "qa_to" => data["qa_to"],
+              "branch" => data["branch"] || {},
+              "pr" => data["pr"] || {},
+              "path" => path.sub(%r{\A#{Regexp.escape(target)}/?}, "")
+            }
+          end
+
+          handoffs = files_under(File.join(project_dir, "handoffs"), "*.md").map do |path|
+            data = front_matter(path)
+            {
+              "task_id" => data["task_id"],
+              "from_role" => data["from_role"],
+              "to_role" => data["to_role"],
+              "from_agent" => data["from_agent"],
+              "to_agent" => data["to_agent"],
+              "current_status" => data["current_status"],
+              "next_action" => data["next_action"],
+              "source_of_truth" => data["source_of_truth"] || [],
+              "allowed_paths" => data["allowed_paths"] || [],
+              "report_paths" => data["report_paths"] || [],
+              "risks" => data["risks"] || [],
+              "blockers" => data["blockers"] || [],
+              "open_questions" => data["open_questions"] || [],
+              "created_at" => data["created_at"],
+              "path" => path.sub(%r{\A#{Regexp.escape(target)}/?}, "")
+            }
+          end
+
+          approval_statuses = %w[proposed scoped approved verification_ready verification_in_progress verification_passed completion_review done blocked rework_requested cancelled]
+          checkpoints = tasks.map do |task|
+            status = task["status"]
+            next unless approval_statuses.include?(status.to_s)
+            {
+              "task_id" => task["id"],
+              "status" => status,
+              "type" => case status
+                        when "approved" then "work_approved"
+                        when "verification_ready", "verification_in_progress" then "verification_checkpoint"
+                        when "completion_review" then "completion_approval"
+                        when "done" then "completion_recorded"
+                        when "blocked", "rework_requested", "cancelled" then "lead_decision_required"
+                        else "scope_or_direction_decision"
+                        end,
+              "owner_role" => task["target_role"]
+            }
+          end.compact
+
+          export = {
+            "schema" => "aiops.runtime_export.v1",
+            "exported_at" => Time.now.utc.iso8601,
+            "target" => target,
+            "project" => operating_model["project"] || File.basename(target),
+            "core_version" => operating_model["core_version"],
+            "operating_model" => operating_model,
+            "agents" => agent_registry["agents"] || [],
+            "tasks" => tasks,
+            "handoffs" => handoffs,
+            "approval_checkpoints" => checkpoints,
+            "adapter_contract" => {
+              "task_graph" => "tasks[].depends_on / tasks[].blocks",
+              "role_assignment" => "tasks[].target_role and agents[].roles",
+              "state_transitions" => "tasks[].status plus runtime/workflow.md",
+              "handoff_events" => "handoffs[]",
+              "approval_checkpoints" => "approval_checkpoints[]"
+            }
+          }
+
+          json = JSON.pretty_generate(export) + "\n"
+          if output.empty?
+            puts json
+          else
+            File.write(output, json)
+          end
+        ' "$target" "$output"
+        if [ -n "$output" ]; then
+          info "AI Ops runtime export"
+          info "target: $target"
+          info "created: $output"
+        fi
+      else
+        die "ruby is required for runtime export"
+      fi
+      ;;
+    -h|--help)
+      usage
+      ;;
+    *)
+      die "unknown export action: $action"
       ;;
   esac
 }
@@ -1365,9 +3597,22 @@ cmd_release_check() {
     "$core/README.md" \
     "$core/QUICKSTART.md" \
     "$core/CHANGELOG.md" \
+    "$core/.github/workflows/ci.yml" \
     "$core/docs/installation.md" \
     "$core/docs/distribution.md" \
+    "$core/scripts/test.sh" \
     "$core/bin/aiops" \
+    "$core/schemas/README.md" \
+    "$core/schemas/task.schema.json" \
+    "$core/schemas/workflow.schema.json" \
+    "$core/schemas/handoff.schema.json" \
+    "$core/schemas/agent_registry.schema.json" \
+    "$core/schemas/operating_model.schema.json" \
+    "$core/schemas/bootstrap_options.schema.json" \
+    "$core/schemas/runtime_export.schema.json" \
+    "$core/adapters/README.md" \
+    "$core/adapters/langgraph/README.md" \
+    "$core/adapters/openai_agents/README.md" \
     "$core/bootstrap/bootstrap_reference.md" \
     "$core/bootstrap/migration_runbook.md" \
     "$core/Formula/ai-agent-ops.rb" \
@@ -1379,11 +3624,66 @@ cmd_release_check() {
     "$core/policies/versioning_policy.md" \
     "$core/runtime/workflow.md" \
     "$core/runtime/task_queue.md" \
+    "$core/runtime/bootstrap_options.json" \
+    "$core/templates/ci/github-actions/aiops.yml" \
     "$core/templates/tool_adapters/codex/AGENTS.md" \
     "$core/templates/tool_adapters/claude/CLAUDE.md"
   do
     check_required_file "$required" "${required#$core/}" || failed=1
   done
+
+  shell_syntax_failed=0
+  for shell_file in "$core/bin/aiops" "$core/scripts/test.sh" "$core"/tests/e2e_*.sh; do
+    [ -f "$shell_file" ] || continue
+    if sh -n "$shell_file"; then
+      :
+    else
+      shell_syntax_failed=1
+    fi
+  done
+  if [ "$shell_syntax_failed" -eq 0 ]; then
+    info "ok: shell syntax"
+  else
+    info "warn: shell syntax failed"
+    warnings=$((warnings + 1))
+  fi
+
+  if command -v ruby >/dev/null 2>&1; then
+    if ruby -rjson -e 'ARGV.each { |path| JSON.parse(File.read(path)) }' "$core"/schemas/*.schema.json >/dev/null 2>&1; then
+      info "ok: schema JSON syntax"
+    else
+      info "warn: schema JSON syntax failed"
+      warnings=$((warnings + 1))
+    fi
+  else
+    info "note: ruby not available; schema JSON syntax not checked"
+  fi
+
+  release_tmp="${TMPDIR:-/tmp}/aiops-release-check-project.$$"
+  rm -rf "$release_tmp"
+  if (
+    set -eu
+    mkdir -p "$release_tmp"
+    "$core/bin/aiops" seed --target "$release_tmp" --adapter both --mode link --core "$core" >/dev/null
+    cp -R "$core/templates/ai_project/fast_track" "$release_tmp/.ai_project"
+    mkdir -p \
+      "$release_tmp/.ai_project/tasks/active" \
+      "$release_tmp/.ai_project/tasks/backlog" \
+      "$release_tmp/.ai_project/tasks/archive" \
+      "$release_tmp/.ai_project/handoffs"
+    "$core/bin/aiops" knowledge init --target "$release_tmp" --mode minimal >/dev/null
+    "$core/bin/aiops" doctor --target "$release_tmp" --strict >/dev/null
+    "$core/bin/aiops" validate --target "$release_tmp" --strict >/dev/null
+    "$core/bin/aiops" migrate --target "$release_tmp" --plan >/dev/null
+    "$core/bin/aiops" knowledge lint --target "$release_tmp" >/dev/null
+    "$core/bin/aiops" export runtime --target "$release_tmp" >/dev/null
+  ); then
+    info "ok: seeded project release gate"
+  else
+    info "warn: seeded project release gate failed"
+    warnings=$((warnings + 1))
+  fi
+  rm -rf "$release_tmp"
 
   if [ -f "$core/CHANGELOG.md" ]; then
     if grep -q "^## $version " "$core/CHANGELOG.md"; then
@@ -1402,6 +3702,22 @@ cmd_release_check() {
       info "warn: Formula version reference does not match VERSION v$version"
       warnings=$((warnings + 1))
     fi
+
+    if grep -q 'libexec.install.*"adapters"' "$formula"; then
+      info "ok: Formula installs adapters"
+    else
+      info "warn: Formula missing adapters install"
+      warnings=$((warnings + 1))
+    fi
+
+    for formula_dir in bootstrap core models policies runtime schemas templates workflows; do
+      if grep -q "libexec.install.*\"$formula_dir\"" "$formula"; then
+        info "ok: Formula installs $formula_dir"
+      else
+        info "warn: Formula missing $formula_dir install"
+        warnings=$((warnings + 1))
+      fi
+    done
 
     if grep -q 'REPLACE_WITH_RELEASE_SHA256' "$formula"; then
       if [ "$allow_pending_release" = "yes" ]; then
@@ -1578,8 +3894,14 @@ main() {
     doctor) cmd_doctor "$@" ;;
     migrate) cmd_migrate "$@" ;;
     bootstrap-guide) cmd_bootstrap_guide "$@" ;;
+    session-guide) cmd_session_guide "$@" ;;
+    role) cmd_role "$@" ;;
     validate) cmd_validate "$@" ;;
+    task) cmd_task "$@" ;;
+    handoff) cmd_handoff "$@" ;;
     knowledge) cmd_knowledge "$@" ;;
+    ci) cmd_ci "$@" ;;
+    export) cmd_export "$@" ;;
     version) cmd_version "$@" ;;
     update) cmd_update "$@" ;;
     release-check) cmd_release_check "$@" ;;

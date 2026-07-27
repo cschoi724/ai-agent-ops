@@ -8,6 +8,31 @@
 - Minor: 새 Agent, workflow, 템플릿, 운영 규칙 추가 또는 기본 흐름 변경
 - Patch: 문구 정리, 충돌 제거, 설명 보강, 누락 수정
 
+## Unreleased
+
+### Added
+
+- 프로젝트 저장소용 GitHub Actions workflow를 생성하는 `aiops ci init` 명령 추가
+- AI Ops 프로젝트 CI 템플릿 `templates/ci/github-actions/aiops.yml` 추가
+- 외부 runtime 연결 준비를 위한 `adapters/` 문서 추가
+- `aiops export runtime` 명령과 `schemas/runtime_export.schema.json` 추가
+- Bootstrap 선택 후보 catalog `runtime/bootstrap_options.json`과 `schemas/bootstrap_options.schema.json` 추가
+
+### Changed
+
+- 저장소 CI를 E2E 테스트, release safety, project CI template 검증 job으로 분리
+- `aiops release-check --strict`가 shell/schema 구문과 seed된 샘플 프로젝트의 doctor/validate/migrate/knowledge gate를 확인하도록 강화
+- Formula 설치 대상에 `adapters/` 포함
+- README와 QUICKSTART를 첫 실행 중심으로 단순화하고 상세 설명은 링크 문서로 분리
+- Bootstrap 선택 기준을 `bootstrap_reference.md`와 `runtime/bootstrap_options.json`으로 통합
+- Team/Role/Board/Coordination/Ownership/Branch 정책 문서를 slim reference로 압축
+- Guided Full, Task, Handoff 템플릿을 schema front matter와 필수 운영 필드 중심으로 경량화
+- Release package 포함/제외 범위와 `release-check` 필수 파일 기준 정리
+
+### Removed
+
+- 중복 bootstrap 정책 문서를 제거하고 `bootstrap_reference.md`와 structured data로 흡수
+
 ## 0.6.4 - 2026-07-23
 
 ### Added
@@ -106,7 +131,7 @@
 - 병렬 작업, dependency, rework, blocked 조율 문서 `coordination_policy.md` 추가
 - project board / team board 기준 문서 `board_model.md` 추가
 - Git branch / commit / PR / merge 일반 정책 문서 `branch_pr_policy.md` 추가
-- 프로젝트별 운영체계 구성 선택 정책 문서 `project_bootstrap_policy.md` 추가
+- 프로젝트별 운영체계 구성 선택 정책 문서 추가
 - 프로젝트 bootstrap 실행 절차 문서 `bootstrap_runbook.md` 추가
 - 실제 프로젝트에 `.ai/` 운영체계 템플릿을 설치하는 `install_runbook.md` 추가
 - `.ai/`가 없는 프로젝트 최초 1회용 `cold_start_prompt.md` 추가
@@ -127,7 +152,7 @@
 - `aiops doctor`에 strict 모드, adapter drift, `.ai_project` 필수 문서, Task 검증 상태 점검 추가
 - 문서 읽기 순서에서 `constitution.md`를 최우선 기준으로 추가
 - `org_model.md`를 Division과 조직 책임 중심으로 정리하고 Team 상세 구성은 `team_model.md`로 분리
-- `project_bootstrap_policy.md`에 단계별 질문 형식, 선택값 기록 규칙, bootstrap 완료 기준 추가
+- 프로젝트별 bootstrap 정책에 단계별 질문 형식, 선택값 기록 규칙, bootstrap 완료 기준 추가
 - `bootstrap_runbook.md`에 짧은 bootstrap trigger와 템플릿 저장소/대상 프로젝트 구분 기준 추가
 - `install_runbook.md`와 `bootstrap_runbook.md`를 별도 실행 단계로 분리
 - 시드 구성 단계의 산출물에 루트 `AGENTS.md` 생성을 명시

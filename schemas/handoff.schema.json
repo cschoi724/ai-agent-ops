@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/handoff.schema.json",
+  "title": "AI Ops Role Handoff",
+  "description": "Schema for role-to-role handoff metadata.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema",
+    "task_id",
+    "from_role",
+    "to_role",
+    "current_status",
+    "next_action",
+    "source_of_truth",
+    "allowed_paths"
+  ],
+  "properties": {
+    "schema": {
+      "const": "aiops.handoff.v1"
+    },
+    "task_id": {
+      "type": "string",
+      "pattern": "^T-[0-9]{8}-[0-9]{3,}$"
+    },
+    "from_role": {
+      "$ref": "#/$defs/roleName"
+    },
+    "to_role": {
+      "$ref": "#/$defs/roleName"
+    },
+    "from_agent": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "to_agent": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "current_status": {
+      "$ref": "#/$defs/taskStatus"
+    },
+    "next_action": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_of_truth": {
+      "$ref": "#/$defs/stringList"
+    },
+    "allowed_paths": {
+      "$ref": "#/$defs/stringList"
+    },
+    "report_paths": {
+      "$ref": "#/$defs/stringList"
+    },
+    "changed_or_affected_paths": {
+      "$ref": "#/$defs/stringList"
+    },
+    "validation_result": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "not_run",
+        "pass",
+        "pass_with_risk",
+        "fail",
+        "blocked"
+      ]
+    },
+    "risks": {
+      "$ref": "#/$defs/stringList"
+    },
+    "blockers": {
+      "$ref": "#/$defs/stringList"
+    },
+    "open_questions": {
+      "$ref": "#/$defs/stringList"
+    },
+    "created_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "$defs": {
+    "taskStatus": {
+      "type": "string",
+      "enum": [
+        "proposed",
+        "scoped",
+        "approved",
+        "in_progress",
+        "verification_ready",
+        "verification_in_progress",
+        "verification_passed",
+        "completion_review",
+        "done",
+        "blocked",
+        "rework_requested",
+        "cancelled"
+      ]
+    },
+    "roleName": {
+      "type": "string",
+      "enum": [
+        "Direction Role",
+        "Lead Role",
+        "Execution Role",
+        "Verification Role",
+        "Completion Role",
+        "Release Role",
+        "Ops Governance Role",
+        "Product Owner"
+      ]
+    },
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    }
+  }
+}

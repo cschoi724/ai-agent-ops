@@ -8,7 +8,7 @@
 
 이 workflow는 `.ai/` 템플릿과 `.ai_project/` 프로젝트 운영 문서를 적용해 AI Agent 운영 체계를 도입하는 절차를 정의한다.
 
-프로젝트별 운영 구성 선택 절차는 `.ai/bootstrap/project_bootstrap_policy.md`를 따른다.
+프로젝트별 운영 구성 선택 절차는 `.ai/bootstrap/bootstrap_reference.md`를 따르고, 선택 후보는 `.ai/runtime/bootstrap_options.json`을 기준으로 한다.
 
 제품 기능 개발이나 앱 코드 변경을 직접 수행하지 않는다. 운영 체계 도입은 AI Ops Agent 또는 Ops Governance Role이 주도하고, 제품/일정 영향 판단은 Lead Role, Direction Role, Product Owner가 확인한다.
 
@@ -38,7 +38,7 @@ Ops Governance analyzes project -> Ops Governance drafts migration plan -> Produ
 
 1. AI Ops Agent가 현재 프로젝트 구조와 기존 운영 지침을 분석한다.
 2. `.ai/` 적용 방식과 `.gitignore` 정책을 확인한다.
-3. `.ai/bootstrap/project_bootstrap_policy.md` 기준으로 운영 모드, Team, Role, branch/PR 전략 선택지를 제시한다.
+3. `.ai/bootstrap/bootstrap_reference.md`와 `.ai/runtime/bootstrap_options.json` 기준으로 운영 모드, Team, Role, branch/PR 전략 선택지를 제시한다.
 4. 사용자가 선택한 내용을 `.ai_project/operating_model.md` 초안으로 정리한다.
 5. 기존 문서를 삭제하지 않고 source of truth 매핑 초안을 작성한다.
 6. 기존 `AGENTS.md`가 있으면 백업과 병합안을 작성한다.

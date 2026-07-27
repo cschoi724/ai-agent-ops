@@ -108,6 +108,49 @@ Formula는 GitHub release tarball URL과 `sha256`으로 버전을 고정한다. 
 ```text
 $(brew --prefix)/bin/aiops
 $(brew --prefix)/opt/ai-agent-ops/libexec/
+$(brew --prefix)/opt/ai-agent-ops/libexec/adapters/
+```
+
+Formula 설치 대상:
+
+```text
+VERSION, README.md, QUICKSTART.md, CHANGELOG.md, LICENSE
+adapters/
+agents/
+bin/
+bootstrap/
+core/
+docs/
+models/
+policies/
+runtime/
+schemas/
+templates/
+workflows/
+```
+
+Formula 설치 제외:
+
+```text
+.git/
+.ai_project/
+design_notes/
+tests/
+scripts/
+Formula/
+개발 중 임시 파일
+```
+
+`tests/`, `scripts/`, `Formula/`는 개발 저장소의 release safety 용도다. `aiops release-check`는 릴리스 소스 체크아웃에서 실행한다.
+
+Homebrew 설치 후 사용자가 실행해야 하는 프로젝트 검증은 아래 명령이 담당한다.
+
+```bash
+aiops doctor --target ./YourProject --strict
+aiops validate --target ./YourProject --strict
+aiops migrate --target ./YourProject --plan
+aiops knowledge lint --target ./YourProject
+aiops export runtime --target ./YourProject
 ```
 
 대상 프로젝트 seed 결과:
@@ -159,5 +202,35 @@ aiops release-check --strict
 - Formula Ruby 문법
 - `LICENSE` 존재 여부
 - git working tree clean 여부
+- shell script 구문
+- schema JSON 구문
+- seed된 샘플 프로젝트의 `doctor --strict`, `validate --strict`, `migrate --plan`, `knowledge lint`
 
 `--strict`는 경고를 실패로 처리한다. 초기 public Homebrew 배포 전에는 반드시 strict 모드를 통과해야 한다.
+
+## 9. Project CI Template
+
+AI Ops가 적용된 프로젝트에는 GitHub Actions workflow를 생성할 수 있다.
+
+```bash
+aiops ci init
+```
+
+생성 파일:
+
+```text
+.github/workflows/aiops.yml
+```
+
+기본 검증:
+
+- `aiops doctor --strict`
+- `.ai_project/`가 있으면 `aiops validate --strict`
+- `.ai_project/`가 있으면 `aiops migrate --plan`
+- `.ai_knowledge/`가 있으면 `aiops knowledge lint`
+
+이미 workflow가 있으면 덮어쓰지 않는다. 교체가 필요할 때만 아래처럼 명시한다.
+
+```bash
+aiops ci init --force
+```

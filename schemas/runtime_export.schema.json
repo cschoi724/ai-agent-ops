@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/runtime_export.schema.json",
+  "title": "AI Ops Runtime Export",
+  "description": "Machine-readable snapshot for external runtime adapters.",
+  "type": "object",
+  "required": [
+    "schema",
+    "exported_at",
+    "project",
+    "operating_model",
+    "agents",
+    "tasks",
+    "handoffs",
+    "approval_checkpoints",
+    "adapter_contract"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "aiops.runtime_export.v1"
+    },
+    "exported_at": {
+      "type": "string"
+    },
+    "target": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
+    "core_version": {
+      "type": ["string", "number", "null"]
+    },
+    "operating_model": {
+      "type": "object"
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "workflow", "target_role", "path"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": ["string", "null"] },
+          "status": { "type": ["string", "null"] },
+          "workflow": { "type": ["string", "null"] },
+          "target_role": { "type": ["string", "null"] },
+          "target_agent": { "type": ["string", "null"] },
+          "required_capabilities": { "type": "array" },
+          "allowed_paths": { "type": "array" },
+          "source_of_truth": { "type": "array" },
+          "depends_on": { "type": "array" },
+          "blocks": { "type": "array" },
+          "locked_by": { "type": ["string", "null"] },
+          "lock_session": { "type": ["string", "null"] },
+          "report_to": { "type": ["string", "null"] },
+          "qa_to": { "type": ["string", "null"] },
+          "branch": { "type": "object" },
+          "pr": { "type": "object" },
+          "path": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "handoffs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["task_id", "from_role", "to_role", "current_status", "next_action", "path"],
+        "properties": {
+          "task_id": { "type": ["string", "null"] },
+          "from_role": { "type": ["string", "null"] },
+          "to_role": { "type": ["string", "null"] },
+          "from_agent": { "type": ["string", "null"] },
+          "to_agent": { "type": ["string", "null"] },
+          "current_status": { "type": ["string", "null"] },
+          "next_action": { "type": ["string", "null"] },
+          "source_of_truth": { "type": "array" },
+          "allowed_paths": { "type": "array" },
+          "report_paths": { "type": "array" },
+          "risks": { "type": "array" },
+          "blockers": { "type": "array" },
+          "open_questions": { "type": "array" },
+          "created_at": { "type": ["string", "null"] },
+          "path": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "approval_checkpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["task_id", "status", "type", "owner_role"],
+        "properties": {
+          "task_id": { "type": "string" },
+          "status": { "type": ["string", "null"] },
+          "type": { "type": "string" },
+          "owner_role": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "adapter_contract": {
+      "type": "object",
+      "required": [
+        "task_graph",
+        "role_assignment",
+        "state_transitions",
+        "handoff_events",
+        "approval_checkpoints"
+      ],
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}

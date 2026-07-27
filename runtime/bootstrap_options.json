@@ -1,0 +1,586 @@
+{
+  "schema": "aiops.bootstrap_options.v1",
+  "version": "1",
+  "generated_from": [
+    "bootstrap/bootstrap_reference.md",
+    "schemas/operating_model.schema.json"
+  ],
+  "categories": {
+    "bootstrap_mode": {
+      "label": "Bootstrap Mode",
+      "question": "How much setup guidance should AI Ops use before applying project files?",
+      "default": "fast_track",
+      "option_source": "bootstrap/bootstrap_reference.md",
+      "record_to": ".ai_project/operating_model.md:bootstrap_mode",
+      "options": [
+        {
+          "id": "fast_track",
+          "label": "Fast Track",
+          "description": "Use a short question flow and minimal safe defaults.",
+          "changes": "Creates a lighter .ai_project shape and leaves advanced choices deferred.",
+          "recommended_when": "New users, small projects, idea discovery, or solo work.",
+          "risk": "Some team, branch, and workflow details may need expansion later."
+        },
+        {
+          "id": "guided_full",
+          "label": "Guided Full",
+          "description": "Compare team, role, workflow, ownership, board, and branch options step by step.",
+          "changes": "Creates the fuller .ai_project shape with detailed operating decisions.",
+          "recommended_when": "Code projects, multiple agents, PR flows, or multi-team setup.",
+          "risk": "Heavier initial setup."
+        },
+        {
+          "id": "manual",
+          "label": "Manual",
+          "description": "Use custom project decisions without the standard guided flow.",
+          "changes": "Requires the operator to keep required fields coherent.",
+          "recommended_when": "Existing organizations with their own process.",
+          "risk": "Higher chance of missing required AI Ops fields."
+        },
+        {
+          "id": "migrated",
+          "label": "Migrated",
+          "description": "Mark a project that was created or upgraded through migration.",
+          "changes": "Preserves existing project decisions and records migration provenance.",
+          "recommended_when": "Existing .ai_project setups upgraded from an older AI Ops version.",
+          "risk": "May need migration validation before strict operation."
+        }
+      ]
+    },
+    "start_context": {
+      "label": "Start Context",
+      "question": "What kind of project start is this?",
+      "default": null,
+      "option_source": "bootstrap/bootstrap_reference.md",
+      "record_to": ".ai_project/operating_model.md:start_context",
+      "options": [
+        {
+          "id": "new_project_with_requirement",
+          "label": "New project with requirement",
+          "description": "A new project or business starts from an idea, requirement, or rough plan.",
+          "changes": "Readiness is checked before implementation roles are activated.",
+          "recommended_when": "The user knows what they want to build at least roughly.",
+          "activates_roles": [
+            "Direction Role",
+            "Lead Role",
+            "Ops Governance Role"
+          ]
+        },
+        {
+          "id": "assigned_or_existing_project",
+          "label": "Assigned or existing project",
+          "description": "AI Ops is being applied to an existing repository, task, or handoff.",
+          "changes": "Project scan and source-of-truth verification come first.",
+          "recommended_when": "There is existing code, documentation, or company work to take over.",
+          "activates_roles": [
+            "Lead Role",
+            "Verification Role",
+            "Ops Governance Role"
+          ]
+        },
+        {
+          "id": "blank_slate_discovery",
+          "label": "Blank slate discovery",
+          "description": "The user does not know what to build yet and wants to explore from zero.",
+          "changes": "No product task is created until Direction work produces a candidate direction.",
+          "recommended_when": "Idea discovery, research, or problem finding.",
+          "activates_roles": [
+            "Direction Role",
+            "Ops Governance Role"
+          ]
+        },
+        {
+          "id": "rescue_or_recovery",
+          "label": "Rescue or recovery",
+          "description": "The project needs stabilization before normal planning or implementation.",
+          "changes": "Build, test, missing context, and broken process checks are prioritized.",
+          "recommended_when": "Broken builds, missing documentation, abandoned work, or failed handoff.",
+          "activates_roles": [
+            "Lead Role",
+            "Verification Role",
+            "Ops Governance Role"
+          ]
+        },
+        {
+          "id": "migration_or_modernization",
+          "label": "Migration or modernization",
+          "description": "The main goal is to move or modernize an existing system.",
+          "changes": "Scope, compatibility, rollback, and verification gates become primary.",
+          "recommended_when": "Framework upgrades, architecture migration, repo restructuring.",
+          "activates_roles": [
+            "Lead Role",
+            "Execution Role",
+            "Verification Role",
+            "Ops Governance Role"
+          ]
+        },
+        {
+          "id": "ops_setup_only",
+          "label": "Ops setup only",
+          "description": "The user only wants AI Ops operating files, not product work.",
+          "changes": "Creates operating setup and defers product tasks.",
+          "recommended_when": "Installing AI Ops into a project before actual work starts.",
+          "activates_roles": [
+            "Ops Governance Role"
+          ]
+        },
+        {
+          "id": "scale_up_existing_ops",
+          "label": "Scale up existing ops",
+          "description": "An existing AI Ops setup needs more teams, roles, or stricter workflow.",
+          "changes": "Current .ai_project decisions are reviewed before expansion.",
+          "recommended_when": "A solo or small setup is growing into team operation.",
+          "activates_roles": [
+            "Lead Role",
+            "Ops Governance Role"
+          ]
+        },
+        {
+          "id": "custom_start_context",
+          "label": "Custom",
+          "description": "The start context does not fit the standard options.",
+          "changes": "The user must record a custom summary and required decisions.",
+          "recommended_when": "Special operating environments or mixed project contexts.",
+          "risk": "Requires more explicit decision records."
+        }
+      ]
+    },
+    "readiness_level": {
+      "label": "Readiness Level",
+      "question": "How ready is the project for execution?",
+      "default": null,
+      "option_source": "bootstrap/bootstrap_reference.md",
+      "record_to": ".ai_project/operating_model.md:readiness_level",
+      "options": [
+        {
+          "id": "idea_only",
+          "label": "Idea only",
+          "description": "The idea is still vague or only stated in a sentence.",
+          "changes": "Implementation is deferred and Direction work comes first.",
+          "recommended_when": "The user needs to clarify problem, audience, and value."
+        },
+        {
+          "id": "idea_structured",
+          "label": "Idea structured",
+          "description": "The goal and core features are roughly understood.",
+          "changes": "Product direction and MVP scope can be drafted before execution.",
+          "recommended_when": "The user can describe what the product should do."
+        },
+        {
+          "id": "planning_ready",
+          "label": "Planning ready",
+          "description": "Planning exists, but implementation breakdown is not ready.",
+          "changes": "Task breakdown, source of truth, and verification criteria are prepared.",
+          "recommended_when": "Requirements exist but work items and tests are not clear."
+        },
+        {
+          "id": "implementation_ready",
+          "label": "Implementation ready",
+          "description": "Requirements and acceptance criteria are ready enough to build.",
+          "changes": "Execution and Verification roles can be activated.",
+          "recommended_when": "The first approved task can be created safely."
+        },
+        {
+          "id": "existing_project_scan_required",
+          "label": "Existing project scan required",
+          "description": "Existing files must be scanned before decisions are trusted.",
+          "changes": "Source-of-truth and code/document consistency are checked first.",
+          "recommended_when": "AI Ops is being applied to an existing repo."
+        },
+        {
+          "id": "discovery_required",
+          "label": "Discovery required",
+          "description": "The problem, user, or value is not clear enough yet.",
+          "changes": "Discovery tasks and Direction questions come before build tasks.",
+          "recommended_when": "The user is exploring possibilities."
+        },
+        {
+          "id": "recovery_required",
+          "label": "Recovery required",
+          "description": "The project must be stabilized before normal execution.",
+          "changes": "Recovery tasks and verification criteria take priority.",
+          "recommended_when": "Build, test, dependency, or documentation state is unreliable."
+        },
+        {
+          "id": "ops_only",
+          "label": "Ops only",
+          "description": "Only the AI Ops operating setup is needed now.",
+          "changes": "Product direction and implementation tasks remain unresolved.",
+          "recommended_when": "The project is only installing or reviewing the harness."
+        }
+      ]
+    },
+    "operating_mode": {
+      "label": "Operating Mode",
+      "question": "How much operating structure does this project need?",
+      "default": "solo_light",
+      "option_source": "bootstrap/bootstrap_reference.md",
+      "record_to": ".ai_project/operating_model.md:operating_mode",
+      "options": [
+        {
+          "id": "solo_light",
+          "label": "Solo Light",
+          "description": "One person or one session can hold multiple roles with minimal ceremony.",
+          "changes": "Uses a single board and a shorter workflow for simple tasks.",
+          "recommended_when": "Small projects, idea work, or first-time AI Ops use.",
+          "activates_roles": [
+            "Direction Role",
+            "Lead Role",
+            "Ops Governance Role"
+          ],
+          "deferred_roles": [
+            "Execution Role",
+            "Verification Role"
+          ]
+        },
+        {
+          "id": "team_basic",
+          "label": "Team Basic",
+          "description": "Lead, Execution, and Verification responsibilities are separated.",
+          "changes": "Task setup, implementation, and verification become distinct handoffs.",
+          "recommended_when": "A project needs safer work separation without full PR process.",
+          "activates_roles": [
+            "Lead Role",
+            "Execution Role",
+            "Verification Role",
+            "Ops Governance Role"
+          ]
+        },
+        {
+          "id": "team_pr",
+          "label": "Team PR",
+          "description": "Team Basic plus task branch, PR, review, and merge ownership.",
+          "changes": "Branch and PR policy becomes part of task execution.",
+          "recommended_when": "Code projects where change history and merge control matter.",
+          "activates_roles": [
+            "Lead Role",
+            "Execution Role",
+            "Verification Role",
+            "Completion Role",
+            "Ops Governance Role"
+          ]
+        },
+        {
+          "id": "multi_team",
+          "label": "Multi Team",
+          "description": "Multiple teams own separate paths, domains, platforms, or modules.",
+          "changes": "Team ownership, team boards, and coordination policy become required.",
+          "recommended_when": "iOS, Android, Web, Backend, or domain teams work in parallel.",
+          "risk": "Requires stronger ownership and dependency records."
+        },
+        {
+          "id": "enterprise",
+          "label": "Enterprise",
+          "description": "Division, QA, Release, and broader governance are included.",
+          "changes": "More approval gates and operating documents are expected.",
+          "recommended_when": "Long-lived products, multiple divisions, or release governance.",
+          "risk": "Too heavy for small projects."
+        }
+      ]
+    },
+    "team_pattern": {
+      "label": "Team Pattern",
+      "question": "How should team ownership be divided?",
+      "default": "single_team",
+      "option_source": "models/team_model.md",
+      "record_to": ".ai_project/operating_model.md:team_pattern",
+      "options": [
+        {
+          "id": "single_team",
+          "label": "Single team",
+          "description": "One team owns most project work.",
+          "changes": "Uses one project board and one shared operating model.",
+          "recommended_when": "Early projects, solo work, or unclear team boundaries."
+        },
+        {
+          "id": "functional_teams",
+          "label": "Functional teams",
+          "description": "Teams are divided by function such as product, development, QA, or release.",
+          "changes": "Role and handoff boundaries become more explicit.",
+          "recommended_when": "Specialized responsibilities matter more than code paths.",
+          "aliases": [
+            "feature_team"
+          ]
+        },
+        {
+          "id": "platform_teams",
+          "label": "Platform teams",
+          "description": "Teams are divided by platform such as iOS, Android, Web, or Backend.",
+          "changes": "Path ownership and verification criteria are configured per platform.",
+          "recommended_when": "Multiple platform codebases are developed in parallel.",
+          "aliases": [
+            "platform_team"
+          ]
+        },
+        {
+          "id": "cross_functional",
+          "label": "Cross-functional",
+          "description": "A team owns end-to-end product slices across disciplines.",
+          "changes": "Domain ownership can matter more than directory ownership.",
+          "recommended_when": "Feature teams deliver across product, design, backend, and frontend."
+        },
+        {
+          "id": "custom",
+          "label": "Custom",
+          "description": "The user defines team names and ownership rules directly.",
+          "changes": "Requires explicit role, path, domain, source-of-truth, and board decisions.",
+          "recommended_when": "The project already has a custom organization shape.",
+          "aliases": [
+            "custom_team",
+            "multi_team",
+            "module_team"
+          ]
+        }
+      ]
+    },
+    "workflow_policy": {
+      "label": "Workflow Policy",
+      "question": "How strict should task state flow be?",
+      "default": "standard_vnext",
+      "option_source": "runtime/workflow.md",
+      "record_to": ".ai_project/operating_model.md:workflow_policy",
+      "options": [
+        {
+          "id": "standard_vnext",
+          "label": "Standard vNext",
+          "description": "Use the full proposed-to-done flow with approval, execution, verification, and completion review.",
+          "changes": "Clearer accountability with more state transitions.",
+          "recommended_when": "Most development projects."
+        },
+        {
+          "id": "skip_scoped_for_simple_tasks",
+          "label": "Skip scoped for simple tasks",
+          "description": "Simple tasks may move from proposed to approved without a separate scoped state.",
+          "changes": "Reduces overhead for small changes.",
+          "recommended_when": "Solo Light, documentation cleanup, or low-risk changes.",
+          "risk": "Ambiguous ownership should still use the standard flow."
+        },
+        {
+          "id": "custom",
+          "label": "Custom",
+          "description": "The project defines its own state flow and transition rules.",
+          "changes": "Requires explicit state, role, and approval mapping.",
+          "recommended_when": "An existing issue or PR workflow must be preserved."
+        }
+      ]
+    },
+    "ownership_model": {
+      "label": "Ownership Model",
+      "question": "How should responsibility for changes be decided?",
+      "default": "path_plus_domain",
+      "option_source": "policies/ownership_model.md",
+      "record_to": ".ai_project/operating_model.md:ownership_model",
+      "options": [
+        {
+          "id": "path_only",
+          "label": "Path only",
+          "description": "Ownership is determined by file and directory paths.",
+          "changes": "Easy to understand but weak for cross-cutting features.",
+          "recommended_when": "Small projects with clear code boundaries."
+        },
+        {
+          "id": "path_plus_domain",
+          "label": "Path plus domain",
+          "description": "Ownership uses both paths and product or technical domains.",
+          "changes": "Cross-path features can still have a clear owner.",
+          "recommended_when": "Most app and service projects."
+        },
+        {
+          "id": "document_ownership",
+          "label": "Document ownership",
+          "description": "Source-of-truth documents have explicit owners.",
+          "changes": "Requirements, architecture, and API docs are protected as decision sources.",
+          "recommended_when": "Planning, design, or architecture documents drive execution."
+        },
+        {
+          "id": "strict_parallel_control",
+          "label": "Strict parallel control",
+          "description": "Parallel work is restricted when ownership or path conflicts may occur.",
+          "changes": "Reduces merge and rework risk at the cost of speed.",
+          "recommended_when": "Migration, multi-team work, or sensitive code areas."
+        },
+        {
+          "id": "custom",
+          "label": "Custom",
+          "description": "The project defines its own ownership rules.",
+          "changes": "Requires clear conflict resolution and approval policy.",
+          "recommended_when": "Existing CODEOWNERS or company ownership policy must be kept."
+        }
+      ]
+    },
+    "coordination": {
+      "label": "Coordination Policy",
+      "question": "How should parallel work be coordinated?",
+      "default": "single_active_task",
+      "option_source": "policies/coordination_policy.md",
+      "record_to": ".ai_project/operating_model.md:coordination",
+      "options": [
+        {
+          "id": "single_active_task",
+          "label": "Single active task",
+          "description": "Only one core task is active at a time.",
+          "changes": "Minimizes conflict and is easy for new users.",
+          "recommended_when": "Solo Light, early projects, or high uncertainty."
+        },
+        {
+          "id": "parallel_with_locks",
+          "label": "Parallel with locks",
+          "description": "Parallel tasks are allowed when locks and ownership do not conflict.",
+          "changes": "Requires task lock metadata and dependency checks.",
+          "recommended_when": "Multiple agents work on separate areas.",
+          "aliases": [
+            "parallel_with_dependencies",
+            "parallel_by_ownership"
+          ]
+        },
+        {
+          "id": "team_board_coordination",
+          "label": "Team board coordination",
+          "description": "Team boards and the project board coordinate parallel work.",
+          "changes": "Team-level status and cross-team dependencies must be maintained.",
+          "recommended_when": "Multi-team or platform-team operation.",
+          "aliases": [
+            "lead_coordinated_parallel"
+          ]
+        },
+        {
+          "id": "custom",
+          "label": "Custom",
+          "description": "The project defines its own coordination rules.",
+          "changes": "Requires explicit blocked, dependency, and conflict handling.",
+          "recommended_when": "An existing PM or issue process must be preserved."
+        }
+      ]
+    },
+    "board_model": {
+      "label": "Board Model",
+      "question": "Where should work status be tracked?",
+      "default": "project_board_only",
+      "option_source": "policies/board_model.md",
+      "record_to": ".ai_project/operating_model.md:board_model",
+      "options": [
+        {
+          "id": "project_board_only",
+          "label": "Project board only",
+          "description": "Use one .ai_project/task_board.md for the whole project.",
+          "changes": "Simplest board structure.",
+          "recommended_when": "Single team, early projects, or Solo Light."
+        },
+        {
+          "id": "project_plus_team_board",
+          "label": "Project plus team board",
+          "description": "Use one project board plus team-level boards.",
+          "changes": "Separates overall priority from team execution state.",
+          "recommended_when": "Multi-team or platform-team operation."
+        },
+        {
+          "id": "custom_views",
+          "label": "Custom views",
+          "description": "Use custom views by role, team, domain, release, or product line.",
+          "changes": "Flexible but adds maintenance overhead.",
+          "recommended_when": "Enterprise or complex reporting needs.",
+          "aliases": [
+            "team_board_only"
+          ]
+        }
+      ]
+    },
+    "branch_pr": {
+      "label": "Branch / PR Policy",
+      "question": "How should Git branch, PR, and merge control work?",
+      "default": "pending_decision",
+      "option_source": "policies/branch_pr_policy.md",
+      "record_to": ".ai_project/operating_model.md:branch_pr",
+      "options": [
+        {
+          "id": "pending_decision",
+          "label": "Pending decision",
+          "description": "No branch or PR strategy is selected yet.",
+          "changes": "Git initialization, branch creation, PR, and merge remain deferred.",
+          "recommended_when": "The target is not a Git repo or implementation is not ready."
+        },
+        {
+          "id": "simple_safe",
+          "label": "Simple safe",
+          "description": "Use conservative Git behavior with explicit user approval for risky actions.",
+          "changes": "Keeps main protected and requires approval before push or merge.",
+          "recommended_when": "Small code projects that need safety without heavy process."
+        },
+        {
+          "id": "branch_per_task",
+          "label": "Branch per task",
+          "description": "Each task gets a task branch and can be reviewed before merge.",
+          "changes": "Execution owns task commits; Lead owns merge decision.",
+          "recommended_when": "Most AI-assisted code projects.",
+          "aliases": [
+            "feature_branch_pr"
+          ]
+        },
+        {
+          "id": "pr_required",
+          "label": "PR required",
+          "description": "Changes must go through PR and independent review.",
+          "changes": "Verification review becomes part of normal completion.",
+          "recommended_when": "Collaborative repositories or protected main branches.",
+          "aliases": [
+            "trunk_based_pr"
+          ]
+        },
+        {
+          "id": "custom",
+          "label": "Custom",
+          "description": "The project defines its own Git strategy.",
+          "changes": "Requires explicit branch, commit, push, review, and merge rules.",
+          "recommended_when": "Existing GitFlow, company policy, or release branch process.",
+          "aliases": [
+            "gitflow"
+          ]
+        }
+      ]
+    },
+    "knowledge_mode": {
+      "label": "Knowledge Mode",
+      "question": "How should AI-readable project knowledge be organized?",
+      "default": "minimal",
+      "option_source": "templates/ai_knowledge/README.md",
+      "record_to": ".ai_project/operating_model.md:knowledge_mode",
+      "options": [
+        {
+          "id": "minimal",
+          "label": "Minimal",
+          "description": "Keep only a small AI knowledge index and project brief.",
+          "changes": "Fastest setup and lowest documentation overhead.",
+          "recommended_when": "New users, small projects, or early discovery."
+        },
+        {
+          "id": "indexed",
+          "label": "Indexed",
+          "description": "Maintain an index of important project knowledge and source references.",
+          "changes": "Agents can find relevant context without reading every document.",
+          "recommended_when": "The project already has several important documents."
+        },
+        {
+          "id": "context_packs",
+          "label": "Context packs",
+          "description": "Group task-specific knowledge into small context packs.",
+          "changes": "Better for large projects and specialized role sessions.",
+          "recommended_when": "Long documents or many domains make context loading expensive."
+        },
+        {
+          "id": "external_source_of_truth",
+          "label": "External source of truth",
+          "description": "Reference external systems for canonical product or engineering knowledge.",
+          "changes": "AI Ops stores pointers and summaries, not the full source content.",
+          "recommended_when": "Docs live in Notion, Jira, Confluence, Figma, or another system."
+        },
+        {
+          "id": "custom",
+          "label": "Custom",
+          "description": "The project defines its own knowledge structure.",
+          "changes": "Requires explicit update and ownership rules.",
+          "recommended_when": "Existing knowledge management should be preserved."
+        }
+      ]
+    }
+  }
+}

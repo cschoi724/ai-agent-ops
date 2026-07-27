@@ -9,7 +9,7 @@ on:
 
 jobs:
   test:
-    name: aiops tests
+    name: shell, schema, e2e
     runs-on: macos-latest
 
     steps:
@@ -18,3 +18,44 @@ jobs:
 
       - name: Run tests
         run: scripts/test.sh
+
+  release-check:
+    name: release safety
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Release check
+        run: bin/aiops release-check --strict --allow-pending-release
+
+  project-ci-template:
+    name: project ci template
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate project CI
+        run: |
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT INT TERM
+
+          bin/aiops seed --target "$tmpdir" --adapter both --mode link --core "$PWD"
+          cp -R templates/ai_project/fast_track "$tmpdir/.ai_project"
+          perl -0pi -e 's/\{\{START_CONTEXT\}\}/ops_setup_only/g; s/\{\{READINESS_LEVEL\}\}/ops_only/g' "$tmpdir/.ai_project/operating_model.md"
+          mkdir -p \
+            "$tmpdir/.ai_project/tasks/active" \
+            "$tmpdir/.ai_project/tasks/backlog" \
+            "$tmpdir/.ai_project/tasks/archive" \
+            "$tmpdir/.ai_project/handoffs"
+          bin/aiops knowledge init --target "$tmpdir" --mode minimal
+          bin/aiops ci init --target "$tmpdir"
+
+          test -f "$tmpdir/.github/workflows/aiops.yml"
+          bin/aiops doctor --target "$tmpdir" --strict
+          bin/aiops validate --target "$tmpdir" --strict
+          bin/aiops migrate --target "$tmpdir" --plan
+          bin/aiops knowledge lint --target "$tmpdir"

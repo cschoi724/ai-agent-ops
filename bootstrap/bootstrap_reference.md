@@ -10,14 +10,17 @@
 
 Agent는 먼저 `bootstrap_runbook.md`의 핵심 흐름을 따른다. 세부 설정, 질문 팩, mode별 예시, 긴 선택지 설명이 필요할 때만 이 문서를 참조한다.
 
-`project_bootstrap_policy.md`는 어떤 선택지가 있고 어떤 기준으로 확정하는지를 정의한다. 이 reference는 AI Ops Agent가 사용자와 어떤 순서로 확인하고, 어떤 중간 산출물을 보여주고, 언제 파일을 생성하거나 갱신하는지를 자세히 설명한다.
+Bootstrap 선택 후보는 `runtime/bootstrap_options.json`을 기준으로 한다. 이 reference는 AI Ops Agent가 사용자와 어떤 순서로 확인하고, 어떤 중간 산출물을 보여주고, 언제 파일을 생성하거나 갱신하는지를 자세히 설명한다.
 
 ## 2. 관계
 
 기준 정책:
 
 ```text
-.ai/bootstrap/project_bootstrap_policy.md
+.ai/bootstrap/bootstrap_runbook.md
+.ai/bootstrap/bootstrap_reference.md
+.ai/runtime/bootstrap_options.json
+.ai/schemas/bootstrap_options.schema.json
 ```
 
 주요 출력 위치:
@@ -174,7 +177,7 @@ Automation Script:
 템플릿 저장소로 판단되는 신호:
 
 - `core/`, `models/`, `policies/`, `runtime/`, `bootstrap/`, `templates/`가 루트에 있다.
-- `bootstrap/project_bootstrap_policy.md`와 `bootstrap/bootstrap_runbook.md`가 루트에 있다.
+- `bootstrap/bootstrap_runbook.md`, `bootstrap/bootstrap_reference.md`, `runtime/bootstrap_options.json`이 루트 기준 경로에 있다.
 - `.ai_project/`가 없다.
 - 저장소 이름이나 branch가 `ai-agent-ops`, `ai-agent-ops-org`, `org-ops-model`에 가깝다.
 
