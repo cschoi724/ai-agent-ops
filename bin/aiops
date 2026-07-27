@@ -12,6 +12,11 @@ Usage:
   aiops bootstrap-guide [--target DIR]
   aiops validate [project] [--target DIR] [--strict]
   aiops validate task FILE [--strict]
+  aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
+  aiops task status TASK_ID [--target DIR]
+  aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT]
+  aiops task lock TASK_ID --by AGENT [--target DIR] [--role ROLE] [--session ID]
+  aiops task unlock TASK_ID --by AGENT [--target DIR]
   aiops knowledge init [--target DIR] [--mode minimal|full] [--force]
   aiops knowledge lint [--target DIR]
   aiops knowledge status [--target DIR]
@@ -35,6 +40,8 @@ Examples:
   aiops validate --strict
   aiops validate project --target /path/to/project --strict
   aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
+  aiops task create --title "로그인 화면 구현" --workflow feature --role "Lead Role"
+  aiops task transition T-YYYYMMDD-001 --to approved --role "Direction Role"
   aiops knowledge init --mode minimal
   aiops knowledge lint
   aiops bootstrap-guide
@@ -209,6 +216,8 @@ validate_front_matter() {
         ok =
           if field == "required_capabilities"
             array_present?(data[field])
+          elsif field == "target_role"
+            data.key?(field)
           else
             scalar_present?(data[field])
           end
@@ -234,6 +243,10 @@ validate_front_matter() {
       end
       if data["target_role"] && !roles.include?(data["target_role"])
         say("schema_error: invalid target_role #{data["target_role"]}")
+        failed = true
+      end
+      if !%w[done cancelled].include?(data["status"]) && !scalar_present?(data["target_role"])
+        say("schema_error: target_role required for status #{data["status"]}")
         failed = true
       end
       if data.key?("required_capabilities") && !array_present?(data["required_capabilities"])
@@ -506,6 +519,188 @@ validate_project() {
   [ "$failed" -eq 0 ] || return 1
   info ""
   info "ok: project validate"
+}
+
+task_find_file() {
+  target="$1"
+  task_id="$2"
+  task_dir="$target/.ai_project/tasks"
+
+  [ -d "$task_dir" ] || return 1
+
+  if [ -f "$task_dir/active/$task_id.md" ]; then
+    printf '%s\n' "$task_dir/active/$task_id.md"
+    return 0
+  fi
+  if [ -f "$task_dir/backlog/$task_id.md" ]; then
+    printf '%s\n' "$task_dir/backlog/$task_id.md"
+    return 0
+  fi
+  if [ -f "$task_dir/archive/$task_id.md" ]; then
+    printf '%s\n' "$task_dir/archive/$task_id.md"
+    return 0
+  fi
+
+  found="$(find "$task_dir" -type f -name "$task_id*.md" | sort | head -n 1 || true)"
+  [ -n "$found" ] || return 1
+  printf '%s\n' "$found"
+}
+
+task_next_id() {
+  target="$1"
+  date_compact="$2"
+
+  ruby -e '
+    root = ARGV[0]
+    date = ARGV[1]
+    max = 0
+    Dir.glob(File.join(root, ".ai_project/tasks/**/*")).each do |path|
+      name = File.basename(path, ".md")
+      match = name.match(/\AT-#{Regexp.escape(date)}-(\d{3,})/)
+      max = [max, match[1].to_i].max if match
+    end
+    puts format("T-%s-%03d", date, max + 1)
+  ' "$target" "$date_compact"
+}
+
+task_yaml_field() {
+  file="$1"
+  field="$2"
+
+  ruby -ryaml -rdate -e '
+    path = ARGV[0]
+    field = ARGV[1]
+    text = File.read(path)
+    front = nil
+    if text.start_with?("---\n")
+      lines = text.lines
+      closing = nil
+      lines[1..].each_with_index do |line, idx|
+        if line.strip == "---"
+          closing = idx + 1
+          break
+        end
+      end
+      front = lines[1...closing].join if closing
+    else
+      front = text
+    end
+    data = front ? YAML.safe_load(front, permitted_classes: [Date, Time, Symbol], aliases: true) : {}
+    data = {} unless data.is_a?(Hash)
+    value = data[field]
+    if value.is_a?(Array)
+      puts value.join(", ")
+    elsif value.nil?
+      puts ""
+    else
+      puts value
+    end
+  ' "$file" "$field"
+}
+
+task_update_front_matter() {
+  file="$1"
+  shift
+
+  ruby -ryaml -rdate -e '
+    path = ARGV.shift
+    updates = {}
+    ARGV.each do |pair|
+      key, value = pair.split("=", 2)
+      updates[key] = value == "__AIOPS_NULL__" ? nil : value
+    end
+
+    text = File.read(path)
+    unless text.start_with?("---\n")
+      STDERR.puts("error: YAML front matter required: #{path}")
+      exit 1
+    end
+
+    lines = text.lines
+    closing = nil
+    lines[1..].each_with_index do |line, idx|
+      if line.strip == "---"
+        closing = idx + 1
+        break
+      end
+    end
+    unless closing
+      STDERR.puts("error: YAML front matter closing marker missing: #{path}")
+      exit 1
+    end
+
+    front = lines[1...closing].join
+    body = lines[(closing + 1)..]&.join.to_s
+    data = YAML.safe_load(front, permitted_classes: [Date, Time, Symbol], aliases: true)
+    data = {} unless data.is_a?(Hash)
+    updates.each { |key, value| data[key] = value }
+    File.write(path, YAML.dump(data) + "---\n" + body)
+  ' "$file" "$@"
+}
+
+task_append_event() {
+  file="$1"
+  event="$2"
+  actor="$3"
+  reason="$4"
+  date_value="$(date +%Y-%m-%d)"
+
+  if ! grep -q '^## AI Ops CLI 기록' "$file"; then
+    {
+      printf '\n## AI Ops CLI 기록\n\n'
+      printf '| 날짜 | Actor | Event | Reason |\n'
+      printf '|---|---|---|---|\n'
+    } >> "$file"
+  fi
+  printf '| %s | %s | %s | %s |\n' "$date_value" "$actor" "$event" "$reason" >> "$file"
+}
+
+task_next_role_for_status() {
+  status="$1"
+  case "$status" in
+    proposed) printf '%s\n' "Lead Role" ;;
+    scoped) printf '%s\n' "Direction Role" ;;
+    approved) printf '%s\n' "Execution Role" ;;
+    in_progress) printf '%s\n' "Execution Role" ;;
+    verification_ready) printf '%s\n' "Verification Role" ;;
+    verification_in_progress) printf '%s\n' "Verification Role" ;;
+    verification_passed) printf '%s\n' "Completion Role" ;;
+    completion_review) printf '%s\n' "Completion Role" ;;
+    rework_requested) printf '%s\n' "Lead Role" ;;
+    blocked) printf '%s\n' "Lead Role" ;;
+    done|cancelled) printf '%s\n' "" ;;
+    *) printf '%s\n' "" ;;
+  esac
+}
+
+task_transition_allowed() {
+  from="$1"
+  to="$2"
+  role="$3"
+
+  case "$from:$to:$role" in
+    proposed:scoped:"Lead Role"|proposed:scoped:"Direction Role") return 0 ;;
+    proposed:approved:"Direction Role"|proposed:approved:"Lead Role"|proposed:approved:"Product Owner") return 0 ;;
+    proposed:cancelled:"Direction Role"|proposed:cancelled:"Product Owner"|proposed:blocked:*) return 0 ;;
+    scoped:approved:"Direction Role"|scoped:approved:"Lead Role"|scoped:approved:"Product Owner") return 0 ;;
+    scoped:cancelled:"Direction Role"|scoped:cancelled:"Product Owner"|scoped:blocked:*) return 0 ;;
+    approved:in_progress:"Execution Role"|approved:cancelled:"Direction Role"|approved:cancelled:"Product Owner"|approved:blocked:*) return 0 ;;
+    in_progress:verification_ready:"Execution Role"|in_progress:blocked:*) return 0 ;;
+    verification_ready:verification_in_progress:"Verification Role"|verification_ready:blocked:*) return 0 ;;
+    verification_in_progress:verification_passed:"Verification Role"|verification_in_progress:rework_requested:"Verification Role"|verification_in_progress:blocked:*) return 0 ;;
+    verification_passed:completion_review:"Completion Role"|verification_passed:blocked:*) return 0 ;;
+    completion_review:done:"Completion Role"|completion_review:done:"Lead Role"|completion_review:done:"Product Owner") return 0 ;;
+    completion_review:rework_requested:"Completion Role"|completion_review:rework_requested:"Lead Role"|completion_review:blocked:*) return 0 ;;
+    rework_requested:scoped:"Lead Role"|rework_requested:approved:"Lead Role"|rework_requested:approved:"Direction Role"|rework_requested:blocked:*) return 0 ;;
+    blocked:scoped:"Lead Role"|blocked:approved:"Lead Role"|blocked:in_progress:"Execution Role"|blocked:cancelled:"Direction Role"|blocked:cancelled:"Product Owner") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+task_require_project() {
+  target="$1"
+  [ -d "$target/.ai_project/tasks" ] || die ".ai_project/tasks missing; bootstrap or migrate project first"
+  mkdir -p "$target/.ai_project/tasks/active" "$target/.ai_project/tasks/backlog" "$target/.ai_project/tasks/archive"
 }
 
 render_template_file() {
@@ -1470,6 +1665,450 @@ cmd_validate() {
   esac
 }
 
+cmd_task() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "task requires an action: create, status, transition, lock, unlock"
+  shift
+
+  case "$action" in
+    create)
+      target="$(pwd)"
+      title=""
+      workflow="feature"
+      role="Lead Role"
+      capability="planning"
+      queue="active"
+      status="proposed"
+      priority="medium"
+      allowed_path="."
+      source_of_truth=".ai_project/source_of_truth.md"
+      created_by="AI Ops CLI"
+      task_id=""
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --title)
+            shift
+            [ "$#" -gt 0 ] || die "--title requires a value"
+            title="$1"
+            ;;
+          --id)
+            shift
+            [ "$#" -gt 0 ] || die "--id requires a value"
+            task_id="$1"
+            ;;
+          --workflow)
+            shift
+            [ "$#" -gt 0 ] || die "--workflow requires a value"
+            workflow="$1"
+            ;;
+          --role)
+            shift
+            [ "$#" -gt 0 ] || die "--role requires a value"
+            role="$1"
+            ;;
+          --capability)
+            shift
+            [ "$#" -gt 0 ] || die "--capability requires a value"
+            capability="$1"
+            ;;
+          --queue)
+            shift
+            [ "$#" -gt 0 ] || die "--queue requires a value"
+            queue="$1"
+            ;;
+          --status)
+            shift
+            [ "$#" -gt 0 ] || die "--status requires a value"
+            status="$1"
+            ;;
+          --priority)
+            shift
+            [ "$#" -gt 0 ] || die "--priority requires a value"
+            priority="$1"
+            ;;
+          --allowed-path)
+            shift
+            [ "$#" -gt 0 ] || die "--allowed-path requires a value"
+            allowed_path="$1"
+            ;;
+          --source-of-truth)
+            shift
+            [ "$#" -gt 0 ] || die "--source-of-truth requires a value"
+            source_of_truth="$1"
+            ;;
+          --created-by)
+            shift
+            [ "$#" -gt 0 ] || die "--created-by requires a value"
+            created_by="$1"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown task create option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      [ -n "$title" ] || die "task create requires --title"
+      case "$queue" in active|backlog|archive) ;; *) die "task create --queue must be active, backlog, or archive" ;; esac
+
+      target="$(abs_path "$target")"
+      task_require_project "$target"
+
+      date_compact="$(date +%Y%m%d)"
+      date_value="$(date +%Y-%m-%d)"
+      [ -n "$task_id" ] || task_id="$(task_next_id "$target" "$date_compact")"
+      task_file="$target/.ai_project/tasks/$queue/$task_id.md"
+      [ ! -e "$task_file" ] || die "task already exists: ${task_file#$target/}"
+
+      cat > "$task_file" <<EOF
+---
+schema: aiops.task.v1
+id: $task_id
+title: $title
+status: $status
+type: $workflow
+priority: $priority
+priority_reason:
+org_unit:
+team:
+team_lead:
+workflow: $workflow
+target_agent:
+target_role: $role
+required_capabilities:
+  - $capability
+ownership:
+  paths: []
+  domains: []
+  documents: []
+ownership_review:
+  required: false
+  reviewer:
+depends_on: []
+blocks: []
+parallel_group:
+allowed_paths:
+  - $allowed_path
+source_of_truth:
+  - $source_of_truth
+created_by: $created_by
+approved_by:
+locked_by:
+locked_at:
+lock_session:
+lock_timeout_minutes: 240
+created_at: $date_value
+updated_at: $date_value
+report_to: .ai_project/reports/${task_id}_task-report.md
+qa_to: .ai_project/qa/${task_id}_qa-report.md
+branch:
+  name:
+  base:
+pr:
+  url:
+  status:
+---
+
+# $title
+
+## 배경
+
+## 작업 범위
+
+## 완료 조건
+
+## AI Ops CLI 기록
+
+| 날짜 | Actor | Event | Reason |
+|---|---|---|---|
+| $date_value | $created_by | created: $status | task create |
+EOF
+
+      validate_front_matter task "$task_file" yes >/dev/null || {
+        rm -f "$task_file"
+        die "created task failed schema validation"
+      }
+
+      info "AI Ops task create"
+      info "created: ${task_file#$target/}"
+      info "task_id: $task_id"
+      info "status: $status"
+      info "target_role: $role"
+      ;;
+
+    status)
+      target="$(pwd)"
+      task_id=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          -*)
+            die "unknown task status option: $1"
+            ;;
+          *)
+            [ -z "$task_id" ] || die "task status requires exactly one TASK_ID"
+            task_id="$1"
+            ;;
+        esac
+        shift
+      done
+      [ -n "$task_id" ] || die "task status requires TASK_ID"
+      target="$(abs_path "$target")"
+      task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+
+      info "AI Ops task status"
+      info "task: ${task_file#$target/}"
+      for field in id title status workflow target_role target_agent locked_by lock_session updated_at; do
+        info "$field: $(task_yaml_field "$task_file" "$field")"
+      done
+      ;;
+
+    transition)
+      target="$(pwd)"
+      task_id=""
+      to_status=""
+      role=""
+      actor=""
+      reason="task transition"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --to)
+            shift
+            [ "$#" -gt 0 ] || die "--to requires a value"
+            to_status="$1"
+            ;;
+          --role)
+            shift
+            [ "$#" -gt 0 ] || die "--role requires a value"
+            role="$1"
+            ;;
+          --by)
+            shift
+            [ "$#" -gt 0 ] || die "--by requires a value"
+            actor="$1"
+            ;;
+          --reason)
+            shift
+            [ "$#" -gt 0 ] || die "--reason requires a value"
+            reason="$1"
+            ;;
+          -*)
+            die "unknown task transition option: $1"
+            ;;
+          *)
+            [ -z "$task_id" ] || die "task transition requires exactly one TASK_ID"
+            task_id="$1"
+            ;;
+        esac
+        shift
+      done
+
+      [ -n "$task_id" ] || die "task transition requires TASK_ID"
+      [ -n "$to_status" ] || die "task transition requires --to"
+      [ -n "$role" ] || die "task transition requires --role"
+
+      target="$(abs_path "$target")"
+      task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+      from_status="$(task_yaml_field "$task_file" status)"
+      locked_by="$(task_yaml_field "$task_file" locked_by)"
+
+      if [ -n "$locked_by" ]; then
+        if [ -z "$actor" ] || [ "$actor" != "$locked_by" ]; then
+          die "task is locked by $locked_by; transition denied"
+        fi
+      fi
+
+      if ! task_transition_allowed "$from_status" "$to_status" "$role"; then
+        die "invalid transition: $from_status -> $to_status by $role"
+      fi
+
+      next_role="$(task_next_role_for_status "$to_status")"
+      date_value="$(date +%Y-%m-%d)"
+      actor_label="${actor:-$role}"
+
+      case "$to_status" in
+        in_progress)
+          task_update_front_matter "$task_file" \
+            "status=$to_status" \
+            "target_role=$next_role" \
+            "updated_at=$date_value" \
+            "locked_by=${actor_label}" \
+            "locked_at=$date_value"
+          ;;
+        *)
+          task_update_front_matter "$task_file" \
+            "status=$to_status" \
+            "target_role=${next_role:-__AIOPS_NULL__}" \
+            "updated_at=$date_value" \
+            "locked_by=__AIOPS_NULL__" \
+            "locked_at=__AIOPS_NULL__" \
+            "lock_session=__AIOPS_NULL__"
+          ;;
+      esac
+
+      task_append_event "$task_file" "transition: $from_status -> $to_status" "$actor_label" "$reason"
+      validate_front_matter task "$task_file" yes >/dev/null || die "transition produced invalid task metadata"
+
+      info "AI Ops task transition"
+      info "task_id: $task_id"
+      info "from: $from_status"
+      info "to: $to_status"
+      info "role: $role"
+      info "next_role: $next_role"
+      ;;
+
+    lock)
+      target="$(pwd)"
+      task_id=""
+      actor=""
+      role=""
+      session=""
+      reason="task lock"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --by)
+            shift
+            [ "$#" -gt 0 ] || die "--by requires a value"
+            actor="$1"
+            ;;
+          --role)
+            shift
+            [ "$#" -gt 0 ] || die "--role requires a value"
+            role="$1"
+            ;;
+          --session)
+            shift
+            [ "$#" -gt 0 ] || die "--session requires a value"
+            session="$1"
+            ;;
+          --reason)
+            shift
+            [ "$#" -gt 0 ] || die "--reason requires a value"
+            reason="$1"
+            ;;
+          -*)
+            die "unknown task lock option: $1"
+            ;;
+          *)
+            [ -z "$task_id" ] || die "task lock requires exactly one TASK_ID"
+            task_id="$1"
+            ;;
+        esac
+        shift
+      done
+
+      [ -n "$task_id" ] || die "task lock requires TASK_ID"
+      [ -n "$actor" ] || die "task lock requires --by"
+      target="$(abs_path "$target")"
+      task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+      locked_by="$(task_yaml_field "$task_file" locked_by)"
+      if [ -n "$locked_by" ] && [ "$locked_by" != "$actor" ]; then
+        die "task is already locked by $locked_by"
+      fi
+
+      date_value="$(date +%Y-%m-%d)"
+      task_update_front_matter "$task_file" \
+        "locked_by=$actor" \
+        "locked_at=$date_value" \
+        "lock_session=${session:-__AIOPS_NULL__}" \
+        "updated_at=$date_value"
+      task_append_event "$task_file" "lock" "$actor" "$reason"
+
+      info "AI Ops task lock"
+      info "task_id: $task_id"
+      info "locked_by: $actor"
+      [ -z "$role" ] || info "role: $role"
+      [ -z "$session" ] || info "session: $session"
+      ;;
+
+    unlock)
+      target="$(pwd)"
+      task_id=""
+      actor=""
+      reason="task unlock"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --by)
+            shift
+            [ "$#" -gt 0 ] || die "--by requires a value"
+            actor="$1"
+            ;;
+          --reason)
+            shift
+            [ "$#" -gt 0 ] || die "--reason requires a value"
+            reason="$1"
+            ;;
+          -*)
+            die "unknown task unlock option: $1"
+            ;;
+          *)
+            [ -z "$task_id" ] || die "task unlock requires exactly one TASK_ID"
+            task_id="$1"
+            ;;
+        esac
+        shift
+      done
+
+      [ -n "$task_id" ] || die "task unlock requires TASK_ID"
+      [ -n "$actor" ] || die "task unlock requires --by"
+      target="$(abs_path "$target")"
+      task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+      locked_by="$(task_yaml_field "$task_file" locked_by)"
+      if [ -n "$locked_by" ] && [ "$locked_by" != "$actor" ]; then
+        die "task is locked by $locked_by; unlock denied"
+      fi
+
+      date_value="$(date +%Y-%m-%d)"
+      task_update_front_matter "$task_file" \
+        "locked_by=__AIOPS_NULL__" \
+        "locked_at=__AIOPS_NULL__" \
+        "lock_session=__AIOPS_NULL__" \
+        "updated_at=$date_value"
+      task_append_event "$task_file" "unlock" "$actor" "$reason"
+
+      info "AI Ops task unlock"
+      info "task_id: $task_id"
+      info "unlocked_by: $actor"
+      ;;
+
+    *)
+      die "unknown task action: $action"
+      ;;
+  esac
+}
+
 cmd_knowledge() {
   action="${1:-}"
   [ "$#" -gt 0 ] || die "knowledge requires an action: init, lint, status"
@@ -1978,6 +2617,7 @@ main() {
     migrate) cmd_migrate "$@" ;;
     bootstrap-guide) cmd_bootstrap_guide "$@" ;;
     validate) cmd_validate "$@" ;;
+    task) cmd_task "$@" ;;
     knowledge) cmd_knowledge "$@" ;;
     version) cmd_version "$@" ;;
     update) cmd_update "$@" ;;

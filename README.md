@@ -66,6 +66,10 @@ Bootstrap은 Discovery Phase에서 파일을 수정하지 않는다. Agent가 �
 | `aiops bootstrap-guide` | 현재 상태에 맞는 다음 Agent 입력 안내 |
 | `aiops validate --strict` | 현재 프로젝트 운영 schema 검증 |
 | `aiops validate task FILE --strict` | Task front matter schema 검증 |
+| `aiops task create --title TITLE` | 새 Task 생성 |
+| `aiops task status TASK_ID` | Task 상태 확인 |
+| `aiops task transition TASK_ID --to STATUS --role ROLE` | 허용된 상태 전이 적용 |
+| `aiops task lock/unlock TASK_ID --by AGENT` | Task 작업 lock 관리 |
 | `aiops knowledge init --mode minimal` | `.ai_knowledge/` 최소 workspace 생성 |
 | `aiops knowledge lint` | Knowledge workspace 점검 |
 | `aiops update --check` | core 업데이트 가능 여부 확인 |
