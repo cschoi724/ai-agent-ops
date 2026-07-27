@@ -21,5 +21,12 @@
 
 1. `project_brief.md`
 2. `index.md`
-3. 현재 Task가 지정한 source of truth
-4. 필요한 Wiki 세부 문서
+3. 현재 Task가 지정한 context pack
+4. 현재 Task가 지정한 source of truth
+5. 필요한 Wiki 세부 문서
+
+## Context Packs
+
+`context_packs/`는 특정 Task나 주제에 필요한 지식만 모아둔 진입 문서다.
+
+Agent는 모든 Wiki 문서를 한 번에 읽지 않고, 현재 Task와 관련된 context pack을 먼저 확인한다.

@@ -23,6 +23,7 @@ Usage:
   aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT [--target DIR]
   aiops handoff validate FILE|TASK_ID [--target DIR] [--strict]
   aiops knowledge init [--target DIR] [--mode minimal|full] [--force]
+  aiops knowledge pack TOPIC [--target DIR] [--create] [--task TASK_ID] [--source PATH] [--purpose TEXT]
   aiops knowledge lint [--target DIR]
   aiops knowledge status [--target DIR]
   aiops version [--core DIR]
@@ -50,6 +51,7 @@ Examples:
   aiops task transition T-YYYYMMDD-001 --to approved --role "Direction Role"
   aiops handoff create T-YYYYMMDD-001 --from "Execution Role" --to "Verification Role" --next-action "변경 결과 검증"
   aiops knowledge init --mode minimal
+  aiops knowledge pack ios_login --create --task T-YYYYMMDD-001
   aiops knowledge lint
   aiops bootstrap-guide
   aiops session-guide
@@ -2688,6 +2690,7 @@ cmd_role() {
       info "- .ai_project/current_context.md"
       info "- .ai_project/task_board.md"
       info "- .ai_project/source_of_truth.md"
+      info "- 필요한 경우 .ai_knowledge/context_packs/"
       info ""
       info "세션 규칙:"
       info "- 현재 세션은 role_session이다."
@@ -2774,13 +2777,18 @@ cmd_role() {
 
 cmd_knowledge() {
   action="${1:-}"
-  [ "$#" -gt 0 ] || die "knowledge requires an action: init, lint, status"
+  [ "$#" -gt 0 ] || die "knowledge requires an action: init, pack, lint, status"
   shift
 
   target="$(pwd)"
   mode="minimal"
   force="no"
   core="$(default_core_dir)"
+  pack_topic=""
+  pack_create="no"
+  pack_task=""
+  pack_source=".ai_project/source_of_truth.md"
+  pack_purpose=""
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -2797,12 +2805,34 @@ cmd_knowledge() {
       --force)
         force="yes"
         ;;
+      --create)
+        pack_create="yes"
+        ;;
+      --task)
+        shift
+        [ "$#" -gt 0 ] || die "--task requires a value"
+        pack_task="$1"
+        ;;
+      --source)
+        shift
+        [ "$#" -gt 0 ] || die "--source requires a value"
+        pack_source="$1"
+        ;;
+      --purpose)
+        shift
+        [ "$#" -gt 0 ] || die "--purpose requires a value"
+        pack_purpose="$1"
+        ;;
       -h|--help)
         usage
         exit 0
         ;;
       *)
-        die "unknown knowledge option: $1"
+        if [ "$action" = "pack" ] && [ -z "$pack_topic" ]; then
+          pack_topic="$1"
+        else
+          die "unknown knowledge option: $1"
+        fi
         ;;
     esac
     shift
@@ -2837,6 +2867,8 @@ cmd_knowledge() {
       for file in README.md index.md log.md project_brief.md; do
         render_template_file "$core/templates/ai_knowledge/$file" "$knowledge_dir/$file" "$date_value" "$project_name"
       done
+      mkdir -p "$knowledge_dir/context_packs"
+      render_template_file "$core/templates/ai_knowledge/context_packs/_template.md" "$knowledge_dir/context_packs/_template.md" "$date_value" "$project_name"
 
       if [ "$mode" = "full" ]; then
         for dir in concepts decisions architecture open_questions; do
@@ -2847,6 +2879,79 @@ cmd_knowledge() {
 
       info "created: $knowledge_dir"
       info "mode: $mode"
+      ;;
+    pack)
+      [ -n "$pack_topic" ] || die "knowledge pack requires TOPIC"
+      [ -d "$knowledge_dir" ] || die ".ai_knowledge missing; run aiops knowledge init first"
+
+      safe_topic="$(printf '%s\n' "$pack_topic" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/_/g; s/_\{2,\}/_/g; s/^_//; s/_$//')"
+      [ -n "$safe_topic" ] || die "invalid pack topic: $pack_topic"
+      pack_dir="$knowledge_dir/context_packs"
+      pack_file="$pack_dir/$safe_topic.md"
+
+      if [ "$pack_create" = "yes" ]; then
+        mkdir -p "$pack_dir"
+        date_value="$(date +%Y-%m-%d)"
+        project_name="$(basename "$target")"
+        [ -n "$pack_purpose" ] || pack_purpose="Task 또는 주제 '$pack_topic' 작업에 필요한 최소 지식 묶음"
+
+        cat > "$pack_file" <<EOF
+# Context Pack: $pack_topic
+
+작성일: $date_value
+프로젝트: $project_name
+
+## 목적
+
+$pack_purpose
+
+## 언제 읽는가
+
+- 관련 Task를 시작하기 전
+- Role Session을 새로 열 때
+- source of truth와 작업 범위를 빠르게 확인해야 할 때
+
+## 관련 Task
+
+- ${pack_task:-미지정}
+
+## 먼저 확인할 원본
+
+| 원본 | 확인할 내용 |
+|---|---|
+| $pack_source | 현재 작업 기준 |
+
+## 필요한 Wiki 항목
+
+- \`project_brief.md\`
+- \`index.md\`
+
+## 작업 전 확인할 미결정 사항
+
+- 미작성
+
+## 주의
+
+이 context pack은 원본 문서를 대체하지 않는다. 구현, 검증, 완료 판단 전에는 반드시 source of truth를 확인한다.
+EOF
+
+        {
+          printf '\n| %s | AI Ops CLI / Ops Governance Role | context_packs/%s.md | %s | context pack 생성 | |\n' "$date_value" "$safe_topic" "$pack_source"
+        } >> "$knowledge_dir/log.md"
+
+        info "AI Ops knowledge pack"
+        info "created: .ai_knowledge/context_packs/$safe_topic.md"
+        info "topic: $pack_topic"
+        [ -z "$pack_task" ] || info "task: $pack_task"
+        return 0
+      fi
+
+      [ -f "$pack_file" ] || die "context pack not found: $safe_topic; use --create"
+      info "AI Ops knowledge pack"
+      info "topic: $pack_topic"
+      info "file: .ai_knowledge/context_packs/$safe_topic.md"
+      info ""
+      sed -n '1,220p' "$pack_file"
       ;;
     lint)
       failed=0
@@ -2862,6 +2967,11 @@ cmd_knowledge() {
       for file in README.md index.md log.md project_brief.md; do
         knowledge_required_file "$target" "$file" || failed=1
       done
+      if [ -d "$knowledge_dir/context_packs" ]; then
+        info "ok: .ai_knowledge/context_packs"
+      else
+        info "note: .ai_knowledge/context_packs missing"
+      fi
 
       [ "$failed" -eq 0 ] || exit 1
       info "ok: knowledge workspace"
@@ -2876,6 +2986,12 @@ cmd_knowledge() {
             info "  - $file"
           fi
         done
+        if [ -d "$knowledge_dir/context_packs" ]; then
+          info "context packs:"
+          find "$knowledge_dir/context_packs" -maxdepth 1 -type f -name '*.md' | sort | while IFS= read -r pack; do
+            info "  - context_packs/$(basename "$pack")"
+          done
+        fi
       else
         info "missing: .ai_knowledge"
         info "Next: aiops knowledge init --target \"$target\" --mode minimal"

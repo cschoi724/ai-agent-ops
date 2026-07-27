@@ -75,6 +75,7 @@ Bootstrap은 Discovery Phase에서 파일을 수정하지 않는다. Agent가 �
 | `aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT` | Role 간 인계 문서 생성 |
 | `aiops handoff validate FILE --strict` | 인계 문서 schema 검증 |
 | `aiops knowledge init --mode minimal` | `.ai_knowledge/` 최소 workspace 생성 |
+| `aiops knowledge pack TOPIC --create` | 작업별 context pack 생성 |
 | `aiops knowledge lint` | Knowledge workspace 점검 |
 | `aiops update --check` | core 업데이트 가능 여부 확인 |
 | `aiops release-check --strict` | 배포 전 필수 문서와 Formula 상태 점검 |
