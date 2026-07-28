@@ -49,6 +49,16 @@ Agent는 사용자에게 아래 내용을 요약한다.
 - 자동 적용 가능 항목
 - 사용자 결정 필요 항목
 - 자동 변경하지 않을 항목
+- 예상 영향 범위
+- 승인 후 실행할 다음 명령
+
+사용자에게 보여주는 계획은 아래 세 범위를 분리한다.
+
+| 범위 | 의미 | 처리 |
+|---|---|---|
+| `safe_auto_fix` | 운영 파일/디렉토리 중 자동 보강해도 제품 동작에 영향이 없는 항목 | 승인 후 `migrate --apply` |
+| `needs_user_decision` | adapter 문구, schema 채택처럼 기존 결정과 충돌할 수 있는 항목 | 사용자 확인 후 별도 작업 |
+| `manual_only` | 제품 코드, 제품 문서, source of truth, Task 상태, branch/PR, commit/push/deploy | 자동 변경 금지 |
 
 승인 질문은 구체적인 파일 범위를 포함해야 한다.
 
@@ -86,6 +96,8 @@ aiops migrate --target . --apply
 - `AGENTS.md` / `CLAUDE.md` 갱신
 - source of truth 재지정
 - branch/PR 전략 변경
+- 제품 코드 또는 제품 문서 수정
+- Git branch, commit, push, PR, merge, deploy
 
 ## 5. Verify
 

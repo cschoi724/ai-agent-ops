@@ -5,7 +5,7 @@ AI Agent Ops를 처음 쓰는 사용자를 위한 최소 절차다.
 ## 0. 흐름
 
 ```text
-install -> seed -> doctor -> bootstrap-guide -> Agent bootstrap
+install -> seed -> doctor -> bootstrap-guide -> Agent bootstrap -> session-guide -> role prompt
 ```
 
 | 단계 | 하는 일 | 파일 수정 |
@@ -15,6 +15,8 @@ install -> seed -> doctor -> bootstrap-guide -> Agent bootstrap
 | doctor | 설치 상태 점검 | 없음 |
 | bootstrap-guide | 다음 입력 문구 확인 | 없음 |
 | Agent bootstrap | 대화로 운영 모델 구성 | 최종 승인 후 `.ai_project/` 생성 |
+| session-guide | 어떤 Role 세션을 열지 확인 | 없음 |
+| role prompt | 다음 Agent 첫 문구 생성 | 없음 |
 
 ## 1. Install
 
@@ -87,35 +89,50 @@ Agent가 질문을 하나씩 한다. 답변은 Decision Stack에 쌓이고, 마�
 
 ## 6. After Bootstrap
 
-운영 구성이 끝나면 Role을 붙여 작업을 시작한다.
+운영 구성이 끝나면 bootstrap을 다시 시작하지 않는다. 먼저 어떤 Role 세션이 필요한지 확인한다.
+
+```bash
+aiops session-guide
+```
+
+자주 쓰는 선택 기준:
+
+| 하고 싶은 일 | 열 세션 |
+|---|---|
+| 제품 방향이나 요구사항 정리 | Direction Role |
+| Task 후보, 우선순위, 담당 정리 | Lead Role |
+| 승인된 Task 구현 | Execution Role |
+| 구현 결과 독립 검증 | Verification Role |
+| 완료 처리와 잔여 리스크 판단 | Completion Role |
+| 운영모델, 마이그레이션, 정책 점검 | Ops Governance Role |
+
+세션 첫 문구는 직접 쓰기보다 CLI로 만든다.
 
 제품 방향:
 
-```text
-너는 PM Agent / Direction Role이야.
-현재 .ai_project를 읽고 제품 방향 정리를 시작해줘.
+```bash
+aiops role prompt direction
 ```
 
 Task 정리:
 
-```text
-너는 Lead Agent / Lead Role이야.
-현재 board를 읽고 다음 Task 후보와 담당 Role을 정리해줘.
+```bash
+aiops role prompt lead
 ```
 
 구현:
 
-```text
-너는 Development Agent / Execution Role이야.
-승인된 Task를 확인하고 진행해줘.
+```bash
+aiops role prompt execution --task TASK_ID
 ```
 
 검증:
 
-```text
-너는 QA Agent / Verification Role이야.
-검증 대기 Task를 검증해줘.
+```bash
+aiops role prompt verification --task TASK_ID
 ```
+
+명령 출력의 `ROLE SESSION PROMPT` 블록을 새 Codex 또는 Claude 세션 첫 메시지로 사용한다.
 
 ## 7. Useful Commands
 
@@ -147,6 +164,8 @@ aiops migrate --apply
 | `aiops` 명령 없음 | Homebrew 설치 후 새 터미널을 열거나 PATH 확인 |
 | `.ai_project/`가 없음 | 정상이다. bootstrap 승인 후 생성된다 |
 | Agent가 일반 답변만 함 | 새 세션에서 `AI Ops bootstrap 시작해줘.`를 다시 입력 |
+| bootstrap이 이미 끝난 프로젝트에서 또 bootstrap을 묻는지 헷갈림 | `aiops bootstrap-guide` 후 `aiops session-guide`를 사용한다 |
+| 다음 Agent에게 뭐라고 넘길지 모르겠음 | `aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT` 사용 |
 
 ## Next Docs
 
@@ -154,3 +173,4 @@ aiops migrate --apply
 - Bootstrap 상세: [bootstrap/bootstrap_runbook.md](bootstrap/bootstrap_runbook.md)
 - 기존 프로젝트 마이그레이션: [bootstrap/migration_runbook.md](bootstrap/migration_runbook.md)
 - Role 책임: [models/role_model.md](models/role_model.md)
+- Role 인계: [runtime/role_handoff.md](runtime/role_handoff.md)

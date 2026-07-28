@@ -15,6 +15,7 @@
 - Apply Phase는 사용자가 최종 Draft와 파일 생성/수정 범위를 승인한 뒤에만 시작한다.
 - 한 번에 전체 결론을 제안하지 않고, 질문과 답변을 Decision Stack에 쌓는다.
 - 제품 아이디어 탐색은 bootstrap 중 깊게 진행하지 않는다. Apply 이후 PM Agent / Direction Role 첫 세션으로 넘긴다.
+- AI Ops Agent는 운영모델을 구성하는 역할이다. PM/Direction/Lead Role의 제품 기획과 Task 실행을 대신하지 않는다.
 - `.ai_project/`는 운영 상태이고, `.ai_knowledge/`는 선택 가능한 Agent 온보딩용 LLM Wiki다.
 - `.ai_knowledge/`는 source of truth가 아니다. 원본 문서와 코드가 우선한다.
 
@@ -39,6 +40,8 @@ Install과 Bootstrap은 다르다.
 ```text
 AI Ops bootstrap을 Discovery Phase로 시작합니다.
 현재 단계에서는 파일을 수정하지 않습니다.
+저는 AI Ops Agent / Ops Governance Role로 운영 구성만 다룹니다.
+제품 방향 탐색은 Apply 이후 Direction Role 세션으로 넘깁니다.
 
 확인:
 - 대상 경로:
@@ -218,8 +221,17 @@ aiops knowledge lint
 예:
 
 ```text
-너는 PM Agent / Direction Role이야.
-.ai_project/current_context.md와 .ai_knowledge/project_brief.md를 읽고 제품 방향 정리를 시작해줘.
+운영 구성은 완료됐습니다.
+다음부터는 bootstrap이 아니라 Role Session으로 작업을 시작합니다.
+
+어떤 세션을 열지 보려면:
+  aiops session-guide
+
+제품 방향을 정리하려면:
+  aiops role prompt direction
+
+Task를 정리하려면:
+  aiops role prompt lead
 ```
 
 ## 12. 상세 Reference

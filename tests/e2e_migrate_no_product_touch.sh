@@ -19,8 +19,8 @@ after="$(cksum "$tmpdir/Sources/App.swift")"
   exit 1
 }
 
-grep -q 'product code' /tmp/aiops-e2e-migrate-product.out && {
-  printf '%s\n' "migrate apply output should not claim product code changes" >&2
+grep -q 'product code: not touched' /tmp/aiops-e2e-migrate-product.out || {
+  printf '%s\n' "migrate apply should explicitly exclude product code" >&2
   exit 1
 }
 

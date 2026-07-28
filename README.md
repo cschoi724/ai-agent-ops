@@ -68,6 +68,8 @@ YourProject/
 | `aiops seed --adapter both` | 프로젝트에 AI Ops core와 Agent adapter 연결 |
 | `aiops doctor --strict` | 설치와 운영 구성을 엄격 점검 |
 | `aiops bootstrap-guide` | 현재 상태에 맞는 다음 Agent 입력 안내 |
+| `aiops session-guide` | 운영 구성 이후 열 Role Session 선택 |
+| `aiops role prompt ROLE` | Codex/Claude 공통 Role Session 첫 문구 생성 |
 | `aiops migrate --plan` | 기존 운영 프로젝트 업데이트 영향 확인 |
 | `aiops migrate --apply` | 승인된 안전 범위만 마이그레이션 |
 | `aiops validate --strict` | `.ai_project/` schema 검증 |
@@ -101,6 +103,7 @@ YourProject/
 - [runtime/bootstrap_options.json](runtime/bootstrap_options.json): bootstrap 선택 후보 catalog
 - [runtime/workflow.md](runtime/workflow.md): 상태 모델
 - [runtime/task_queue.md](runtime/task_queue.md): Task 운영 기준
+- [runtime/role_handoff.md](runtime/role_handoff.md): Role 인계 기준
 - [adapters/README.md](adapters/README.md): 외부 runtime adapter 계약
 - [CHANGELOG.md](CHANGELOG.md): 변경 이력
 
