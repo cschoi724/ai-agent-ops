@@ -15,6 +15,7 @@ mkdir -p \
 
 "$repo_root/bin/aiops" task create \
   --target "$tmpdir" \
+  --id T-20260727-001 \
   --title "Runtime export task" \
   --workflow feature \
   --role "Lead Role" \

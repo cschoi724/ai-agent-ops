@@ -10,6 +10,10 @@
 
 ## Unreleased
 
+- 예정된 변경사항 없음
+
+## 0.7.0 - 2026-07-28
+
 ### Added
 
 - 프로젝트 저장소용 GitHub Actions workflow를 생성하는 `aiops ci init` 명령 추가
