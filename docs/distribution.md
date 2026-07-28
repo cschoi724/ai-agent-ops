@@ -82,15 +82,34 @@ aiops update --check
 5. `bin/aiops update --check` 확인
 6. license 결정과 `LICENSE` 파일 확인
 7. git tag 생성: `vX.Y.Z`
-8. GitHub release tarball SHA256 계산
-9. `Formula/ai-agent-ops.rb`의 `url`, `sha256` 갱신
-10. `bin/aiops release-check --strict` 재확인
-11. Homebrew tap 저장소에 Formula 반영
+8. GitHub Release 생성
+9. GitHub release tarball SHA256 계산
+10. `Formula/ai-agent-ops.rb`의 `url`, `sha256` 갱신
+11. `bin/aiops release-check --strict` 재확인
+12. Homebrew tap 저장소에 Formula 반영
 
 권장 tag:
 
 ```text
-v0.6.1
+vX.Y.Z
+```
+
+GitHub Release note는 shell inline 문자열보다 파일을 사용한다. Markdown의 backtick이 shell command substitution으로 해석될 수 있기 때문이다.
+
+```bash
+gh release create vX.Y.Z \
+  --repo cschoi724/ai-agent-ops \
+  --title "AI Agent Ops vX.Y.Z" \
+  --notes-file /tmp/aiops-vX.Y.Z-release-notes.md
+```
+
+이미 생성된 Release 본문을 고칠 때도 같은 방식을 사용한다.
+
+```bash
+gh release edit vX.Y.Z \
+  --repo cschoi724/ai-agent-ops \
+  --title "AI Agent Ops vX.Y.Z" \
+  --notes-file /tmp/aiops-vX.Y.Z-release-notes.md
 ```
 
 ## 6. Homebrew Formula
