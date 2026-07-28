@@ -106,6 +106,7 @@ YourProject/
 
 ## Status
 
-Current version: `0.6.4`
+Current release is tracked in [VERSION](VERSION) and [CHANGELOG.md](CHANGELOG.md).
+Installed version can be checked with `aiops version`.
 
 AI Agent Ops는 베타 하네스다. CLI 검증과 CI는 강화되어 있지만, Git 권한이나 배포 권한 같은 물리적 통제는 각 프로젝트 환경에서 별도로 유지해야 한다.

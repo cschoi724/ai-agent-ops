@@ -12,6 +12,14 @@
 
 - 예정된 변경사항 없음
 
+## 0.7.1 - 2026-07-28
+
+### Changed
+
+- README의 stale 버전 표기를 제거하고 `VERSION` / `aiops version` 기준으로 확인하도록 정리
+- release note 작성 절차를 `docs/distribution.md`에 추가하고 `--notes-file` 사용을 권장
+- 배포 문서의 오래된 tag 예시를 `vX.Y.Z` 기준으로 정리
+
 ## 0.7.0 - 2026-07-28
 
 ### Added
