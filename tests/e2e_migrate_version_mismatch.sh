@@ -33,4 +33,14 @@ grep -q 'operating_model.md core_version/core_source record' /tmp/aiops-e2e-migr
   exit 1
 }
 
+grep -q 'Migration Plan Summary' /tmp/aiops-e2e-migrate-mismatch.out || {
+  printf '%s\n' "migrate plan did not include user-facing summary" >&2
+  exit 1
+}
+
+grep -q 'next_command_after_approval:' /tmp/aiops-e2e-migrate-mismatch.out || {
+  printf '%s\n' "migrate plan did not include next command" >&2
+  exit 1
+}
+
 printf '%s\n' "ok: migrate version mismatch"

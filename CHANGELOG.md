@@ -10,7 +10,14 @@
 
 ## Unreleased
 
-- 예정된 변경사항 없음
+### Changed
+
+- `bootstrap-guide`가 완료된 프로젝트와 신규 프로젝트의 다음 행동을 Role Session 중심으로 안내하도록 개선
+- `session-guide`와 `role prompt` 출력에 Role 선택 기준, 인계 기준, 검증 결과 기록 기준을 보강
+- `migrate --plan` 출력에 영향 정책, 승인 문구, 다음 명령을 추가해 기존 프로젝트 업데이트 흐름을 명확화
+- Quick Start를 bootstrap 이후 `session-guide` / `role prompt` 기반 첫 작업 흐름으로 개편
+- Codex / Claude adapter에 AI Ops Agent와 PM/Direction/Lead Role의 책임 경계를 명확히 추가
+- Handoff 템플릿과 생성 파일에 다음 Agent의 확인 명령과 Role 검증 기준을 추가
 
 ## 0.7.1 - 2026-07-28
 

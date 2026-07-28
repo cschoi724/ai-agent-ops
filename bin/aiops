@@ -1038,6 +1038,13 @@ print_migration_lists() {
   operating_model="$target/.ai_project/operating_model.md"
   safe_count=0
 
+  info ""
+  info "Migration Plan Summary"
+  info "  - safe_auto_fix: AI Ops 운영 파일/디렉토리 중 자동 보강해도 제품 동작에 영향을 주지 않는 항목"
+  info "  - needs_user_decision: 기존 프로젝트 결정이나 adapter 문구를 바꿀 수 있어 사용자 확인이 필요한 항목"
+  info "  - manual_only: 제품 코드, 제품 문서, Git/배포처럼 AI Ops가 자동 변경하지 않는 항목"
+  info ""
+
   info "safe_auto_fix:"
   if project_needs_core_version_update "$operating_model" "$current_version" "$recorded_version"; then
     info "  - operating_model.md core_version/core_source record"
@@ -1120,6 +1127,22 @@ print_migration_lists() {
     info "  - .ai_project/tasks/"
     info "  - .ai_project/handoffs/"
     info "  - .ai_knowledge/"
+    info ""
+    info "approval_prompt:"
+    info "  위 safe_auto_fix와 apply_scope 범위만 적용해도 될까요?"
+    info ""
+    info "next_command_after_approval:"
+    info "  aiops migrate --target \"$target\" --apply"
+  else
+    info ""
+    info "next_command:"
+    if [ "$safe_count" -gt 0 ]; then
+      info "  aiops migrate --target \"$target\" --plan"
+    elif [ "$decision_count" -gt 0 ]; then
+      info "  사용자 결정 항목을 확인한 뒤 필요한 파일만 수동 조정"
+    else
+      info "  변경 필요 없음"
+    fi
   fi
 }
 
@@ -1297,6 +1320,12 @@ cmd_migrate() {
   info "project_mode: $project_mode"
   info "recorded_core_version: $recorded_version"
   info "migration_status: $status"
+  info ""
+  info "impact_policy:"
+  info "  - product code: not touched"
+  info "  - product Docs: not touched"
+  info "  - .ai_project/.ai_knowledge: safe migration scope only"
+  info "  - adapter files: report drift, do not rewrite automatically"
 
   if [ "$mode" != "apply" ]; then
     if [ "$core_source" = "missing" ]; then
@@ -1437,6 +1466,15 @@ cmd_migrate() {
 
   info ""
   info "AI Ops migration apply complete."
+  info ""
+  info "changed_scope:"
+  info "  - .ai_project operating records"
+  info "  - task/handoff directories"
+  info "  - .ai_knowledge minimal structure when missing"
+  info "not_changed:"
+  info "  - product code"
+  info "  - product Docs"
+  info "  - Git branch, commit, push, deploy"
   info ""
   info "Verifying migration state..."
   cmd_migrate_verify "$target" "$current_version"
@@ -2623,6 +2661,13 @@ $qa_report"
           - 차단/결정 필요: #{data["blockers"].empty? ? "없음" : data["blockers"].join(", ")}
           - 주의: 현재 Task의 workflow, status, target_agent, target_role이 네 Role과 맞는지 먼저 확인해줘.
 
+          먼저 확인:
+
+          ```bash
+          aiops task status #{task_id}
+          aiops handoff validate #{task_id} --strict
+          ```
+
           ## 인계 기록
 
           | 날짜 | From | To | 상태 | 요약 |
@@ -2727,6 +2772,14 @@ cmd_session_guide() {
   info "  - orchestration_session: Lead/Direction이 Task와 인계를 조율"
   info "  - role_session: 특정 Role 책임을 맡은 독립 Agent 세션"
   info "  - delegated_worker: 현재 세션 안의 좁은 보조 작업자"
+  info ""
+  info "선택 기준:"
+  info "  - 무엇을 만들지 정해야 함: Direction Role"
+  info "  - Task 범위/우선순위/담당을 정해야 함: Lead Role"
+  info "  - 승인된 Task를 구현해야 함: Execution Role"
+  info "  - 구현 결과를 독립 검증해야 함: Verification Role"
+  info "  - 완료 처리/잔여 리스크 판단이 필요함: Completion Role"
+  info "  - 운영모델/마이그레이션/정책 충돌을 봐야 함: Ops Governance Role"
   info ""
   info "기본 원칙:"
   info "  - Execution과 Verification은 가능하면 별도 Role Session으로 분리합니다."
@@ -2843,6 +2896,7 @@ cmd_role() {
       info "- 한 세션이 여러 Role을 연속 수행하려면 workflow 또는 사용자 명시 승인이 필요하다."
       info "- delegated_worker를 사용할 수 있어도 독립 Role Session을 대체하지 않는다."
       info "- 상태 전이, lock, handoff는 aiops CLI 명령으로 처리한다."
+      info "- Role이 바뀌면 최종 응답에 '다음 Agent에게 전달할 말'을 남긴다."
       info "- 사용자 승인 없이 commit, push, merge, deploy를 진행하지 않는다."
       info ""
       info "이 Role의 책임:"
@@ -2875,14 +2929,16 @@ cmd_role() {
           "Execution Role")
             info "Execution 진행 기준:"
             info "- 실행 가능하면 aiops task transition $task_id --target \"$target\" --to in_progress --role \"Execution Role\" --by \"$agent\""
+            info "- 완료 전 자체 테스트/검증 결과를 task report에 남긴다."
             info "- 완료 후 aiops handoff create $task_id --target \"$target\" --from \"Execution Role\" --to \"Verification Role\" --next-action \"작업 결과 독립 검증\""
-            info "- 인계 검증 후 aiops task transition $task_id --target \"$target\" --to verification_ready --role \"Execution Role\" --by \"$agent\""
+            info "- handoff 생성 후 aiops task transition $task_id --target \"$target\" --to verification_ready --role \"Execution Role\" --by \"$agent\""
             ;;
           "Verification Role")
             info "Verification 진행 기준:"
             info "- 검증 시작 시 aiops task transition $task_id --target \"$target\" --to verification_in_progress --role \"Verification Role\" --by \"$agent\""
+            info "- PASS/PASS_WITH_RISK/FAIL/BLOCKED 중 하나로 결과를 명확히 남긴다."
             info "- 통과 시 Completion 인계를 만들고 verification_passed로 전환한다."
-            info "- 실패 또는 차단 시 Lead Role로 rework/blocked 인계를 남긴다."
+            info "- 실패 또는 차단 시 Lead Role로 rework_requested 또는 blocked 인계를 남긴다."
             ;;
           "Completion Role")
             info "Completion 진행 기준:"
@@ -2893,6 +2949,7 @@ cmd_role() {
           "Lead Role")
             info "Lead 진행 기준:"
             info "- Task 범위와 ownership을 정리한다."
+            info "- 승인 전에는 Execution Role에게 구현을 시작시키지 않는다."
             info "- 승인된 실행 Task는 Execution Role로 인계한다."
             ;;
         esac
@@ -3838,6 +3895,7 @@ cmd_bootstrap_guide() {
     info "ok: .ai_project exists"
     info ""
     info "현재 프로젝트는 AI Ops 운영 구성이 이미 완료된 상태입니다."
+    info "bootstrap을 다시 시작하지 말고, 목적에 맞는 Role Session을 여는 흐름으로 진행하세요."
     info ""
     info "활성 Agent / Role 후보:"
     if [ -f "$target/.ai_project/agent_registry.md" ]; then
@@ -3858,10 +3916,16 @@ cmd_bootstrap_guide() {
     info "다음 단계:"
     info "  - 운영 상태를 점검하려면:"
     info "      aiops doctor --target \"$target\" --strict"
-    info "  - 첫 Agent 세션을 시작하려면:"
-    info "      너는 PM Agent / Lead Role이야. 현재 운영 상태와 다음 Task 후보를 정리해줘."
+    info "  - 어떤 Role 세션을 열지 보려면:"
+    info "      aiops session-guide --target \"$target\""
+    info "  - 제품 방향/요구사항을 정리하려면:"
+    info "      aiops role prompt direction --target \"$target\""
+    info "  - 다음 Task를 등록/조율하려면:"
+    info "      aiops role prompt lead --target \"$target\""
+    info "  - 승인된 Task를 실행하려면:"
+    info "      aiops role prompt execution --target \"$target\" --task TASK_ID"
     info "  - 운영모델 자체를 점검하려면:"
-    info "      너는 AI Ops Agent / Ops Governance Role이야. .ai_project 운영 구성을 점검하고 개선 필요사항만 보고해줘."
+    info "      aiops role prompt ops --target \"$target\""
     info "  - 운영 구성을 다시 검토해야 할 때만:"
     info "      AI Ops bootstrap 재검토해줘."
   else
@@ -3869,6 +3933,11 @@ cmd_bootstrap_guide() {
     info ""
     info "새 운영 구성을 시작하려면 Agent 세션에서 말하세요:"
     info "  AI Ops bootstrap 시작해줘."
+    info ""
+    info "이때 Agent의 역할:"
+    info "  - AI Ops Agent / Ops Governance Role로 동작합니다."
+    info "  - 제품 기획을 깊게 진행하지 않고 운영 구성만 결정합니다."
+    info "  - 제품 아이디어 탐색은 Apply 후 PM/Direction Role 세션으로 넘깁니다."
     info ""
     info "Bootstrap 진행 방식:"
     info "  1. 빠른 시작"

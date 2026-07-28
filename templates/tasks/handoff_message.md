@@ -40,4 +40,16 @@ Task {{TASK_ID}}를 이어서 처리해줘.
 - 남은 리스크: {{RISKS_OR_NONE}}
 - 차단/결정 필요: {{BLOCKERS_OR_DECISIONS_OR_NONE}}
 
-먼저 Task의 `workflow`, `status`, `target_agent`, `target_role`이 네 Role과 맞는지 확인한다.
+먼저 확인:
+
+- Task의 `workflow`, `status`, `target_agent`, `target_role`이 네 Role과 맞는지 확인한다.
+- `allowed_paths` 밖 파일은 수정하지 않는다.
+- 필요한 context pack이 있으면 `.ai_knowledge/context_packs/`에서 찾는다.
+- 승인, commit, push, merge, deploy 권한은 프로젝트 정책을 따른다.
+
+세션 시작 전 확인 명령:
+
+```bash
+aiops task status {{TASK_ID}}
+aiops handoff validate {{TASK_ID}} --strict
+```

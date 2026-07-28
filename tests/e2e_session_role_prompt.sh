@@ -100,6 +100,11 @@ grep -q 'aiops role prompt execution' /tmp/aiops-e2e-session-guide.out || {
   exit 1
 }
 
+grep -q '선택 기준:' /tmp/aiops-e2e-session-guide.out || {
+  printf '%s\n' "session-guide did not include role selection criteria" >&2
+  exit 1
+}
+
 "$repo_root/bin/aiops" role prompt execution \
   --target "$tmpdir" \
   --task T-20260727-020 \
@@ -119,6 +124,11 @@ grep -q 'task_id: T-20260727-020' /tmp/aiops-e2e-role-prompt.out || {
 
 grep -q 'aiops task status T-20260727-020' /tmp/aiops-e2e-role-prompt.out || {
   printf '%s\n' "role prompt did not include task status command" >&2
+  exit 1
+}
+
+grep -q "다음 Agent에게 전달할 말" /tmp/aiops-e2e-role-prompt.out || {
+  printf '%s\n' "role prompt did not include handoff reminder" >&2
   exit 1
 }
 

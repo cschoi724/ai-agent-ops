@@ -19,12 +19,14 @@ Agent 세션 분리와 보조 위임 기준은 `.ai/policies/session_orchestrati
 - Role 전환은 Task의 `status`, `target_agent`, `target_role` 변경으로 표현한다.
 - 다음 담당이 현재 세션 Role과 다르면 현재 Agent는 다음 단계까지 이어서 처리하지 않는다.
 - 다음 담당에게 넘길 말은 Task 파일의 `Next Agent Handoff` 섹션과 최종 응답에 같은 내용으로 남긴다.
+- 가능하면 `aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT`로 인계 파일을 만든다.
 - 인계 메시지는 Codex와 Claude 모두 이해할 수 있는 일반 문장과 Task metadata로 작성한다.
 - 다음 Agent에게 역할을 명시한다. 예: `너는 Development Agent / Execution Role이야.`
 - 다음 Role을 별도 세션에서 시작해야 하면 새 세션 시작에 필요한 정보를 함께 남긴다.
 - 인계 메시지는 실행 지시가 아니라 다음 Role이 읽어야 할 시작 컨텍스트다. 승인, commit, push, merge, 배포 권한은 프로젝트 정책을 따른다.
 - 실제 다음 Role은 Task의 `workflow`, `status`, `target_agent`, `target_role`, 프로젝트별 override를 기준으로 정한다.
 - 이 문서의 상태별 표준 문구와 다른 전이가 필요하면 필수 인계 필드는 유지하고 Role 이름, 상태, 다음 행동만 해당 workflow에 맞게 바꾼다.
+- 어떤 세션을 열지 모르면 먼저 `aiops session-guide`를 실행하고, 실제 첫 메시지는 `aiops role prompt ROLE --task TASK_ID`로 만든다.
 
 ## 3. 필수 인계 필드
 

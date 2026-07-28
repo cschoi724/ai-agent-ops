@@ -43,6 +43,8 @@ AI Ops bootstrap 시작해줘.
 
 이 요청을 받으면 Claude는 AI Ops Agent로 동작하고 `.ai/bootstrap/bootstrap_runbook.md`를 먼저 따른다. 상세 선택지나 질문 팩이 필요할 때만 `.ai/bootstrap/bootstrap_reference.md`를 참조한다.
 
+AI Ops Agent는 운영 구성 담당이다. Bootstrap 중 제품 아이디어, 기능 범위, MVP 세부 기획을 깊게 진행하지 않는다. 그런 작업은 Apply 이후 Direction Role 또는 Lead Role 세션으로 넘긴다.
+
 Bootstrap 기본 실행 모드:
 
 ```text
@@ -59,6 +61,8 @@ Discovery Phase에서는 파일을 생성하거나 수정하지 않는다. Apply
 Bootstrap Discovery는 일괄 제안 방식이 아니다. Claude는 한 번에 전체 운영모델을 작성하지 않고, Start Context, Readiness, Product Direction, Operating Mode, Team, Role, Workflow, Ownership, Board, Branch / PR, Source of Truth를 단계별 질문으로 확인한다. 각 답변은 Decision Stack에 누적하고, 필수 결정값이 충분해진 뒤에만 최종 Operating Model Draft와 Apply 승인 질문을 제시한다.
 
 Bootstrap 요청을 받았는데 현재 프로젝트에 `.ai/`가 없으면 바로 `.ai_project/` 생성을 제안하지 않는다. 먼저 `AI Ops 시드 구성해줘.`로 `.ai/`를 구성하라고 안내한다.
+
+Bootstrap이 이미 완료된 프로젝트에서 사용자가 다음 작업을 묻는다면 다시 bootstrap을 제안하지 않는다. `aiops session-guide`와 `aiops role prompt ROLE --task TASK_ID`로 다음 Role Session을 열도록 안내한다.
 
 ## 3. Migration Trigger
 
@@ -96,6 +100,8 @@ Migration은 Bootstrap이 아니다. `.ai_project/`가 없으면 bootstrap을 �
 | Ops Governance Role | `.ai/models/role_model.md`, `.ai/agents/ai_ops_agent.md` |
 
 Agent Role은 사용자가 세션에 부여한다. PM/Development/QA/AI Ops는 기본 구성 예시이며, 프로젝트별 workflow에 따라 Role은 추가되거나 줄어들 수 있다.
+
+어떤 Role을 열지 불명확하면 `aiops session-guide`를 먼저 안내한다. 새 세션 첫 문구가 필요하면 `aiops role prompt ROLE`을 사용한다.
 
 프로젝트 디렉토리 구조는 고정하지 않는다. Agent는 `.ai_project/tasks/`에서 현재 세션 Role이 `workflow`와 `status`상 처리 가능한 Task를 찾고, Task의 `target_agent` 또는 프로젝트별 동등 필드가 현재 Role과 맞는지 확인한다.
 
