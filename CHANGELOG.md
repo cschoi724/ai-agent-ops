@@ -10,6 +10,10 @@
 
 ## Unreleased
 
+- 예정된 변경사항 없음
+
+## 0.8.0 - 2026-07-28
+
 ### Changed
 
 - `bootstrap-guide`가 완료된 프로젝트와 신규 프로젝트의 다음 행동을 Role Session 중심으로 안내하도록 개선
