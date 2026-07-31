@@ -10,6 +10,10 @@
 
 ## Unreleased
 
+- 예정된 변경사항 없음
+
+## 0.9.0 - 2026-07-31
+
 ### Added
 
 - 다중 Agent/worktree 환경에서 최신 공용 Task 상태 기준을 정의하는 `policies/shared_status_policy.md` 추가
