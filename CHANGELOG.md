@@ -10,7 +10,17 @@
 
 ## Unreleased
 
-- 예정된 변경사항 없음
+### Added
+
+- 다중 Agent/worktree 환경에서 최신 공용 Task 상태 기준을 정의하는 `policies/shared_status_policy.md` 추가
+- `aiops status-ref`, `aiops sync-status`, `aiops worktree doctor` 명령 추가
+- `aiops task status TASK_ID --source canonical`로 canonical ref 기준 Task 상태 조회 지원
+- Task/Handoff/Operating Model schema에 `canonical_status_ref`, `status_ref`, `status_ref_sha`, worktree/base ref 필드 추가
+- 다중 worktree 상태 동기화 사용법 문서 `docs/shared_status.md` 추가
+
+### Changed
+
+- Role prompt, Codex/Claude adapter, Handoff 템플릿에 stale worktree 경고와 status ref 확인 기준 추가
 
 ## 0.8.0 - 2026-07-28
 

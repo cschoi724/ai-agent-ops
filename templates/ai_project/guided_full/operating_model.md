@@ -14,6 +14,9 @@ ownership_model: {{OWNERSHIP_MODEL}}
 coordination: {{PARALLEL_CONTROL}}
 board_model: {{BOARD_MODEL}}
 branch_pr: {{BRANCH_STRATEGY_MODEL}}
+canonical_status_ref: {{CANONICAL_STATUS_REF}}
+status_ref_checked_at:
+status_ref_sha:
 knowledge_mode: {{KNOWLEDGE_MODE}}
 release_role: deferred
 active_roles:
@@ -47,6 +50,7 @@ deferred_roles:
 | coordination | {{PARALLEL_CONTROL}} |
 | board_model | {{BOARD_MODEL}} |
 | branch_pr | {{BRANCH_STRATEGY_MODEL}} |
+| canonical_status_ref | {{CANONICAL_STATUS_REF}} |
 | knowledge_mode | {{KNOWLEDGE_MODE}} |
 | release_role | deferred |
 
@@ -63,6 +67,7 @@ Canonical option definitions live in `.ai/runtime/bootstrap_options.json`.
 | Coordination | `.ai/policies/coordination_policy.md` |
 | Board | `.ai/policies/board_model.md` |
 | Branch / PR | `.ai/policies/branch_pr_policy.md` |
+| Shared Status | `.ai/policies/shared_status_policy.md` |
 | Workflow | `.ai/runtime/workflow.md` |
 
 ## Organization

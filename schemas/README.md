@@ -64,6 +64,8 @@ CLI는 front matter를 읽어 schema로 검증하고, 본문은 사람이 읽는
 
 9단계 이후 `aiops export runtime`이 Task graph, Role assignment, 상태, Handoff, approval checkpoint를 runtime adapter용 JSON으로 내보낸다.
 
+10단계 이후 다중 worktree 운영을 위해 `canonical_status_ref`, `status_ref`, `status_ref_sha`, `worktree_path`, `base_ref` 계열 필드를 optional로 기록한다. 기존 프로젝트 migration 충돌을 줄이기 위해 첫 단계에서는 required로 강제하지 않는다.
+
 ## 호환성 원칙
 
 - 기존 Markdown 본문은 유지한다.

@@ -20,6 +20,7 @@ Agent 세션 분리와 보조 위임 기준은 `.ai/policies/session_orchestrati
 - 다음 담당이 현재 세션 Role과 다르면 현재 Agent는 다음 단계까지 이어서 처리하지 않는다.
 - 다음 담당에게 넘길 말은 Task 파일의 `Next Agent Handoff` 섹션과 최종 응답에 같은 내용으로 남긴다.
 - 가능하면 `aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT`로 인계 파일을 만든다.
+- 다중 worktree 운영에서는 인계 전에 `aiops sync-status` 또는 동등한 fetch/SHA 확인을 수행하고 `status_ref`, `status_ref_sha`를 남긴다.
 - 인계 메시지는 Codex와 Claude 모두 이해할 수 있는 일반 문장과 Task metadata로 작성한다.
 - 다음 Agent에게 역할을 명시한다. 예: `너는 Development Agent / Execution Role이야.`
 - 다음 Role을 별도 세션에서 시작해야 하면 새 세션 시작에 필요한 정보를 함께 남긴다.
@@ -39,6 +40,8 @@ Role이 바뀌는 상태 전이에서는 아래 항목을 채운다.
 Task {{TASK_ID}}를 이어서 처리해줘.
 
 - 현재 상태: {{CURRENT_STATUS}}
+- 기준 상태 ref: {{STATUS_REF}}
+- 기준 상태 SHA: {{STATUS_REF_SHA}}
 - 다음에 해야 할 일: {{NEXT_ACTION}}
 - 기준 문서: {{SOURCE_OF_TRUTH}}
 - 허용 경로: {{ALLOWED_PATHS}}

@@ -28,6 +28,7 @@ Role 모델은 책임을 정의하고, 이 문서는 그 책임을 한 세션에
 - Completion, merge, release 판단은 실행 세션이 대신하지 않는다.
 - 보조 작업자는 최종 책임자가 아니며, 최종 책임은 현재 Role Session이 가진다.
 - 세션 전환은 Task의 `status`, `target_agent`, `target_role`, lock, handoff로 기록한다.
+- 다중 worktree 운영에서는 세션 시작 시 `shared_status_policy.md` 기준으로 canonical status ref와 SHA를 확인한다.
 
 ## 4. 별도 세션 권장 기준
 
@@ -72,6 +73,9 @@ Session Handoff:
 - to_role:
 - task:
 - lock:
+- status_ref:
+- status_ref_sha:
+- worktree_path:
 - report_path:
 - next_session_start_prompt:
 ```
