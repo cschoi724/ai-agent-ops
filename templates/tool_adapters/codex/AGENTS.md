@@ -9,6 +9,7 @@
 - Task Queue 운영 시 `.ai/runtime/task_queue.md`를 읽는다.
 - Role 전환 또는 Task 인계가 있으면 `.ai/runtime/role_handoff.md`를 읽는다.
 - 세션 분리 또는 보조 위임이 있으면 `.ai/policies/session_orchestration_policy.md`를 읽는다.
+- 여러 worktree 또는 task branch가 있으면 `.ai/policies/shared_status_policy.md`를 읽는다.
 - `.ai/`는 운영 가이드북이며 사용자 승인 없이 수정하지 않는다.
 - 프로젝트별 실행 Task와 협업 기록은 `.ai_project/`를 확인한다.
 - 커밋, push, 배포, 외부 설정 변경은 사용자 승인 후 진행한다.
@@ -139,6 +140,8 @@ Agent Role은 사용자가 세션에 부여한다. PM/Development/QA/AI Ops는 �
 한 세션 안에서 보조 작업자나 subagent를 사용할 수 있어도, 이는 독립 Role Session을 대체하지 않는다. 구현, 검증, 완료 판단처럼 책임 분리가 필요한 작업은 별도 Role Session으로 넘긴다.
 
 실제 파일 수정, 빌드, 테스트 범위는 Task의 `allowed_paths`가 결정하고, 기준 문서는 `source_of_truth`가 결정한다. 현재 작업 디렉토리와 `allowed_paths`가 다르면 작업 전에 기준 경로를 명확히 보고하고 `allowed_paths` 안에서만 작업한다.
+
+다중 worktree 환경에서는 현재 worktree의 `.ai_project/` 문서를 최신 공용 상태로 가정하지 않는다. 프로젝트에 `canonical_status_ref`가 있으면 작업 시작 전 `aiops status-ref`, `aiops sync-status`, 필요한 경우 `aiops task status TASK_ID --source canonical`로 기준 ref와 SHA를 확인하고 보고한다.
 
 상태 전이 후 `target_agent` 또는 `target_role`이 다른 Agent/Role로 바뀌면 `.ai/runtime/role_handoff.md` 기준으로 Task 파일과 최종 응답에 `다음 Agent에게 전달할 말`을 남긴다. 이 문구는 Codex 전용 명령이 아니라 Claude도 그대로 이해할 수 있는 Role 기반 지시로 작성한다.
 

@@ -14,6 +14,9 @@ ownership_model: path_plus_domain
 coordination: single_active_task
 board_model: project_board_only
 branch_pr: pending_decision
+canonical_status_ref:
+status_ref_checked_at:
+status_ref_sha:
 knowledge_mode: minimal
 release_role: inactive
 active_roles:
@@ -52,6 +55,7 @@ deferred_roles:
 | coordination | `single_active_task` |
 | board_model | `project_board_only` |
 | branch_pr | `pending_decision` |
+| canonical_status_ref | unresolved |
 | knowledge_mode | `minimal` |
 | release_role | `inactive` |
 

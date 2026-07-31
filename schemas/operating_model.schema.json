@@ -147,6 +147,26 @@
         "custom"
       ]
     },
+    "canonical_status_ref": {
+      "description": "Git ref used as the shared source for current project task/status state.",
+      "type": [
+        "string",
+        "object",
+        "null"
+      ]
+    },
+    "status_ref_checked_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status_ref_sha": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "knowledge_mode": {
       "type": "string",
       "enum": [

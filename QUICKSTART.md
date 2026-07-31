@@ -143,6 +143,17 @@ aiops knowledge init --mode minimal
 aiops ci init
 ```
 
+여러 Agent가 별도 worktree에서 작업한다면 세션 시작 전에 공용 상태 기준을 확인한다.
+
+```bash
+aiops status-ref
+aiops sync-status
+aiops task status TASK_ID --source canonical
+aiops worktree doctor
+```
+
+`canonical_status_ref`가 없으면 프로젝트의 통합 브랜치에 맞게 `.ai_project/operating_model.md` 또는 `.ai_project/branch_pr_strategy.md`에 기록한다. 예: `origin/main`, `origin/develop`.
+
 기존 프로젝트의 AI Ops 버전 반영이 필요하면 먼저 계획만 확인한다.
 
 ```bash
@@ -174,3 +185,4 @@ aiops migrate --apply
 - 기존 프로젝트 마이그레이션: [bootstrap/migration_runbook.md](bootstrap/migration_runbook.md)
 - Role 책임: [models/role_model.md](models/role_model.md)
 - Role 인계: [runtime/role_handoff.md](runtime/role_handoff.md)
+- 다중 worktree 상태 동기화: [docs/shared_status.md](docs/shared_status.md)

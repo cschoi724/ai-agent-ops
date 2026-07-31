@@ -208,6 +208,55 @@
         "null"
       ]
     },
+    "status_ref": {
+      "description": "Canonical status ref used when this task status was checked or changed.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status_ref_sha": {
+      "description": "SHA of status_ref observed by the acting Agent.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "worktree_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "worktree_role": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "active",
+        "verification",
+        "merged",
+        "stale",
+        "dirty",
+        "unpushed",
+        "cleanup_candidate",
+        "custom"
+      ]
+    },
+    "base_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "base_sha": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "branch": {
       "type": "object",
       "additionalProperties": true,

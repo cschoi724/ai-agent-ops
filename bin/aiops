@@ -16,12 +16,15 @@ Usage:
   aiops validate task FILE [--strict]
   aiops validate handoff FILE [--strict]
   aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
-  aiops task status TASK_ID [--target DIR]
+  aiops task status TASK_ID [--target DIR] [--source local|canonical]
   aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT]
   aiops task lock TASK_ID --by AGENT [--target DIR] [--role ROLE] [--session ID]
   aiops task unlock TASK_ID --by AGENT [--target DIR]
   aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT [--target DIR]
   aiops handoff validate FILE|TASK_ID [--target DIR] [--strict]
+  aiops status-ref [--target DIR]
+  aiops sync-status [--target DIR]
+  aiops worktree doctor [--target DIR]
   aiops knowledge init [--target DIR] [--mode minimal|full] [--force]
   aiops knowledge pack TOPIC [--target DIR] [--create] [--task TASK_ID] [--source PATH] [--purpose TEXT]
   aiops knowledge lint [--target DIR]
@@ -50,8 +53,12 @@ Examples:
   aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
   aiops validate handoff .ai_project/handoffs/T-YYYYMMDD-001_execution_to_verification.md --strict
   aiops task create --title "로그인 화면 구현" --workflow feature --role "Lead Role"
+  aiops task status T-YYYYMMDD-001 --source canonical
   aiops task transition T-YYYYMMDD-001 --to approved --role "Direction Role"
   aiops handoff create T-YYYYMMDD-001 --from "Execution Role" --to "Verification Role" --next-action "변경 결과 검증"
+  aiops status-ref
+  aiops sync-status
+  aiops worktree doctor
   aiops knowledge init --mode minimal
   aiops knowledge pack ios_login --create --task T-YYYYMMDD-001
   aiops knowledge lint
@@ -909,6 +916,245 @@ project_recorded_core_version() {
   else
     printf '%s\n' "$recorded"
   fi
+}
+
+canonical_status_ref_value() {
+  target="$1"
+  project_dir="$target/.ai_project"
+  ref=""
+
+  if [ -f "$project_dir/operating_model.md" ]; then
+    ref="$(task_field_value "$project_dir/operating_model.md" "canonical_status_ref")"
+    if [ -z "$ref" ]; then
+      ref="$(markdown_table_value "$project_dir/operating_model.md" "canonical_status_ref")"
+    fi
+  fi
+
+  if [ -z "$ref" ] && [ -f "$project_dir/branch_pr_strategy.md" ]; then
+    ref="$(awk -F': *' '$1 ~ /^[[:space:]]*canonical_status_ref$/ { print $2; exit }' "$project_dir/branch_pr_strategy.md")"
+  fi
+
+  case "$ref" in
+    ""|"null"|"unresolved"|"{{CANONICAL_STATUS_REF}}")
+      printf '%s\n' ""
+      ;;
+    \{*|\[*)
+      printf '%s\n' ""
+      ;;
+    *)
+      printf '%s\n' "$ref" | sed 's/^`//; s/`$//'
+      ;;
+  esac
+}
+
+git_require_repo() {
+  target="$1"
+  git -C "$target" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "target is not a Git work tree: $target"
+}
+
+git_ref_sha() {
+  target="$1"
+  ref="$2"
+  git -C "$target" rev-parse --verify "$ref^{commit}" 2>/dev/null || return 1
+}
+
+task_find_file_in_ref() {
+  target="$1"
+  ref="$2"
+  task_id="$3"
+
+  git -C "$target" ls-tree -r --name-only "$ref" .ai_project/tasks 2>/dev/null | awk -v id="$task_id" '
+    $0 == ".ai_project/tasks/active/" id ".md" { print; found=1; exit }
+    $0 == ".ai_project/tasks/backlog/" id ".md" { print; found=1; exit }
+    $0 == ".ai_project/tasks/archive/" id ".md" { print; found=1; exit }
+    $0 == ".ai_project/tasks/" id ".md" { print; found=1; exit }
+    index($0, ".ai_project/tasks/") == 1 && $0 ~ "/" id "[^/]*\\.md$" { candidate=$0 }
+    END { if (!found && candidate != "") print candidate }
+  '
+}
+
+cmd_status_ref() {
+  target="$(pwd)"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --target)
+        shift
+        [ "$#" -gt 0 ] || die "--target requires a value"
+        target="$1"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "unknown status-ref option: $1"
+        ;;
+    esac
+    shift
+  done
+
+  target="$(abs_path "$target")"
+  ref="$(canonical_status_ref_value "$target")"
+
+  info "AI Ops status ref"
+  info "target: $target"
+  if [ -n "$ref" ]; then
+    info "canonical_status_ref: $ref"
+    if git -C "$target" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      if sha="$(git_ref_sha "$target" "$ref")"; then
+        info "status_ref_sha: $sha"
+      else
+        info "status_ref_sha: unresolved"
+      fi
+    else
+      info "git: not_a_worktree"
+    fi
+  else
+    info "canonical_status_ref: unresolved"
+    info "note: set it in .ai_project/operating_model.md or .ai_project/branch_pr_strategy.md"
+    info "examples:"
+    info "  canonical_status_ref: origin/main"
+    info "  canonical_status_ref: origin/develop"
+  fi
+}
+
+cmd_sync_status() {
+  target="$(pwd)"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --target)
+        shift
+        [ "$#" -gt 0 ] || die "--target requires a value"
+        target="$1"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "unknown sync-status option: $1"
+        ;;
+    esac
+    shift
+  done
+
+  target="$(abs_path "$target")"
+  git_require_repo "$target"
+  status_ref="$(canonical_status_ref_value "$target")"
+  [ -n "$status_ref" ] || die "canonical_status_ref unresolved; set it before sync-status"
+
+  info "AI Ops sync status"
+  info "target: $target"
+  info "canonical_status_ref: $status_ref"
+
+  git -C "$target" fetch --prune origin
+  status_ref_sha="$(git_ref_sha "$target" "$status_ref")" || die "canonical_status_ref not found after fetch: $status_ref"
+  worktree_branch="$(git -C "$target" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'unknown')"
+  worktree_head="$(git -C "$target" rev-parse --short HEAD 2>/dev/null || printf 'unknown')"
+
+  info "status_ref_sha: $status_ref_sha"
+  info "worktree_branch: $worktree_branch"
+  info "worktree_head: $worktree_head"
+
+  if [ -d "$target/.ai_project" ]; then
+    runtime_dir="$target/.ai_project/.runtime"
+    mkdir -p "$runtime_dir"
+    {
+      printf 'status_ref: %s\n' "$status_ref"
+      printf 'status_ref_sha: %s\n' "$status_ref_sha"
+      printf 'worktree_branch: %s\n' "$worktree_branch"
+      printf 'worktree_head: %s\n' "$worktree_head"
+      printf 'checked_at: %s\n' "$(date +%Y-%m-%d)"
+    } > "$runtime_dir/status_ref"
+    info "recorded: .ai_project/.runtime/status_ref"
+  fi
+}
+
+cmd_worktree() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "worktree requires an action: doctor"
+  shift
+
+  case "$action" in
+    doctor)
+      target="$(pwd)"
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown worktree doctor option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      target="$(abs_path "$target")"
+      git_require_repo "$target"
+      status_ref="$(canonical_status_ref_value "$target")"
+      status_ref_sha=""
+      if [ -n "$status_ref" ]; then
+        status_ref_sha="$(git_ref_sha "$target" "$status_ref" || true)"
+      fi
+
+      info "AI Ops worktree doctor"
+      info "target: $target"
+      info "canonical_status_ref: ${status_ref:-unresolved}"
+      info "status_ref_sha: ${status_ref_sha:-unresolved}"
+      info ""
+
+      git -C "$target" worktree list --porcelain | awk '
+        /^worktree / { if (path != "") print path; path=substr($0, 10) }
+        END { if (path != "") print path }
+      ' | while IFS= read -r worktree_path; do
+        [ -n "$worktree_path" ] || continue
+        branch="$(git -C "$worktree_path" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'unknown')"
+        head="$(git -C "$worktree_path" rev-parse --short HEAD 2>/dev/null || printf 'unknown')"
+        dirty="no"
+        if [ -n "$(git -C "$worktree_path" status --porcelain 2>/dev/null || true)" ]; then
+          dirty="yes"
+        fi
+
+        merged="unknown"
+        if [ -n "$status_ref" ] && [ -n "$status_ref_sha" ] && git -C "$worktree_path" merge-base --is-ancestor HEAD "$status_ref" >/dev/null 2>&1; then
+          merged="yes"
+        elif [ -n "$status_ref" ] && [ -n "$status_ref_sha" ]; then
+          merged="no"
+        fi
+
+        classification="active"
+        if [ "$dirty" = "yes" ]; then
+          classification="dirty"
+        elif [ "$merged" = "yes" ]; then
+          classification="cleanup_candidate"
+        elif [ -n "$status_ref" ] && [ -n "$status_ref_sha" ] && git -C "$worktree_path" merge-base --is-ancestor "$status_ref" HEAD >/dev/null 2>&1; then
+          classification="active"
+        elif [ -n "$status_ref" ] && [ -n "$status_ref_sha" ]; then
+          classification="stale_or_diverged"
+        fi
+
+        info "worktree: $worktree_path"
+        info "  branch: $branch"
+        info "  head: $head"
+        info "  dirty: $dirty"
+        info "  merged_to_status_ref: $merged"
+        info "  classification: $classification"
+        info "  cleanup: report_only"
+      done
+      ;;
+    *)
+      die "unknown worktree action: $action"
+      ;;
+  esac
 }
 
 project_needs_core_version_update() {
@@ -1886,6 +2132,13 @@ cmd_doctor() {
           ;;
       esac
     fi
+
+    canonical_status_ref="$(canonical_status_ref_value "$target")"
+    if [ -n "$canonical_status_ref" ]; then
+      info "ok: canonical_status_ref $canonical_status_ref"
+    else
+      info "note: canonical_status_ref unresolved; recommended for multi-worktree projects"
+    fi
   else
     info "note: .ai_project missing; run bootstrap when ready"
   fi
@@ -2156,6 +2409,12 @@ created_at: $date_value
 updated_at: $date_value
 report_to: .ai_project/reports/${task_id}_task-report.md
 qa_to: .ai_project/qa/${task_id}_qa-report.md
+status_ref:
+status_ref_sha:
+worktree_path:
+worktree_role:
+base_ref:
+base_sha:
 branch:
   name:
   base:
@@ -2194,12 +2453,18 @@ EOF
     status)
       target="$(pwd)"
       task_id=""
+      source="local"
       while [ "$#" -gt 0 ]; do
         case "$1" in
           --target)
             shift
             [ "$#" -gt 0 ] || die "--target requires a value"
             target="$1"
+            ;;
+          --source)
+            shift
+            [ "$#" -gt 0 ] || die "--source requires a value"
+            source="$1"
             ;;
           -*)
             die "unknown task status option: $1"
@@ -2213,9 +2478,37 @@ EOF
       done
       [ -n "$task_id" ] || die "task status requires TASK_ID"
       target="$(abs_path "$target")"
+      case "$source" in local|canonical) ;; *) die "task status --source must be local or canonical" ;; esac
+
+      if [ "$source" = "canonical" ]; then
+        git_require_repo "$target"
+        status_ref="$(canonical_status_ref_value "$target")"
+        [ -n "$status_ref" ] || die "canonical_status_ref unresolved; run aiops status-ref"
+        status_ref_sha="$(git_ref_sha "$target" "$status_ref")" || die "canonical_status_ref not found locally: $status_ref; run aiops sync-status"
+        task_path="$(task_find_file_in_ref "$target" "$status_ref" "$task_id")"
+        [ -n "$task_path" ] || die "task not found in $status_ref: $task_id"
+        tmp_task="${TMPDIR:-/tmp}/aiops-canonical-task.$$"
+        git -C "$target" show "$status_ref:$task_path" > "$tmp_task" || {
+          rm -f "$tmp_task"
+          die "failed to read task from $status_ref: $task_path"
+        }
+
+        info "AI Ops task status"
+        info "source: canonical"
+        info "status_ref: $status_ref"
+        info "status_ref_sha: $status_ref_sha"
+        info "task: $status_ref:$task_path"
+        for field in id title status workflow target_role target_agent locked_by lock_session updated_at; do
+          info "$field: $(task_yaml_field "$tmp_task" "$field")"
+        done
+        rm -f "$tmp_task"
+        return 0
+      fi
+
       task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
 
       info "AI Ops task status"
+      info "source: local"
       info "task: ${task_file#$target/}"
       for field in id title status workflow target_role target_agent locked_by lock_session updated_at; do
         info "$field: $(task_yaml_field "$task_file" "$field")"
@@ -2582,6 +2875,12 @@ $1"
       allowed_paths="$(task_yaml_field "$task_file" allowed_paths)"
       task_report="$(task_yaml_field "$task_file" report_to)"
       qa_report="$(task_yaml_field "$task_file" qa_to)"
+      status_ref="$(canonical_status_ref_value "$target")"
+      status_ref_sha=""
+      if [ -n "$status_ref" ] && git -C "$target" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        status_ref_sha="$(git_ref_sha "$target" "$status_ref" || true)"
+      fi
+      worktree_path="$target"
       date_value="$(date +%Y-%m-%d)"
       from_slug="$(role_slug "$from_role")"
       to_slug="$(role_slug "$to_role")"
@@ -2607,16 +2906,19 @@ $qa_report"
         to_agent = ARGV[5]
         current_status = ARGV[6]
         next_action = ARGV[7]
-        source_of_truth = ARGV[8]
-        allowed_paths = ARGV[9]
-        report_paths = ARGV[10]
-        changed_paths = ARGV[11]
-        validation_result = ARGV[12]
-        risks = ARGV[13]
-        blockers = ARGV[14]
-        open_questions = ARGV[15]
-        created_at = ARGV[16]
-        summary = ARGV[17]
+        status_ref = ARGV[8]
+        status_ref_sha = ARGV[9]
+        worktree_path = ARGV[10]
+        source_of_truth = ARGV[11]
+        allowed_paths = ARGV[12]
+        report_paths = ARGV[13]
+        changed_paths = ARGV[14]
+        validation_result = ARGV[15]
+        risks = ARGV[16]
+        blockers = ARGV[17]
+        open_questions = ARGV[18]
+        created_at = ARGV[19]
+        summary = ARGV[20]
 
         def list(value)
           value.to_s.lines.map(&:strip).reject(&:empty?).flat_map { |line| line.split(",").map(&:strip) }.reject(&:empty?)
@@ -2631,6 +2933,10 @@ $qa_report"
           "to_agent" => to_agent.empty? ? nil : to_agent,
           "current_status" => current_status,
           "next_action" => next_action,
+          "status_ref" => status_ref.empty? ? nil : status_ref,
+          "status_ref_sha" => status_ref_sha.empty? ? nil : status_ref_sha,
+          "worktree_path" => worktree_path.empty? ? nil : worktree_path,
+          "worktree_role" => nil,
           "source_of_truth" => list(source_of_truth),
           "allowed_paths" => list(allowed_paths),
           "report_paths" => list(report_paths),
@@ -2652,6 +2958,8 @@ $qa_report"
           Task #{task_id}를 이어서 처리해줘.
 
           - 현재 상태: #{current_status}
+          - 기준 상태 ref: #{status_ref.empty? ? "unresolved" : status_ref}
+          - 기준 상태 SHA: #{status_ref_sha.empty? ? "unresolved" : status_ref_sha}
           - 다음에 해야 할 일: #{next_action}
           - 기준 문서: #{data["source_of_truth"].join(", ")}
           - 허용 경로: #{data["allowed_paths"].join(", ")}
@@ -2665,6 +2973,7 @@ $qa_report"
 
           ```bash
           aiops task status #{task_id}
+          aiops task status #{task_id} --source canonical
           aiops handoff validate #{task_id} --strict
           ```
 
@@ -2676,7 +2985,7 @@ $qa_report"
         MD
 
         File.write(path, YAML.dump(data) + "---\n\n" + body)
-      ' "$handoff_file" "$task_id" "$from_role" "$to_role" "$from_agent" "$to_agent" "$current_status" "$next_action" "$source_of_truth" "$allowed_paths" "$report_paths" "$changed_paths" "$validation_result" "$risks" "$blockers" "$open_questions" "$date_value" "$summary"
+      ' "$handoff_file" "$task_id" "$from_role" "$to_role" "$from_agent" "$to_agent" "$current_status" "$next_action" "$status_ref" "$status_ref_sha" "$worktree_path" "$source_of_truth" "$allowed_paths" "$report_paths" "$changed_paths" "$validation_result" "$risks" "$blockers" "$open_questions" "$date_value" "$summary"
 
       validate_front_matter handoff "$handoff_file" yes >/dev/null || {
         rm -f "$handoff_file"
@@ -2785,6 +3094,7 @@ cmd_session_guide() {
   info "  - Execution과 Verification은 가능하면 별도 Role Session으로 분리합니다."
   info "  - delegated_worker는 독립 Verification/Completion을 대체하지 않습니다."
   info "  - 세션 전환은 Task status, target_role, lock, handoff로 기록합니다."
+  info "  - 여러 worktree를 쓰면 먼저 aiops sync-status로 canonical status ref와 SHA를 확인합니다."
   info ""
 
   info "활성 Agent / Role 후보:"
@@ -2883,6 +3193,7 @@ cmd_role() {
       info "- .ai/runtime/workflow.md"
       info "- .ai/runtime/task_queue.md"
       info "- .ai/runtime/role_handoff.md"
+      info "- .ai/policies/shared_status_policy.md"
       info "- .ai/policies/session_orchestration_policy.md"
       info "- .ai_project/operating_model.md"
       info "- .ai_project/agent_registry.md"
@@ -2897,6 +3208,8 @@ cmd_role() {
       info "- delegated_worker를 사용할 수 있어도 독립 Role Session을 대체하지 않는다."
       info "- 상태 전이, lock, handoff는 aiops CLI 명령으로 처리한다."
       info "- Role이 바뀌면 최종 응답에 '다음 Agent에게 전달할 말'을 남긴다."
+      info "- 다중 worktree 환경에서는 현재 worktree 문서를 최신 공용 상태로 가정하지 않는다."
+      info "- 작업 상태 판단 전 canonical status ref와 SHA를 확인한다."
       info "- 사용자 승인 없이 commit, push, merge, deploy를 진행하지 않는다."
       info ""
       info "이 Role의 책임:"
@@ -2920,7 +3233,10 @@ cmd_role() {
         info "- locked_by: $locked_by"
         info ""
         info "작업 시작 전 확인:"
+        info "- aiops status-ref --target \"$target\""
+        info "- aiops sync-status --target \"$target\""
         info "- aiops task status $task_id --target \"$target\""
+        info "- 필요하면 aiops task status $task_id --target \"$target\" --source canonical"
         info "- 현재 Role이 Task의 status/target_role과 맞는지 확인한다."
         info "- allowed_paths 밖 파일은 수정하지 않는다."
         info ""
@@ -3390,6 +3706,12 @@ cmd_export() {
               "lock_session" => data["lock_session"],
               "report_to" => data["report_to"],
               "qa_to" => data["qa_to"],
+              "status_ref" => data["status_ref"],
+              "status_ref_sha" => data["status_ref_sha"],
+              "worktree_path" => data["worktree_path"],
+              "worktree_role" => data["worktree_role"],
+              "base_ref" => data["base_ref"],
+              "base_sha" => data["base_sha"],
               "branch" => data["branch"] || {},
               "pr" => data["pr"] || {},
               "path" => path.sub(%r{\A#{Regexp.escape(target)}/?}, "")
@@ -3406,6 +3728,10 @@ cmd_export() {
               "to_agent" => data["to_agent"],
               "current_status" => data["current_status"],
               "next_action" => data["next_action"],
+              "status_ref" => data["status_ref"],
+              "status_ref_sha" => data["status_ref_sha"],
+              "worktree_path" => data["worktree_path"],
+              "worktree_role" => data["worktree_role"],
               "source_of_truth" => data["source_of_truth"] || [],
               "allowed_paths" => data["allowed_paths"] || [],
               "report_paths" => data["report_paths"] || [],
@@ -3657,6 +3983,7 @@ cmd_release_check() {
     "$core/.github/workflows/ci.yml" \
     "$core/docs/installation.md" \
     "$core/docs/distribution.md" \
+    "$core/docs/shared_status.md" \
     "$core/scripts/test.sh" \
     "$core/bin/aiops" \
     "$core/schemas/README.md" \
@@ -3677,6 +4004,7 @@ cmd_release_check() {
     "$core/models/knowledge_model.md" \
     "$core/policies/knowledge_policy.md" \
     "$core/policies/migration_policy.md" \
+    "$core/policies/shared_status_policy.md" \
     "$core/policies/session_orchestration_policy.md" \
     "$core/policies/versioning_policy.md" \
     "$core/runtime/workflow.md" \
@@ -3968,6 +4296,9 @@ main() {
     validate) cmd_validate "$@" ;;
     task) cmd_task "$@" ;;
     handoff) cmd_handoff "$@" ;;
+    status-ref) cmd_status_ref "$@" ;;
+    sync-status) cmd_sync_status "$@" ;;
+    worktree) cmd_worktree "$@" ;;
     knowledge) cmd_knowledge "$@" ;;
     ci) cmd_ci "$@" ;;
     export) cmd_export "$@" ;;

@@ -14,6 +14,7 @@
 
 - 기본 branch에 직접 push하지 않는다.
 - commit, push, PR, merge는 프로젝트 정책과 사용자 승인 범위를 따른다.
+- 여러 worktree 또는 task branch를 사용하면 공용 상태 기준은 `shared_status_policy.md`의 `canonical_status_ref`를 따른다.
 - Execution Role은 작업 단위 변경과 commit을 맡을 수 있다.
 - Verification Role은 검증 결과와 review 근거를 기록한다.
 - Lead Role은 merge 가능 여부를 최종 판단한다.
@@ -145,6 +146,7 @@ merge 조건:
 - Verification 결과가 기록되어 있다.
 - unresolved risk가 Lead Role에 의해 수용되었다.
 - branch가 기본 branch와 충돌하지 않는다.
+- Task 상태와 dependency가 최신 `canonical_status_ref` 기준으로 확인되었다.
 
 merge owner 기본값은 Lead Role이다.
 
@@ -156,6 +158,12 @@ merge owner 기본값은 Lead Role이다.
 ```
 
 Team별 override는 플랫폼, repo, CI, release gate가 다를 때만 둔다.
+
+다중 worktree 또는 task branch 운영에서는 아래 값을 함께 기록한다.
+
+```yaml
+canonical_status_ref: origin/main
+```
 
 ## 13. Bootstrap 질문
 

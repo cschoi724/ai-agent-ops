@@ -10,6 +10,8 @@
 
 `.ai_project/tasks/`의 Task 파일은 Agent 실행 지시의 source of truth다. `.ai_project/task_board.md`는 현황 요약판이며, `reports/`, `qa/`는 Task 진행 과정의 보조 기록이다.
 
+다중 branch 또는 worktree 운영에서는 현재 worktree의 Task 파일이 최신 공용 상태가 아닐 수 있다. 공용 상태 판단, dependency 해제, `done` 확정은 `.ai/policies/shared_status_policy.md`의 `canonical_status_ref` 기준으로 확인한다.
+
 Task 실행 흐름은 Agent별 고정 권한보다 세션 Role과 Task의 `workflow`, `status`, `target_agent` 또는 `target_role` 조합을 우선한다.
 
 ## 2. 기본 원칙
@@ -18,6 +20,7 @@ Task 실행 흐름은 Agent별 고정 권한보다 세션 Role과 Task의 `workf
 - Agent 세션 분리와 보조 위임 기준은 `.ai/policies/session_orchestration_policy.md`를 따른다.
 - PM/Development/QA Agent는 vNext 책임 단계 위에 매핑되는 bootstrap Role이다.
 - Agent는 세션 시작 또는 재개 시 `.ai_project/current_context.md`와 `.ai_project/tasks/`를 확인한다.
+- Agent는 세션 시작 또는 재개 시 프로젝트가 정한 canonical status ref와 확인 SHA를 함께 기록한다.
 - `workflow`는 Task의 상태 전이 규칙을 정한다.
 - 기존 Task에 `workflow`가 없으면 `type` 값을 같은 이름의 workflow로 해석한다.
 - `target_agent`는 기존 호환 라우팅 필드이며, 현재 `status`에서 이 Task를 처리할 Role 또는 Agent 이름을 뜻한다.
@@ -35,6 +38,7 @@ Task 실행 흐름은 Agent별 고정 권한보다 세션 Role과 Task의 `workf
 - 실행 가능한 Task는 `status: approved`, `status: verification_ready`, `status: completion_review`처럼 명확한 상태를 가져야 한다.
 - 실행 가능한 Task는 필요한 경우 `approved_by`가 비어 있지 않아야 한다.
 - Task는 `depends_on`이 모두 완료된 경우에만 실행한다.
+- `depends_on` 완료 여부는 다중 worktree 운영에서 canonical status ref 기준으로 확인한다.
 - Agent는 잠금 필드가 비어 있는 Task만 시작할 수 있다.
 - Agent는 Task를 시작하기 전 상태를 갱신하고, 완료 후 공통 작업 보고서 경로를 Task 파일에 기록한다.
 - 동시에 여러 Task를 병렬 실행하지 않는다. 같은 Agent는 하나의 `in_progress` 또는 `verification_in_progress` Task만 가진다.

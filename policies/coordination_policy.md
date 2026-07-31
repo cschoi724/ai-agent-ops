@@ -13,6 +13,7 @@ Coordination은 여러 Agent, Role, Team이 같은 프로젝트에서 충돌 없
 ## 2. 기본 원칙
 
 - 한 Task의 source of truth는 Task 파일이다.
+- 다중 worktree 운영에서 공용 Task 상태는 `shared_status_policy.md`의 `canonical_status_ref` 기준으로 확인한다.
 - 병렬 작업은 ownership, lock, dependency가 명확할 때만 허용한다.
 - 불명확하면 `single_active_task`로 되돌린다.
 - blocked와 rework는 실패가 아니라 조율 상태다.
@@ -40,6 +41,7 @@ canonical 선택값은 `schemas/operating_model.schema.json`과 `runtime/bootstr
 - 같은 source of truth 문서를 동시에 수정하지 않는다.
 - Team Board 또는 Project Board에서 병렬 상태가 보인다.
 - Lead Role이 병렬 가능하다고 판단했다.
+- 각 Agent가 확인한 `status_ref`와 `status_ref_sha`가 기록되어 있다.
 
 ## 5. 병렬 작업 금지 조건
 
@@ -54,6 +56,8 @@ canonical 선택값은 `schemas/operating_model.schema.json`과 `runtime/bootstr
 ## 6. Dependency
 
 Dependency는 선행 작업이 끝나야 진행 가능한 관계다.
+
+dependency 해제는 local worktree snapshot이 아니라 canonical status ref 기준으로 확인한다.
 
 Task metadata 권장 필드:
 

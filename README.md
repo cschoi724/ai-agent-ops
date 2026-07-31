@@ -74,6 +74,10 @@ YourProject/
 | `aiops migrate --apply` | 승인된 안전 범위만 마이그레이션 |
 | `aiops validate --strict` | `.ai_project/` schema 검증 |
 | `aiops task create --title TITLE` | Task 생성 |
+| `aiops status-ref` | 공용 상태 기준 ref 확인 |
+| `aiops sync-status` | canonical ref fetch/SHA 기록 |
+| `aiops task status TASK_ID --source canonical` | 최신 공용 ref 기준 Task 상태 확인 |
+| `aiops worktree doctor` | 다중 worktree 상태 진단 |
 | `aiops task transition TASK_ID --to STATUS --role ROLE` | 상태 전이 |
 | `aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT` | Role 인계 |
 | `aiops knowledge init --mode minimal` | `.ai_knowledge/` 생성 |
@@ -90,12 +94,14 @@ YourProject/
 - Execution Role은 승인된 Task 밖 구현을 하지 않는다.
 - Verification Role은 자기 작업을 검증하지 않는다.
 - AI Ops Agent는 제품 구현 대신 운영모델을 점검한다.
+- 여러 worktree를 쓰는 프로젝트에서는 현재 폴더의 `.ai_project/`를 최신 공용 상태로 가정하지 않고 `canonical_status_ref`를 확인한다.
 
 ## More Docs
 
 - [QUICKSTART.md](QUICKSTART.md): 처음 실행 절차
 - [docs/installation.md](docs/installation.md): 설치 방식
 - [docs/distribution.md](docs/distribution.md): 배포와 Homebrew 기준
+- [docs/shared_status.md](docs/shared_status.md): 다중 Agent/worktree 상태 동기화
 - [bootstrap/bootstrap_runbook.md](bootstrap/bootstrap_runbook.md): bootstrap 실행 흐름
 - [bootstrap/migration_runbook.md](bootstrap/migration_runbook.md): 기존 프로젝트 마이그레이션
 - [core/constitution.md](core/constitution.md): 운영 헌법

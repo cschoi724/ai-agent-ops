@@ -16,6 +16,7 @@ branch_strategy:
   model: feature_branch_pr
   base_branch: main
   branch_naming: "{type}/{task_id}-{slug}"
+  canonical_status_ref: origin/main
 ```
 
 ## 3. Role Permissions
@@ -53,6 +54,7 @@ merge:
 | 항목 | 선택값 | 결정 사유 |
 |---|---|---|
 | 기본 branch | main | |
+| canonical_status_ref | origin/main | 최신 공용 Task 상태 기준 |
 | 전략 | feature_branch_pr | |
 | Execution Role commit | allowed on task branch | |
 | Execution Role push | allowed on task branch | |

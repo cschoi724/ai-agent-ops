@@ -7,6 +7,10 @@ from_agent: {{FROM_AGENT}}
 to_agent: {{NEXT_AGENT}}
 current_status: {{CURRENT_STATUS}}
 next_action: {{NEXT_ACTION}}
+status_ref: {{STATUS_REF}}
+status_ref_sha: {{STATUS_REF_SHA}}
+worktree_path: {{WORKTREE_PATH}}
+worktree_role: {{WORKTREE_ROLE}}
 source_of_truth:
   - {{SOURCE_OF_TRUTH}}
 allowed_paths:
@@ -31,6 +35,8 @@ created_by: {{FROM_AGENT}}
 Task {{TASK_ID}}를 이어서 처리해줘.
 
 - 현재 상태: {{CURRENT_STATUS}}
+- 기준 상태 ref: {{STATUS_REF}}
+- 기준 상태 SHA: {{STATUS_REF_SHA}}
 - 다음에 해야 할 일: {{NEXT_ACTION}}
 - 기준 문서: {{SOURCE_OF_TRUTH}}
 - 허용 경로: {{ALLOWED_PATHS}}
@@ -51,5 +57,6 @@ Task {{TASK_ID}}를 이어서 처리해줘.
 
 ```bash
 aiops task status {{TASK_ID}}
+aiops task status {{TASK_ID}} --source canonical
 aiops handoff validate {{TASK_ID}} --strict
 ```

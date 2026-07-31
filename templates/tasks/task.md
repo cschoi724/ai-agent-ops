@@ -40,6 +40,12 @@ created_at: {{DATE}}
 updated_at: {{DATE}}
 report_to: .ai_project/reports/T-{{DATE_COMPACT}}-001_task-report.md
 qa_to: .ai_project/qa/T-{{DATE_COMPACT}}-001_qa-report.md
+status_ref:
+status_ref_sha:
+worktree_path:
+worktree_role:
+base_ref:
+base_sha:
 branch:
   name:
   base:
@@ -75,6 +81,8 @@ When the next Role should continue, update or create a handoff using `.ai/runtim
 Task {{TASK_ID}}를 이어서 처리해줘.
 
 - 현재 상태: {{CURRENT_STATUS}}
+- 기준 상태 ref: {{STATUS_REF}}
+- 기준 상태 SHA: {{STATUS_REF_SHA}}
 - 다음에 해야 할 일: {{NEXT_ACTION}}
 - 기준 문서: {{SOURCE_OF_TRUTH}}
 - 허용 경로: {{ALLOWED_PATHS}}
