@@ -2,6 +2,37 @@
 
 AI Ops에서 프로젝트 상태를 안정적으로 읽기 위한 기준 문서다.
 
+## Project Snapshot
+
+`aiops project snapshot --json`은 Agent가 세션 시작 또는 작업 착수 전에 먼저 읽는 기계 판독 상태 계약이다.
+
+```sh
+aiops project snapshot --json
+```
+
+이 명령은 파일을 수정하지 않는다. `.ai_project`가 없는 프로젝트나 Git 저장소가 아닌 폴더에서도 실패하지 않고, 현재 가능한 범위의 상태와 blocker를 JSON으로 출력한다.
+
+현재 schema:
+
+```text
+aiops.project_snapshot.v1
+```
+
+주요 출력:
+
+- `source_refs`: local branch/head, `canonical_status_ref`, 기록된 status ref SHA, 동기화 상태
+- `core`: `.ai/` core 연결과 Codex/Claude adapter 상태
+- `project`: 운영 모드, workflow 정책, 기록된 core version
+- `agents`: 등록 Agent와 활성 Role
+- `tasks`: Task 개수, 활성 Task, 상태 분포, Task별 routing 정보
+- `workflow`: workflow catalog 연결 상태
+- `health`: `ok`, `warning`, `blocked` 요약
+- `control`: Agent가 시작/상태전이/commit/push/merge를 해도 되는지에 대한 통제 신호
+- `checks`: severity, confidence, evidence를 포함한 판단 근거
+- `next`: Agent용 command와 사용자용 message로 분리된 다음 조치
+
+`snapshot`은 source of truth가 아니다. `.ai_project/`, workflow catalog, Git 상태를 읽어 만든 projection이다. 사용자용 monitor나 dashboard도 이 snapshot 또는 같은 상태 계약을 읽어야 한다.
+
 ## Inspect
 
 `aiops project inspect`는 현재 프로젝트의 운영 상태를 읽기 전용으로 요약한다.
@@ -27,7 +58,7 @@ aiops project inspect --json
 
 다중 Agent나 여러 worktree를 사용하는 프로젝트에서는 현재 폴더의 문서가 최신 공용 상태가 아닐 수 있다.
 
-`project inspect`는 Agent가 작업 전에 현재 상태를 한 번에 확인할 수 있는 공통 입력 기반이다. 이후 `doctor`, `validate`, `context`, `health`, Dashboard 기능은 이 정규화된 상태 조회를 기준으로 확장한다.
+`project inspect`는 사람이 읽기 쉬운 상세 점검에 가깝다. Agent가 가장 먼저 읽어야 하는 표준 상태 계약은 `project snapshot --json`이다.
 
 ## JSON 출력
 
@@ -101,7 +132,7 @@ aiops project health --json
 aiops.project_health.v1
 ```
 
-`health`는 빠른 판단을 위한 파생 요약이다. 실제 운영 기준은 `.ai_project/` 문서, workflow catalog, Git 상태, schema 검증 결과를 함께 확인한다.
+`health`는 빠른 판단을 위한 파생 요약이다. Agent 통제 기준은 `project snapshot --json`의 `control`, `checks`, `source_refs`를 우선 확인한다.
 
 ## 관계 검증
 

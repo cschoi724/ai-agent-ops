@@ -153,10 +153,13 @@ Agent Role은 사용자가 세션에 부여한다. PM/Development/QA/AI Ops는 �
 
 우선 읽기 전용 CLI로 요약 상태를 확인한다.
 
-1. `aiops project health`
-2. 필요하면 `aiops project inspect`
-3. 특정 Role 또는 Task 작업이면 `aiops project context --role ROLE --task TASK_ID`
-4. 문제나 불일치가 있으면 `aiops validate project --strict`
+1. `aiops project snapshot --json`
+2. 사람이 읽을 요약이 필요하면 `aiops project health`
+3. 상세 점검이 필요하면 `aiops project inspect`
+4. 특정 Role 또는 Task 작업이면 `aiops project context --role ROLE --task TASK_ID --json`
+5. 문제나 불일치가 있으면 `aiops validate project --strict`
+
+`project snapshot --json`의 `control`, `checks`, `source_refs`를 먼저 확인한다. `control.can_transition`이 false이면 상태 전이를 진행하지 않고, `blocked_actions`와 `checks[].evidence`를 사용자에게 요약한다. `commit`, `push`, `merge`, `deploy`는 snapshot에 허용처럼 보이는 경우가 있더라도 사용자 승인 없이 진행하지 않는다.
 
 세부 문서 확인이 필요하면 아래를 읽는다.
 

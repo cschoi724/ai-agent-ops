@@ -10,6 +10,16 @@
 
 ## Unreleased
 
+### Added
+
+- `aiops project snapshot --json` 명령과 `schemas/project_snapshot.schema.json` 추가
+- snapshot에 `control`, `checks`, `source_refs`, Agent/user 분리 `next`를 포함해 Agent 통제 신호를 구조화
+
+### Changed
+
+- Codex / Claude adapter가 세션 시작 시 `project snapshot --json`을 우선 확인하도록 안내
+- `release-check --strict`가 seed된 프로젝트의 snapshot 계약을 검증하도록 강화
+
 ## 0.10.0 - 2026-08-05
 
 ### Added
