@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/action_plan.schema.json",
+  "title": "AI Ops Action Plan",
+  "description": "Schema for pre-work Agent action intent review.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "generated_at",
+    "target",
+    "role",
+    "task_id",
+    "task",
+    "intended_actions",
+    "allowed_paths",
+    "requires_user_approval",
+    "blocked_actions",
+    "warnings",
+    "evidence"
+  ],
+  "properties": {
+    "schema": {
+      "const": "aiops.action_plan.v1"
+    },
+    "generated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "role": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_id": {
+      "type": "string",
+      "pattern": "^T-[0-9]{8}-[0-9]{3,}$"
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "status",
+        "workflow",
+        "target_role",
+        "target_agent"
+      ],
+      "properties": {
+        "path": { "type": "string" },
+        "status": { "type": ["string", "null"] },
+        "workflow": { "type": ["string", "null"] },
+        "target_role": { "type": ["string", "null"] },
+        "target_agent": { "type": ["string", "null"] }
+      }
+    },
+    "intended_actions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "read_source",
+          "edit_allowed_paths",
+          "edit_paths",
+          "run_tests",
+          "task_transition",
+          "create_handoff",
+          "commit",
+          "push",
+          "merge",
+          "deploy"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "allowed_paths": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "requested_paths": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "requires_user_approval": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["commit", "push", "merge", "deploy", "external_configuration_changes"]
+      },
+      "uniqueItems": true
+    },
+    "blocked_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/actionSignal"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/actionSignal"
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "snapshot_health",
+        "can_start_task",
+        "can_transition",
+        "status_ref_state"
+      ],
+      "properties": {
+        "snapshot_health": { "type": ["string", "null"] },
+        "can_start_task": { "type": "boolean" },
+        "can_transition": { "type": "boolean" },
+        "status_ref_state": { "type": ["string", "null"] },
+        "canonical_status_ref": { "type": ["string", "null"] },
+        "canonical_status_sha": { "type": ["string", "null"] }
+      }
+    }
+  },
+  "$defs": {
+    "actionSignal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "reason", "evidence"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

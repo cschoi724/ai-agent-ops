@@ -16,6 +16,8 @@ Usage:
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
   aiops role prompt ROLE [--target DIR] [--task TASK_ID] [--adapter codex|claude|generic] [--agent NAME]
+  aiops action plan --role ROLE --task TASK_ID [--target DIR] [--intends LIST] [--paths LIST] --json
+  aiops action validate FILE
   aiops validate [project] [--target DIR] [--strict]
   aiops validate task FILE [--strict]
   aiops validate handoff FILE [--strict]
@@ -59,6 +61,8 @@ Examples:
   aiops project inspect --json
   aiops project snapshot --json
   aiops project context --role execution --task T-YYYYMMDD-001
+  aiops action plan --role execution --task T-YYYYMMDD-001 --json
+  aiops action validate /tmp/action_plan.json
   aiops project health
   aiops validate --strict
   aiops validate project --target /path/to/project --strict
@@ -5428,6 +5432,414 @@ EOF
   esac
 }
 
+cmd_action() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "action requires an action: plan, validate"
+  shift
+
+  case "$action" in
+    plan)
+      target="$(pwd)"
+      role_input=""
+      task_id=""
+      intends="read_source,edit_allowed_paths,run_tests"
+      paths=""
+      json="no"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --role)
+            shift
+            [ "$#" -gt 0 ] || die "--role requires a value"
+            role_input="$1"
+            ;;
+          --task)
+            shift
+            [ "$#" -gt 0 ] || die "--task requires a value"
+            task_id="$1"
+            ;;
+          --intends)
+            shift
+            [ "$#" -gt 0 ] || die "--intends requires a value"
+            intends="$1"
+            ;;
+          --paths)
+            shift
+            [ "$#" -gt 0 ] || die "--paths requires a value"
+            paths="$1"
+            ;;
+          --json)
+            json="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown action plan option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      [ "$json" = "yes" ] || die "action plan currently requires --json"
+      [ -n "$role_input" ] || die "action plan requires --role"
+      [ -n "$task_id" ] || die "action plan requires --task"
+      role="$(normalize_role_name "$role_input")" || die "unknown role: $role_input"
+      target="$(abs_path "$target")"
+      [ -d "$target/.ai_project" ] || die ".ai_project missing; bootstrap project first"
+      task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for action plan"
+      aiops_path="$(script_dir)/$(basename "$0")"
+
+      ruby -ryaml -rjson -rdate -rtime -rfind -ropen3 -e '
+        aiops_path = ARGV[0]
+        target = ARGV[1]
+        role = ARGV[2]
+        task_id = ARGV[3]
+        task_file = ARGV[4]
+        intends_raw = ARGV[5]
+        paths_raw = ARGV[6]
+
+        def front_matter(path)
+          return {} unless File.file?(path)
+          text = File.read(path)
+          return {} unless text.start_with?("---\n")
+          lines = text.lines
+          closing = nil
+          lines[1..].each_with_index do |line, idx|
+            if line.strip == "---"
+              closing = idx + 1
+              break
+            end
+          end
+          return {} unless closing
+          YAML.safe_load(lines[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+        rescue Psych::SyntaxError
+          {}
+        end
+
+        def legacy_field(path, key)
+          return nil unless File.file?(path)
+          File.foreach(path) do |line|
+            if line =~ /^[[:space:]]*#{Regexp.escape(key)}:[[:space:]]*(.*)$/
+              value = Regexp.last_match(1).strip
+              return nil if value.empty?
+              return value.gsub(/\A`|`\z/, "")
+            end
+          end
+          nil
+        end
+
+        def list(value)
+          case value
+          when Array then value.compact.map(&:to_s).map(&:strip).reject(&:empty?)
+          when nil then []
+          else value.to_s.split(",").map(&:strip).reject(&:empty?)
+          end
+        end
+
+        def csv(value)
+          value.to_s.split(",").map(&:strip).reject(&:empty?)
+        end
+
+        def normalize(value)
+          case value
+          when Hash
+            value.each_with_object({}) { |(key, item), out| out[key.to_s] = normalize(item) }
+          when Array
+            value.map { |item| normalize(item) }
+          when Date, Time
+            value.to_s
+          else
+            value
+          end
+        end
+
+        def project_snapshot(aiops_path, target)
+          stdout, stderr, status = Open3.capture3(aiops_path, "project", "snapshot", "--target", target, "--json")
+          unless status.success?
+            abort("error: project snapshot failed before action plan\n#{stderr}#{stdout}")
+          end
+          JSON.parse(stdout)
+        rescue JSON::ParserError => error
+          abort("error: project snapshot returned invalid JSON: #{error.message}")
+        end
+
+        def clean_relative_path(path)
+          value = path.to_s.strip
+          return nil if value.empty? || value.start_with?("/")
+          parts = []
+          value.split("/").each do |part|
+            next if part.empty? || part == "."
+            if part == ".."
+              return nil if parts.empty?
+              parts.pop
+            else
+              parts << part
+            end
+          end
+          parts.empty? ? "." : parts.join("/")
+        end
+
+        def path_allowed?(path, allowed_paths)
+          normalized = clean_relative_path(path)
+          return false unless normalized
+          return true if allowed_paths.empty?
+          allowed_paths.any? do |allowed|
+            prefix = clean_relative_path(allowed)
+            next false unless prefix
+            prefix == "." || normalized == prefix || normalized.start_with?(prefix.end_with?("/") ? prefix : "#{prefix}/")
+          end
+        end
+
+        project_dir = File.join(target, ".ai_project")
+        task = front_matter(task_file)
+        intended_actions = csv(intends_raw)
+        requested_paths = csv(paths_raw)
+        allowed_paths = list(task["allowed_paths"])
+        snapshot = project_snapshot(aiops_path, target)
+        source_refs = snapshot.fetch("source_refs", {})
+        control = snapshot.fetch("control", {})
+        snapshot_health = snapshot.dig("health", "overall")
+        snapshot_can_start_task = control["can_start_task"] == true
+        snapshot_can_transition = control["can_transition"] == true
+        status_ref_state = source_refs["status_ref_state"]
+        status_ref = source_refs["canonical_status_ref"]
+        status_ref_sha = source_refs["canonical_status_sha"]
+        recorded_sha = source_refs["recorded_status_sha"]
+        snapshot_blockers = snapshot.fetch("checks", [])
+          .select { |check| check.is_a?(Hash) && check["severity"] == "blocker" }
+          .map { |check| check["id"] }
+          .compact
+
+        blocked_actions = []
+        warnings = []
+        approval_actions = %w[commit push merge deploy]
+        requires_user_approval = (intended_actions & approval_actions)
+        requires_user_approval << "external_configuration_changes" if intended_actions.include?("deploy")
+
+        target_role = task["target_role"] || legacy_field(task_file, "target_role")
+        if target_role && target_role != role
+          warnings << {
+            "action" => "role_alignment",
+            "reason" => "requested role differs from task target_role",
+            "evidence" => { "role" => role, "target_role" => target_role }
+          }
+        end
+
+        if intended_actions.include?("edit_paths") || intended_actions.include?("edit_allowed_paths")
+          outside = requested_paths.reject { |path| path_allowed?(path, allowed_paths) }
+          unless outside.empty?
+            blocked_actions << {
+              "action" => "edit_paths",
+              "reason" => "requested path is outside task allowed_paths",
+              "evidence" => { "requested_paths" => outside, "allowed_paths" => allowed_paths }
+            }
+          end
+        end
+
+        if intended_actions.include?("task_transition") && %w[ref_not_found_locally not_recorded recorded_stale].include?(status_ref_state)
+          blocked_actions << {
+            "action" => "task_transition",
+            "reason" => "canonical status ref is not current",
+            "evidence" => {
+              "status_ref_state" => status_ref_state,
+              "canonical_status_ref" => status_ref,
+              "canonical_status_sha" => status_ref_sha,
+              "recorded_status_sha" => recorded_sha
+            }
+          }
+        end
+
+        if intended_actions.empty?
+          warnings << {
+            "action" => "intended_actions",
+            "reason" => "no intended actions declared",
+            "evidence" => {}
+          }
+        end
+
+        plan = normalize({
+          "schema" => "aiops.action_plan.v1",
+          "generated_at" => Time.now.utc.iso8601,
+          "target" => target,
+          "role" => role,
+          "task_id" => task["id"] || task_id,
+          "task" => {
+            "path" => task_file.sub(%r{\A#{Regexp.escape(target)}/?}, ""),
+            "status" => task["status"] || legacy_field(task_file, "status"),
+            "workflow" => task["workflow"] || legacy_field(task_file, "workflow"),
+            "target_role" => target_role,
+            "target_agent" => task["target_agent"] || legacy_field(task_file, "target_agent")
+          },
+          "intended_actions" => intended_actions.uniq,
+          "allowed_paths" => allowed_paths.uniq,
+          "requested_paths" => requested_paths.uniq,
+          "requires_user_approval" => requires_user_approval.uniq,
+          "blocked_actions" => blocked_actions,
+          "warnings" => warnings,
+          "evidence" => {
+            "snapshot_health" => snapshot_health,
+            "can_start_task" => snapshot_can_start_task,
+            "can_transition" => snapshot_can_transition,
+            "status_ref_state" => status_ref_state,
+            "canonical_status_ref" => status_ref,
+            "canonical_status_sha" => status_ref_sha,
+            "recorded_status_sha" => recorded_sha,
+            "snapshot_blockers" => snapshot_blockers
+          }
+        })
+
+        puts JSON.pretty_generate(plan)
+      ' "$aiops_path" "$target" "$role" "$task_id" "$task_file" "$intends" "$paths"
+      ;;
+    validate)
+      file=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          -*)
+            die "unknown action validate option: $1"
+            ;;
+          *)
+            [ -z "$file" ] || die "action validate requires exactly one FILE"
+            file="$1"
+            ;;
+        esac
+        shift
+      done
+      [ -n "$file" ] || die "action validate requires exactly one FILE"
+      [ -f "$file" ] || die "action plan file not found: $file"
+      core="$(default_core_dir)"
+      schema="$core/schemas/action_plan.schema.json"
+      [ -f "$schema" ] || die "action plan schema not found: $schema"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for action plan validation"
+      info "AI Ops action plan validate"
+      info "plan: $file"
+      ruby -rjson -e '
+        data = JSON.parse(File.read(ARGV[0]))
+        schema = JSON.parse(File.read(ARGV[1]))
+        errors = []
+
+        def type_ok?(value, type)
+          case type
+          when "object" then value.is_a?(Hash)
+          when "array" then value.is_a?(Array)
+          when "string" then value.is_a?(String)
+          when "boolean" then value == true || value == false
+          when "null" then value.nil?
+          else true
+          end
+        end
+
+        def validate(value, schema, path, errors)
+          return unless schema.is_a?(Hash)
+          if schema.key?("$ref")
+            ref = schema["$ref"].sub("#/$defs/", "")
+            return validate(value, $defs[ref], path, errors)
+          end
+          if schema.key?("const") && value != schema["const"]
+            errors << "#{path}: const mismatch"
+          end
+          if schema.key?("enum") && !schema["enum"].include?(value)
+            errors << "#{path}: enum mismatch #{value.inspect}"
+          end
+          if schema.key?("type")
+            types = Array(schema["type"])
+            unless types.any? { |type| type_ok?(value, type) }
+              errors << "#{path}: expected #{types.join("|")}, got #{value.class}"
+              return
+            end
+          end
+          if value.is_a?(String)
+            errors << "#{path}: shorter than minLength" if schema["minLength"] && value.length < schema["minLength"].to_i
+            errors << "#{path}: pattern mismatch" if schema["pattern"] && !value.match?(Regexp.new("\\A#{schema["pattern"]}\\z"))
+          end
+          if value.is_a?(Array)
+            errors << "#{path}: array items must be unique" if schema["uniqueItems"] && value.uniq.length != value.length
+            if schema["items"]
+              value.each_with_index { |item, index| validate(item, schema["items"], "#{path}[#{index}]", errors) }
+            end
+          end
+          if value.is_a?(Hash)
+            Array(schema["required"]).each { |key| errors << "#{path}.#{key}: required property missing" unless value.key?(key) }
+            properties = schema["properties"].is_a?(Hash) ? schema["properties"] : {}
+            properties.each { |key, child| validate(value[key], child, "#{path}.#{key}", errors) if value.key?(key) }
+            extra = value.keys - properties.keys
+            errors << "#{path}: unknown properties #{extra.join(", ")}" if schema["additionalProperties"] == false && !extra.empty?
+          end
+        end
+
+        $defs = schema["$defs"] || {}
+        validate(data, schema, "$", errors)
+
+        approval_actions = %w[commit push merge deploy]
+        missing_approval = data.fetch("intended_actions", []) & approval_actions
+        missing_approval -= data.fetch("requires_user_approval", [])
+        errors << "$.requires_user_approval: missing approval actions #{missing_approval.join(", ")}" unless missing_approval.empty?
+
+        def clean_relative_path(path)
+          value = path.to_s.strip
+          return nil if value.empty? || value.start_with?("/")
+          parts = []
+          value.split("/").each do |part|
+            next if part.empty? || part == "."
+            if part == ".."
+              return nil if parts.empty?
+              parts.pop
+            else
+              parts << part
+            end
+          end
+          parts.empty? ? "." : parts.join("/")
+        end
+
+        def path_allowed?(path, allowed)
+          normalized = clean_relative_path(path)
+          return false unless normalized
+          return true if allowed.empty?
+          allowed.any? do |prefix_raw|
+            prefix = clean_relative_path(prefix_raw)
+            next false unless prefix
+            prefix == "." || normalized == prefix || normalized.start_with?(prefix.end_with?("/") ? prefix : "#{prefix}/")
+          end
+        end
+
+        if data.fetch("intended_actions", []).include?("edit_paths") || data.fetch("intended_actions", []).include?("edit_allowed_paths")
+          requested = data.fetch("requested_paths", [])
+          allowed = data.fetch("allowed_paths", [])
+          outside = requested.reject { |path| path_allowed?(path, allowed) }
+          has_blocker = data.fetch("blocked_actions", []).any? { |item| item["action"] == "edit_paths" }
+          errors << "$.blocked_actions: missing edit_paths blocker" if outside.any? && !has_blocker
+        end
+
+        stale_states = %w[ref_not_found_locally not_recorded recorded_stale]
+        if data.fetch("intended_actions", []).include?("task_transition") &&
+            (stale_states.include?(data.dig("evidence", "status_ref_state").to_s) || data.dig("evidence", "can_transition") == false)
+          has_blocker = data.fetch("blocked_actions", []).any? { |item| item["action"] == "task_transition" }
+          errors << "$.blocked_actions: missing task_transition blocker" unless has_blocker
+        end
+
+        abort("schema_error:\n" + errors.join("\n")) unless errors.empty?
+        puts "ok: schema"
+      ' "$file" "$schema"
+      info "ok: action plan"
+      ;;
+    *)
+      die "unknown action subcommand: $action"
+      ;;
+  esac
+}
+
 cmd_handoff() {
   action="${1:-}"
   [ "$#" -gt 0 ] || die "handoff requires an action: create, validate"
@@ -6692,6 +7104,7 @@ cmd_release_check() {
     "$core/schemas/runtime_export.schema.json" \
     "$core/schemas/project_snapshot.schema.json" \
     "$core/schemas/policy_rules.schema.json" \
+    "$core/schemas/action_plan.schema.json" \
     "$core/adapters/README.md" \
     "$core/adapters/langgraph/README.md" \
     "$core/adapters/openai_agents/README.md" \
@@ -7025,6 +7438,7 @@ main() {
     bootstrap-guide) cmd_bootstrap_guide "$@" ;;
     session-guide) cmd_session_guide "$@" ;;
     role) cmd_role "$@" ;;
+    action) cmd_action "$@" ;;
     validate) cmd_validate "$@" ;;
     task) cmd_task "$@" ;;
     handoff) cmd_handoff "$@" ;;
