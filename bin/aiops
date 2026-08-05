@@ -449,6 +449,180 @@ validate_task_file() {
   info "ok: task metadata"
 }
 
+validate_project_relationships() {
+  target="$1"
+  project_dir="$target/.ai_project"
+
+  info ""
+  info "validate: relationships"
+
+  if command -v ruby >/dev/null 2>&1; then
+    ruby -ryaml -rdate -rfind -ropen3 -e '
+      target = ARGV[0]
+      project_dir = File.join(target, ".ai_project")
+      warnings = 0
+
+      def front_matter(path)
+        return {} unless File.file?(path)
+        text = File.read(path)
+        return {} unless text.start_with?("---\n")
+        lines = text.lines
+        closing = nil
+        lines[1..].each_with_index do |line, idx|
+          if line.strip == "---"
+            closing = idx + 1
+            break
+          end
+        end
+        return {} unless closing
+        YAML.safe_load(lines[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+      rescue Psych::SyntaxError
+        {}
+      end
+
+      def legacy_field(path, key)
+        return nil unless File.file?(path)
+        File.foreach(path) do |line|
+          if line =~ /^[[:space:]]*#{Regexp.escape(key)}:[[:space:]]*(.*)$/
+            value = Regexp.last_match(1).strip
+            return nil if value.empty?
+            return value.gsub(/\A`|`\z/, "")
+          end
+        end
+        nil
+      end
+
+      def list(value)
+        case value
+        when Array then value.compact.map(&:to_s).reject(&:empty?)
+        when nil then []
+        else value.to_s.split(",").map(&:strip).reject(&:empty?)
+        end
+      end
+
+      def blankish?(value)
+        value.nil? || value.to_s.empty? || %w[null unresolved pending_decision none].include?(value.to_s)
+      end
+
+      def git(target, *args)
+        stdout, _stderr, status = Open3.capture3("git", "-C", target, *args)
+        return nil unless status.success?
+        stdout.strip
+      end
+
+      def warn(message)
+        puts "warn: #{message}"
+        1
+      end
+
+      operating = front_matter(File.join(project_dir, "operating_model.md"))
+      registry = front_matter(File.join(project_dir, "agent_registry.md"))
+      agents = registry["agents"].is_a?(Array) ? registry["agents"] : []
+      agent_names = agents.map { |agent| agent.is_a?(Hash) ? agent["agent"].to_s : nil }.compact.reject(&:empty?)
+      agent_roles = agents.flat_map { |agent| agent.is_a?(Hash) ? list(agent["roles"]) : [] }.uniq
+      declared_roles = list(operating["active_roles"]) + list(operating["deferred_roles"]) + agent_roles
+      declared_roles = declared_roles.uniq
+
+      workflow_names = %w[feature bugfix docs ops_migration release]
+      ai_workflows = File.join(target, ".ai", "workflows")
+      if Dir.exist?(ai_workflows)
+        Dir.glob(File.join(ai_workflows, "*.md")).each do |path|
+          workflow_names << File.basename(path, ".md")
+        end
+      end
+      workflow_names = workflow_names.uniq
+
+      task_files = []
+      task_root = File.join(project_dir, "tasks")
+      if Dir.exist?(task_root)
+        Find.find(task_root) do |entry|
+          task_files << entry if File.file?(entry) && File.basename(entry).end_with?(".md")
+        end
+      end
+      task_files.sort!
+
+      tasks = task_files.map do |path|
+        data = front_matter(path)
+        {
+          "path" => path,
+          "relative" => path.sub(%r{\A#{Regexp.escape(target)}/?}, ""),
+          "id" => data["id"] || File.basename(path, ".md"),
+          "status" => data["status"] || legacy_field(path, "status"),
+          "workflow" => data["workflow"] || legacy_field(path, "workflow"),
+          "target_role" => data["target_role"] || legacy_field(path, "target_role"),
+          "target_agent" => data["target_agent"] || legacy_field(path, "target_agent"),
+          "depends_on" => list(data["depends_on"]),
+          "blocks" => list(data["blocks"]),
+          "source_of_truth" => list(data["source_of_truth"])
+        }
+      end
+      task_ids = tasks.map { |task| task["id"].to_s }.reject(&:empty?)
+
+      if agents.empty?
+        warnings += warn("agent_registry has no agents; target_agent relationship checks are limited")
+      else
+        puts "ok: agent registry reference set"
+      end
+
+      if workflow_names.empty?
+        warnings += warn("workflow reference set is empty")
+      else
+        puts "ok: workflow reference set"
+      end
+
+      tasks.each do |task|
+        label = task["relative"]
+        role = task["target_role"]
+        agent = task["target_agent"]
+        workflow = task["workflow"]
+
+        if !blankish?(role) && !declared_roles.include?(role.to_s)
+          warnings += warn("#{label} target_role not declared in operating_model or agent_registry: #{role}")
+        end
+
+        if !blankish?(agent) && !agent_names.include?(agent.to_s)
+          warnings += warn("#{label} target_agent not registered: #{agent}")
+        end
+
+        if !blankish?(workflow) && !workflow_names.include?(workflow.to_s)
+          warnings += warn("#{label} workflow not found in .ai/workflows: #{workflow}")
+        end
+
+        (task["depends_on"] + task["blocks"]).each do |dependency|
+          next if blankish?(dependency)
+          warnings += warn("#{label} references missing task: #{dependency}") unless task_ids.include?(dependency.to_s)
+        end
+
+        task["source_of_truth"].each do |source|
+          next if blankish?(source)
+          next if source =~ %r{\Ahttps?://}
+          next if source.start_with?("external:")
+          source_path = source.start_with?("/") ? source : File.join(target, source)
+          warnings += warn("#{label} source_of_truth missing: #{source}") unless File.exist?(source_path)
+        end
+      end
+
+      canonical_status_ref = operating["canonical_status_ref"] || legacy_field(File.join(project_dir, "operating_model.md"), "canonical_status_ref")
+      unless blankish?(canonical_status_ref)
+        if git(target, "rev-parse", "--is-inside-work-tree") == "true"
+          if git(target, "rev-parse", "--verify", "#{canonical_status_ref}^{commit}")
+            puts "ok: canonical_status_ref resolves"
+          else
+            warnings += warn("canonical_status_ref does not resolve locally: #{canonical_status_ref}")
+          end
+        else
+          warnings += warn("canonical_status_ref is set but target is not a Git worktree: #{canonical_status_ref}")
+        end
+      end
+
+      puts "relationship_warnings: #{warnings}"
+      puts "ok: relationship validation report_only"
+    ' "$target"
+  else
+    info "note: ruby not available; relationship validation skipped"
+  fi
+}
+
 validate_project() {
   target="$1"
   strict="$2"
@@ -540,6 +714,8 @@ validate_project() {
       validate_task_file "$task" || exit 1
     done || failed=1
   fi
+
+  validate_project_relationships "$target"
 
   [ "$failed" -eq 0 ] || return 1
   info ""
