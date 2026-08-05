@@ -45,6 +45,35 @@ aiops.project_inspect.v1
 
 JSON 출력은 source of truth가 아니라, 현재 프로젝트 파일과 Git 상태를 읽어 만든 파생 결과다.
 
+## Agent Context Contract
+
+`aiops project context`는 Role Session이 작업을 시작하기 전에 읽을 실행 계약을 출력한다.
+
+```sh
+aiops project context --role execution
+aiops project context --role execution --task T-YYYYMMDD-001
+aiops project context --role execution --task T-YYYYMMDD-001 --json
+```
+
+이 명령은 파일을 수정하지 않는다. 현재 Role과 Task를 기준으로 아래 항목을 한 번에 모은다.
+
+- 현재 프로젝트 운영 모드와 workflow 정책
+- 현재 branch, HEAD, `canonical_status_ref`
+- Task status, workflow, target_role, target_agent
+- Task의 `allowed_paths`와 `source_of_truth`
+- 현재 Role이 수행할 수 있는 다음 상태 전이
+- 다음 상태의 checkpoint와 canonical publish 정책
+- 승인 없이 하면 안 되는 행동
+- 세션 시작 전 권장 확인 명령
+
+Role Session은 이 출력을 기준으로 “내가 지금 이 Task를 맡아도 되는지”, “다음 상태로 어떻게 넘겨야 하는지”, “어떤 파일 밖으로 나가면 안 되는지”를 확인한다.
+
+현재 schema:
+
+```text
+aiops.project_context.v1
+```
+
 ## 관계 검증
 
 `aiops validate project --strict`는 schema 검증 후 문서 간 관계도 함께 점검한다.

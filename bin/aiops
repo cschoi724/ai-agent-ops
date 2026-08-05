@@ -10,6 +10,7 @@ Usage:
   aiops doctor [--target DIR] [--strict]
   aiops migrate [--target DIR] [--plan|--apply]
   aiops project inspect [--target DIR] [--json]
+  aiops project context --role ROLE [--target DIR] [--task TASK_ID] [--json]
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
   aiops role prompt ROLE [--target DIR] [--task TASK_ID] [--adapter codex|claude|generic] [--agent NAME]
@@ -52,6 +53,7 @@ Examples:
   aiops migrate --plan
   aiops project inspect
   aiops project inspect --json
+  aiops project context --role execution --task T-YYYYMMDD-001
   aiops validate --strict
   aiops validate project --target /path/to/project --strict
   aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
@@ -2603,7 +2605,7 @@ cmd_doctor() {
 
 cmd_project() {
   action="${1:-}"
-  [ "$#" -gt 0 ] || die "project requires an action: inspect"
+  [ "$#" -gt 0 ] || die "project requires an action: inspect, context"
   shift
 
   case "$action" in
@@ -2912,6 +2914,353 @@ cmd_project() {
       else
         die "ruby is required for project inspect"
       fi
+      ;;
+    context)
+      target="$(pwd)"
+      role_input=""
+      task_id=""
+      json="no"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --role)
+            shift
+            [ "$#" -gt 0 ] || die "--role requires a value"
+            role_input="$1"
+            ;;
+          --task)
+            shift
+            [ "$#" -gt 0 ] || die "--task requires a value"
+            task_id="$1"
+            ;;
+          --json)
+            json="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown project context option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      [ -n "$role_input" ] || die "project context requires --role"
+      role="$(normalize_role_name "$role_input")" || die "unknown role: $role_input"
+      target="$(abs_path "$target")"
+      [ -d "$target/.ai_project" ] || die ".ai_project missing; bootstrap project first"
+
+      task_file=""
+      if [ -n "$task_id" ]; then
+        task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+      fi
+
+      catalog="$(workflow_catalog_path "$target" "" 2>/dev/null || true)"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for project context"
+
+      ruby -ryaml -rjson -rdate -ropen3 -e '
+        target = ARGV[0]
+        role = ARGV[1]
+        task_file = ARGV[2]
+        task_id = ARGV[3]
+        catalog_path = ARGV[4]
+        as_json = ARGV[5] == "yes"
+
+        def front_matter(path)
+          return {} unless File.file?(path)
+          text = File.read(path)
+          return {} unless text.start_with?("---\n")
+          lines = text.lines
+          closing = nil
+          lines[1..].each_with_index do |line, idx|
+            if line.strip == "---"
+              closing = idx + 1
+              break
+            end
+          end
+          return {} unless closing
+          YAML.safe_load(lines[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+        rescue Psych::SyntaxError
+          {}
+        end
+
+        def legacy_field(path, key)
+          return nil unless File.file?(path)
+          File.foreach(path) do |line|
+            if line =~ /^[[:space:]]*#{Regexp.escape(key)}:[[:space:]]*(.*)$/
+              value = Regexp.last_match(1).strip
+              return nil if value.empty?
+              return value.gsub(/\A`|`\z/, "")
+            end
+          end
+          nil
+        end
+
+        def table_value(path, key)
+          return nil unless File.file?(path)
+          File.foreach(path) do |line|
+            next unless line.include?("|")
+            cells = line.split("|").map { |cell| cell.strip.gsub(/\A`|`\z/, "") }
+            next unless cells.length >= 4
+            return cells[2] if cells[1] == key && !cells[2].empty?
+          end
+          nil
+        end
+
+        def value_from(data, path, key)
+          value = data[key]
+          value = legacy_field(path, key) || table_value(path, key) if value.nil? || value == ""
+          return nil if value.nil?
+          return nil if value.to_s.empty?
+          return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value.to_s)
+          value
+        end
+
+        def list(value)
+          case value
+          when Array then value.compact.map(&:to_s).reject(&:empty?)
+          when nil then []
+          else value.to_s.split(",").map(&:strip).reject(&:empty?)
+          end
+        end
+
+        def git(target, *args)
+          stdout, _stderr, status = Open3.capture3("git", "-C", target, *args)
+          return nil unless status.success?
+          stdout.strip
+        end
+
+        def normalize(value)
+          case value
+          when Hash
+            value.each_with_object({}) { |(key, item), out| out[key.to_s] = normalize(item) }
+          when Array
+            value.map { |item| normalize(item) }
+          when Date, Time
+            value.to_s
+          else
+            value
+          end
+        end
+
+        def resolve_workflow(workflows, workflow_id, default_workflow, seen = [])
+          return {} if workflow_id.nil? || seen.include?(workflow_id)
+          entry = workflows[workflow_id] || workflows[default_workflow] || {}
+          inherited = entry["inherits"]
+          if inherited
+            parent = resolve_workflow(workflows, inherited, default_workflow, seen + [workflow_id])
+            parent.merge(entry) do |key, parent_value, child_value|
+              if key == "statuses"
+                parent_value.merge(child_value || {})
+              elsif key == "transitions"
+                child_value || parent_value
+              else
+                child_value.nil? ? parent_value : child_value
+              end
+            end
+          else
+            entry
+          end
+        end
+
+        project_dir = File.join(target, ".ai_project")
+        operating_path = File.join(project_dir, "operating_model.md")
+        registry_path = File.join(project_dir, "agent_registry.md")
+        operating = front_matter(operating_path)
+        registry = front_matter(registry_path)
+        status_ref = value_from(operating, operating_path, "canonical_status_ref")
+        status_ref_sha = status_ref ? git(target, "rev-parse", "--verify", "#{status_ref}^{commit}") : nil
+        git_inside = git(target, "rev-parse", "--is-inside-work-tree") == "true"
+
+        catalog = File.file?(catalog_path) ? JSON.parse(File.read(catalog_path)) : {}
+        workflows = catalog["workflows"] || {}
+        default_workflow = catalog["default_workflow"] || "feature"
+
+        task = nil
+        valid_next = []
+        workflow_entry = {}
+        status_meta = {}
+        allowed_paths = []
+        source_of_truth = []
+        required_files = [
+          ".ai/runtime/workflows.json",
+          ".ai/runtime/workflow.md",
+          ".ai/runtime/task_queue.md",
+          ".ai/runtime/role_handoff.md",
+          ".ai/policies/shared_status_policy.md",
+          ".ai/policies/session_orchestration_policy.md",
+          ".ai_project/operating_model.md",
+          ".ai_project/agent_registry.md",
+          ".ai_project/current_context.md",
+          ".ai_project/task_board.md",
+          ".ai_project/source_of_truth.md"
+        ]
+
+        if !task_file.to_s.empty?
+          data = front_matter(task_file)
+          workflow = data["workflow"] || legacy_field(task_file, "workflow") || default_workflow
+          status = data["status"] || legacy_field(task_file, "status")
+          target_role = data["target_role"] || legacy_field(task_file, "target_role")
+          target_agent = data["target_agent"] || legacy_field(task_file, "target_agent")
+          allowed_paths = list(data["allowed_paths"])
+          source_of_truth = list(data["source_of_truth"])
+          required_files += source_of_truth
+          workflow_entry = resolve_workflow(workflows, workflow, default_workflow)
+          status_meta = (workflow_entry["statuses"] || {})[status] || {}
+          transitions = workflow_entry["transitions"].is_a?(Array) ? workflow_entry["transitions"] : []
+          valid_next = transitions.select do |transition|
+            transition.is_a?(Hash) &&
+              transition["from"] == status &&
+              list(transition["allowed_roles"]).include?(role)
+          end.map do |transition|
+            to = transition["to"]
+            meta = (workflow_entry["statuses"] || {})[to] || {}
+            {
+              "to" => to,
+              "next_role" => transition["next_role"],
+              "checkpoint" => meta["checkpoint"],
+              "canonical_publish" => meta["canonical_publish"],
+              "meaning" => meta["meaning"]
+            }
+          end
+          task = {
+            "id" => data["id"] || task_id,
+            "path" => task_file.sub(%r{\A#{Regexp.escape(target)}/?}, ""),
+            "title" => data["title"],
+            "status" => status,
+            "workflow" => workflow,
+            "status_meaning" => status_meta["meaning"],
+            "checkpoint" => status_meta["checkpoint"],
+            "canonical_publish" => status_meta["canonical_publish"],
+            "target_role" => target_role,
+            "target_agent" => target_agent,
+            "allowed_paths" => allowed_paths,
+            "source_of_truth" => source_of_truth,
+            "locked_by" => data["locked_by"] || legacy_field(task_file, "locked_by"),
+            "lock_session" => data["lock_session"] || legacy_field(task_file, "lock_session"),
+            "status_ref" => data["status_ref"] || legacy_field(task_file, "status_ref"),
+            "status_ref_sha" => data["status_ref_sha"] || legacy_field(task_file, "status_ref_sha")
+          }
+        end
+
+        forbidden_actions = [
+          "commit without explicit user approval",
+          "push without explicit user approval",
+          "merge without explicit user approval",
+          "deploy without explicit user approval",
+          "edit .ai/ core instructions unless the operator explicitly approved core changes"
+        ]
+        forbidden_actions << "edit outside allowed_paths" unless allowed_paths.empty?
+
+        contract = normalize({
+          "schema" => "aiops.project_context.v1",
+          "target" => target,
+          "role" => role,
+          "project" => {
+            "name" => value_from(operating, operating_path, "project") || File.basename(target),
+            "operating_mode" => value_from(operating, operating_path, "operating_mode") || "unknown",
+            "workflow_policy" => value_from(operating, operating_path, "workflow_policy") || "unknown",
+            "knowledge_mode" => value_from(operating, operating_path, "knowledge_mode") || "unknown"
+          },
+          "git" => {
+            "inside_worktree" => git_inside,
+            "branch" => git_inside ? git(target, "rev-parse", "--abbrev-ref", "HEAD") : nil,
+            "head" => git_inside ? git(target, "rev-parse", "--short", "HEAD") : nil,
+            "canonical_status_ref" => status_ref,
+            "canonical_status_sha" => status_ref_sha
+          },
+          "task" => task,
+          "required_files" => required_files.uniq,
+          "allowed_paths" => allowed_paths,
+          "source_of_truth" => source_of_truth,
+          "valid_next_transitions" => valid_next,
+          "handoff_target" => valid_next.map { |transition| transition["next_role"] }.compact.uniq,
+          "approval_required_for" => ["commit", "push", "merge", "deploy", "external configuration changes"],
+          "forbidden_actions" => forbidden_actions,
+          "recommended_checks" => begin
+            checks = ["aiops project inspect --target #{target}", "aiops validate project --target #{target} --strict"]
+            checks << "aiops status-ref --target #{target}" if status_ref
+            checks << "aiops sync-status --target #{target}" if status_ref
+            checks << "aiops task status #{task["id"]} --target #{target}" if task
+            checks << "aiops task status #{task["id"]} --target #{target} --source canonical" if task && status_ref
+            checks
+          end
+        })
+
+        if as_json
+          puts JSON.pretty_generate(contract)
+          exit 0
+        end
+
+        puts "AI Ops project context"
+        puts "target: #{contract["target"]}"
+        puts "role: #{contract["role"]}"
+        puts "project: #{contract["project"]["name"]}"
+        puts "operating_mode: #{contract["project"]["operating_mode"]}"
+        puts "workflow_policy: #{contract["project"]["workflow_policy"]}"
+        puts ""
+        puts "git:"
+        puts "  branch: #{contract["git"]["branch"] || "unknown"}"
+        puts "  head: #{contract["git"]["head"] || "unknown"}"
+        puts "  canonical_status_ref: #{contract["git"]["canonical_status_ref"] || "unresolved"}"
+        puts "  canonical_status_sha: #{contract["git"]["canonical_status_sha"] || "unresolved"}"
+
+        if contract["task"]
+          t = contract["task"]
+          puts ""
+          puts "task:"
+          puts "  id: #{t["id"]}"
+          puts "  path: #{t["path"]}"
+          puts "  status: #{t["status"]}"
+          puts "  workflow: #{t["workflow"]}"
+          puts "  status_meaning: #{t["status_meaning"] || "unknown"}"
+          puts "  checkpoint: #{t["checkpoint"].nil? ? "unknown" : t["checkpoint"]}"
+          puts "  canonical_publish: #{t["canonical_publish"] || "unknown"}"
+          puts "  target_role: #{t["target_role"] || "unassigned"}"
+          puts "  target_agent: #{t["target_agent"] || "unassigned"}"
+          puts "  locked_by: #{t["locked_by"] || "none"}"
+          puts "  status_ref: #{t["status_ref"] || "unresolved"}"
+          puts "  status_ref_sha: #{t["status_ref_sha"] || "unresolved"}"
+        end
+
+        puts ""
+        puts "required_files:"
+        contract["required_files"].each { |file| puts "  - #{file}" }
+        puts ""
+        puts "allowed_paths:"
+        if contract["allowed_paths"].empty?
+          puts "  - unrestricted_by_task"
+        else
+          contract["allowed_paths"].each { |path| puts "  - #{path}" }
+        end
+        puts ""
+        puts "valid_next_transitions:"
+        if contract["valid_next_transitions"].empty?
+          puts "  - none"
+        else
+          contract["valid_next_transitions"].each do |transition|
+            puts "  - to: #{transition["to"]}"
+            puts "    next_role: #{transition["next_role"] || "none"}"
+            puts "    checkpoint: #{transition["checkpoint"]}"
+            puts "    canonical_publish: #{transition["canonical_publish"]}"
+          end
+        end
+        puts ""
+        puts "handoff_target: #{contract["handoff_target"].empty? ? "none" : contract["handoff_target"].join(", ")}"
+        puts ""
+        puts "forbidden_actions:"
+        contract["forbidden_actions"].each { |action| puts "  - #{action}" }
+        puts ""
+        puts "recommended_checks:"
+        contract["recommended_checks"].each { |check| puts "  - #{check}" }
+      ' "$target" "$role" "$task_file" "$task_id" "$catalog" "$json"
       ;;
     -h|--help)
       usage
@@ -4089,6 +4438,10 @@ cmd_session_guide() {
   info "  aiops role prompt completion --target \"$target\" --task TASK_ID"
   info "  aiops role prompt ops --target \"$target\""
   info ""
+  info "Role Session 실행 계약 확인:"
+  info "  aiops project context --role execution --target \"$target\" --task TASK_ID"
+  info "  aiops project context --role lead --target \"$target\""
+  info ""
   info "Codex / Claude 지정 예시:"
   info "  aiops role prompt execution --adapter codex --task TASK_ID"
   info "  aiops role prompt verification --adapter claude --task TASK_ID"
@@ -4211,6 +4564,7 @@ cmd_role() {
         info "- locked_by: $locked_by"
         info ""
         info "작업 시작 전 확인:"
+        info "- aiops project context --role \"$role\" --target \"$target\" --task $task_id"
         info "- aiops status-ref --target \"$target\""
         info "- aiops sync-status --target \"$target\""
         info "- aiops task status $task_id --target \"$target\""
@@ -4247,6 +4601,12 @@ cmd_role() {
             info "- 승인된 실행 Task는 Execution Role로 인계한다."
             ;;
         esac
+        info ""
+      else
+        info "작업 시작 전 확인:"
+        info "- aiops project context --role \"$role\" --target \"$target\""
+        info "- aiops project inspect --target \"$target\""
+        info "- aiops validate project --target \"$target\" --strict"
         info ""
       fi
 
