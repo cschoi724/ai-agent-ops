@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+## 0.10.0 - 2026-08-05
+
 ### Added
 
 - `aiops project inspect`, `aiops project inspect --json` 명령 추가
