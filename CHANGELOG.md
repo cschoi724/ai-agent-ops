@@ -21,6 +21,7 @@
 - `aiops validate workflow-catalog` 명령과 `task transition` checkpoint 출력 추가
 - `aiops project context --role ROLE [--task TASK_ID] [--json]` Agent Context Contract 출력 추가
 - `aiops project health [--json]` 운영 준비도 요약 추가
+- 자연어 요청을 Agent가 읽기 전용 CLI로 해석하는 기준 문서 `docs/agent_intent.md` 추가
 
 ## 0.9.0 - 2026-07-31
 

@@ -136,6 +136,25 @@ aiops role prompt verification --task TASK_ID
 
 ## 7. Useful Commands
 
+이 명령들은 사용자가 모두 외우기 위한 목록이 아니다. 운영 중에는 Agent에게 자연어로 요청하고, Agent가 필요한 읽기 전용 명령을 선택해 실행하는 흐름을 권장한다.
+
+```text
+AI Ops 상태 점검해줘.
+다음에 뭘 해야 해?
+이 Task 시작해도 돼?
+worktree 상태가 이상한 것 같아.
+```
+
+Agent가 우선 참고하는 상태 조회 명령:
+
+```bash
+aiops project health
+aiops project inspect
+aiops project context --role ROLE --task TASK_ID
+```
+
+문제가 있거나 업데이트가 필요할 때:
+
 ```bash
 aiops validate --strict
 aiops migrate --plan

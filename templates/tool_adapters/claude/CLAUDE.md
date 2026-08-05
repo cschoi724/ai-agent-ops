@@ -104,6 +104,8 @@ Agent Role은 사용자가 세션에 부여한다. PM/Development/QA/AI Ops는 �
 
 어떤 Role을 열지 불명확하면 `aiops session-guide`를 먼저 안내한다. 새 세션 첫 문구가 필요하면 `aiops role prompt ROLE`을 사용한다.
 
+사용자가 “AI Ops 상태 점검”, “다음 할 일”, “이 Task 시작 가능 여부”, “worktree 상태 이상”처럼 자연어로 요청하면 `.ai/docs/agent_intent.md` 기준을 따른다. 자연어를 CLI 명령에 1:1로 강제 매핑하지 말고, 필요한 최소 읽기 전용 명령부터 실행한 뒤 사람이 이해할 수 있는 판단과 다음 조치로 요약한다.
+
 프로젝트 디렉토리 구조는 고정하지 않는다. Agent는 `.ai_project/tasks/`에서 현재 세션 Role이 `workflow`와 `status`상 처리 가능한 Task를 찾고, Task의 `target_agent` 또는 프로젝트별 동등 필드가 현재 Role과 맞는지 확인한다.
 
 한 세션 안에서 보조 작업자나 subagent를 사용할 수 있어도, 이는 독립 Role Session을 대체하지 않는다. 구현, 검증, 완료 판단처럼 책임 분리가 필요한 작업은 별도 Role Session으로 넘긴다.
@@ -117,6 +119,15 @@ Agent Role은 사용자가 세션에 부여한다. PM/Development/QA/AI Ops는 �
 ## 5. 프로젝트 상태 확인
 
 프로젝트가 초기화되어 있으면 아래 문서를 확인한다.
+
+우선 읽기 전용 CLI로 요약 상태를 확인한다.
+
+1. `aiops project health`
+2. 필요하면 `aiops project inspect`
+3. 특정 Role 또는 Task 작업이면 `aiops project context --role ROLE --task TASK_ID`
+4. 문제나 불일치가 있으면 `aiops validate project --strict`
+
+세부 문서 확인이 필요하면 아래를 읽는다.
 
 1. `.ai_project/README.md`
 2. `.ai_project/agent_registry.md`

@@ -5769,6 +5769,7 @@ cmd_release_check() {
     "$core/.github/workflows/ci.yml" \
     "$core/docs/installation.md" \
     "$core/docs/distribution.md" \
+    "$core/docs/agent_intent.md" \
     "$core/docs/project_state.md" \
     "$core/docs/shared_status.md" \
     "$core/scripts/test.sh" \

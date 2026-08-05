@@ -48,6 +48,16 @@ AI Ops bootstrap 시작해줘.
 
 처음 사용한다면 전체 절차는 [QUICKSTART.md](QUICKSTART.md)를 따라가면 된다.
 
+운영 중에는 사용자가 모든 CLI 명령을 외울 필요가 없다. 보통은 Agent에게 자연어로 요청한다.
+
+```text
+AI Ops 상태 점검해줘.
+다음에 뭘 해야 해?
+이 Task를 개발 에이전트에게 넘길 준비됐어?
+```
+
+Agent는 필요한 읽기 전용 CLI를 선택해 실행하고, 결과를 사람이 이해하기 쉬운 판단과 다음 조치로 요약한다. 자세한 기준은 [docs/agent_intent.md](docs/agent_intent.md)를 확인한다.
+
 ## What Gets Added
 
 ```text
@@ -105,6 +115,7 @@ YourProject/
 - [QUICKSTART.md](QUICKSTART.md): 처음 실행 절차
 - [docs/installation.md](docs/installation.md): 설치 방식
 - [docs/distribution.md](docs/distribution.md): 배포와 Homebrew 기준
+- [docs/agent_intent.md](docs/agent_intent.md): 자연어 요청을 Agent가 처리하는 기준
 - [docs/project_state.md](docs/project_state.md): 프로젝트 상태 조회와 정규화 기준
 - [docs/shared_status.md](docs/shared_status.md): 다중 Agent/worktree 상태 동기화
 - [bootstrap/bootstrap_runbook.md](bootstrap/bootstrap_runbook.md): bootstrap 실행 흐름
