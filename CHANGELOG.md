@@ -10,7 +10,10 @@
 
 ## Unreleased
 
-- 예정된 변경사항 없음
+### Added
+
+- `aiops project inspect`, `aiops project inspect --json` 명령 추가
+- 프로젝트 상태 조회와 정규화 기준 문서 `docs/project_state.md` 추가
 
 ## 0.9.0 - 2026-07-31
 

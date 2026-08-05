@@ -9,6 +9,7 @@ Usage:
   aiops seed [--adapter codex|claude|both] [--mode link|copy] [--target DIR] [--core DIR] [--force]
   aiops doctor [--target DIR] [--strict]
   aiops migrate [--target DIR] [--plan|--apply]
+  aiops project inspect [--target DIR] [--json]
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
   aiops role prompt ROLE [--target DIR] [--task TASK_ID] [--adapter codex|claude|generic] [--agent NAME]
@@ -48,6 +49,8 @@ Examples:
   aiops seed --adapter both --mode copy
   aiops doctor
   aiops migrate --plan
+  aiops project inspect
+  aiops project inspect --json
   aiops validate --strict
   aiops validate project --target /path/to/project --strict
   aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
@@ -2153,6 +2156,327 @@ cmd_doctor() {
 
   info "warnings: $warnings"
   [ "$failed" -eq 0 ] || exit 1
+}
+
+cmd_project() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "project requires an action: inspect"
+  shift
+
+  case "$action" in
+    inspect)
+      target="$(pwd)"
+      json="no"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --json)
+            json="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown project inspect option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      target="$(abs_path "$target")"
+      if command -v ruby >/dev/null 2>&1; then
+        ruby -ryaml -rjson -rdate -rtime -rfind -ropen3 -e '
+          target = ARGV[0]
+          json = ARGV[1] == "yes"
+
+          def front_matter(path)
+            return {} unless File.file?(path)
+            text = File.read(path)
+            return {} unless text.start_with?("---\n")
+            lines = text.lines
+            closing = nil
+            lines[1..].each_with_index do |line, idx|
+              if line.strip == "---"
+                closing = idx + 1
+                break
+              end
+            end
+            return {} unless closing
+            YAML.safe_load(lines[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+          rescue Psych::SyntaxError
+            {}
+          end
+
+          def legacy_field(path, key)
+            return nil unless File.file?(path)
+            File.foreach(path) do |line|
+              if line =~ /^[[:space:]]*#{Regexp.escape(key)}:[[:space:]]*(.*)$/
+                value = Regexp.last_match(1).strip
+                return nil if value.empty?
+                return value.gsub(/\A`|`\z/, "")
+              end
+            end
+            nil
+          end
+
+          def table_value(path, key)
+            return nil unless File.file?(path)
+            File.foreach(path) do |line|
+              next unless line.include?("|")
+              cells = line.split("|").map { |cell| cell.strip.gsub(/\A`|`\z/, "") }
+              next unless cells.length >= 4
+              return cells[2] if cells[1] == key && !cells[2].empty?
+            end
+            nil
+          end
+
+          def value_from(data, path, key)
+            value = data[key]
+            if value.nil? || value == ""
+              value = legacy_field(path, key) || table_value(path, key)
+            end
+            return nil if value.nil?
+            return nil if value.to_s.empty?
+            return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value.to_s)
+            value
+          end
+
+          def normalize(value)
+            case value
+            when Hash
+              value.each_with_object({}) { |(key, item), out| out[key.to_s] = normalize(item) }
+            when Array
+              value.map { |item| normalize(item) }
+            when Date, Time
+              value.to_s
+            else
+              value
+            end
+          end
+
+          def git(target, *args)
+            stdout, _stderr, status = Open3.capture3("git", "-C", target, *args)
+            return nil unless status.success?
+            stdout.strip
+          end
+
+          def files_under(path)
+            return [] unless Dir.exist?(path)
+            files = []
+            Find.find(path) do |entry|
+              files << entry if File.file?(entry) && File.basename(entry).end_with?(".md")
+            end
+            files.sort
+          end
+
+          def core_source(ai_path)
+            if File.symlink?(ai_path)
+              link = File.readlink(ai_path)
+              if link.include?("homebrew") || link.include?("/Cellar/") || link.include?("/opt/ai-agent-ops")
+                "homebrew"
+              else
+                "symlink"
+              end
+            elsif Dir.exist?(ai_path)
+              "project_local_copy"
+            else
+              "missing"
+            end
+          end
+
+          def runtime_status_ref(path)
+            data = {}
+            return data unless File.file?(path)
+            File.foreach(path) do |line|
+              key, value = line.split(":", 2)
+              next unless key && value
+              data[key.strip] = value.strip
+            end
+            data
+          end
+
+          project_dir = File.join(target, ".ai_project")
+          ai_path = File.join(target, ".ai")
+          operating_path = File.join(project_dir, "operating_model.md")
+          registry_path = File.join(project_dir, "agent_registry.md")
+          operating = front_matter(operating_path)
+          registry = front_matter(registry_path)
+
+          core = {
+            "present" => File.exist?(ai_path),
+            "source" => core_source(ai_path),
+            "version" => File.file?(File.join(ai_path, "VERSION")) ? File.read(File.join(ai_path, "VERSION")).strip : "unknown",
+            "adapters" => {
+              "codex" => File.file?(File.join(target, "AGENTS.md")),
+              "claude" => File.file?(File.join(target, "CLAUDE.md"))
+            }
+          }
+
+          status_ref = value_from(operating, operating_path, "canonical_status_ref")
+          git_inside = git(target, "rev-parse", "--is-inside-work-tree") == "true"
+          git_branch = git_inside ? git(target, "rev-parse", "--abbrev-ref", "HEAD") : nil
+          git_head = git_inside ? git(target, "rev-parse", "--short", "HEAD") : nil
+          status_ref_sha = git_inside && status_ref ? git(target, "rev-parse", "--verify", "#{status_ref}^{commit}") : nil
+          runtime_ref = runtime_status_ref(File.join(project_dir, ".runtime", "status_ref"))
+          runtime_sha = runtime_ref["status_ref_sha"]
+          status_ref_state =
+            if !status_ref
+              "unresolved"
+            elsif !status_ref_sha
+              "ref_not_found_locally"
+            elsif runtime_sha.nil? || runtime_sha.empty?
+              "not_recorded"
+            elsif runtime_sha == status_ref_sha
+              "recorded_current"
+            else
+              "recorded_stale"
+            end
+
+          tasks = files_under(File.join(project_dir, "tasks")).map do |path|
+            data = front_matter(path)
+            relative = path.sub(%r{\A#{Regexp.escape(target)}/?}, "")
+            queue = relative[%r{\.ai_project/tasks/([^/]+)/}, 1] || "unknown"
+            {
+              "id" => data["id"] || File.basename(path, ".md"),
+              "title" => data["title"],
+              "status" => data["status"] || legacy_field(path, "status"),
+              "workflow" => data["workflow"] || legacy_field(path, "workflow"),
+              "target_role" => data["target_role"] || legacy_field(path, "target_role"),
+              "target_agent" => data["target_agent"] || legacy_field(path, "target_agent"),
+              "queue" => queue,
+              "path" => relative
+            }
+          end
+
+          task_counts_by_queue = Hash.new(0)
+          task_counts_by_status = Hash.new(0)
+          tasks.each do |task|
+            task_counts_by_queue[task["queue"] || "unknown"] += 1
+            task_counts_by_status[task["status"] || "unknown"] += 1
+          end
+
+          agents = registry["agents"].is_a?(Array) ? registry["agents"] : []
+          active_roles = operating["active_roles"]
+          unless active_roles.is_a?(Array)
+            active_roles = agents.flat_map { |agent| agent.is_a?(Hash) && agent["status"] == "enabled" ? Array(agent["roles"]) : [] }.uniq
+          end
+
+          project = {
+            "present" => Dir.exist?(project_dir),
+            "name" => value_from(operating, operating_path, "project") || File.basename(target),
+            "bootstrap_mode" => value_from(operating, operating_path, "bootstrap_mode") || "unknown",
+            "core_version" => value_from(operating, operating_path, "core_version") || "unknown",
+            "start_context" => value_from(operating, operating_path, "start_context") || "unknown",
+            "readiness_level" => value_from(operating, operating_path, "readiness_level") || "unknown",
+            "operating_mode" => value_from(operating, operating_path, "operating_mode") || "unknown",
+            "team_pattern" => value_from(operating, operating_path, "team_pattern") || "unknown",
+            "workflow_policy" => value_from(operating, operating_path, "workflow_policy") || "unknown",
+            "ownership_model" => value_from(operating, operating_path, "ownership_model") || "unknown",
+            "coordination" => value_from(operating, operating_path, "coordination") || "unknown",
+            "board_model" => value_from(operating, operating_path, "board_model") || "unknown",
+            "knowledge_mode" => value_from(operating, operating_path, "knowledge_mode") || "unknown"
+          }
+
+          state = normalize({
+            "schema" => "aiops.project_inspect.v1",
+            "target" => target,
+            "core" => core,
+            "project" => project,
+            "git" => {
+              "inside_worktree" => git_inside,
+              "branch" => git_branch,
+              "head" => git_head,
+              "canonical_status_ref" => status_ref,
+              "canonical_status_sha" => status_ref_sha,
+              "recorded_status_ref" => runtime_ref["status_ref"],
+              "recorded_status_sha" => runtime_sha,
+              "recorded_checked_at" => runtime_ref["checked_at"],
+              "status_ref_state" => status_ref_state
+            },
+            "agents" => {
+              "count" => agents.length,
+              "active_roles" => active_roles || []
+            },
+            "tasks" => {
+              "total" => tasks.length,
+              "by_queue" => task_counts_by_queue.sort.to_h,
+              "by_status" => task_counts_by_status.sort.to_h,
+              "items" => tasks
+            },
+            "next" => begin
+              notes = []
+              notes << "run aiops seed before bootstrap" unless core["present"]
+              notes << "run AI Ops bootstrap before task work" unless project["present"]
+              notes << "set canonical_status_ref for multi-worktree projects" if project["present"] && !status_ref
+              notes << "run aiops sync-status to record latest canonical SHA" if status_ref && status_ref_state != "recorded_current"
+              notes
+            end
+          })
+
+          if json
+            puts JSON.pretty_generate(state)
+            exit 0
+          end
+
+          puts "AI Ops project inspect"
+          puts "target: #{state["target"]}"
+          puts ""
+          puts "core:"
+          puts "  present: #{state["core"]["present"]}"
+          puts "  source: #{state["core"]["source"]}"
+          puts "  version: #{state["core"]["version"]}"
+          puts "  adapters: codex=#{state["core"]["adapters"]["codex"]}, claude=#{state["core"]["adapters"]["claude"]}"
+          puts ""
+          puts "project:"
+          puts "  present: #{state["project"]["present"]}"
+          puts "  name: #{state["project"]["name"]}"
+          puts "  bootstrap_mode: #{state["project"]["bootstrap_mode"]}"
+          puts "  readiness_level: #{state["project"]["readiness_level"]}"
+          puts "  operating_mode: #{state["project"]["operating_mode"]}"
+          puts "  team_pattern: #{state["project"]["team_pattern"]}"
+          puts "  workflow_policy: #{state["project"]["workflow_policy"]}"
+          puts "  knowledge_mode: #{state["project"]["knowledge_mode"]}"
+          puts ""
+          puts "git:"
+          puts "  inside_worktree: #{state["git"]["inside_worktree"]}"
+          puts "  branch: #{state["git"]["branch"] || "unknown"}"
+          puts "  head: #{state["git"]["head"] || "unknown"}"
+          puts "  canonical_status_ref: #{state["git"]["canonical_status_ref"] || "unresolved"}"
+          puts "  canonical_status_sha: #{state["git"]["canonical_status_sha"] || "unresolved"}"
+          puts "  recorded_status_sha: #{state["git"]["recorded_status_sha"] || "unrecorded"}"
+          puts "  status_ref_state: #{state["git"]["status_ref_state"]}"
+          puts ""
+          puts "agents:"
+          puts "  count: #{state["agents"]["count"]}"
+          puts "  active_roles: #{Array(state["agents"]["active_roles"]).join(", ")}"
+          puts ""
+          puts "tasks:"
+          puts "  total: #{state["tasks"]["total"]}"
+          puts "  by_queue: #{state["tasks"]["by_queue"].map { |key, value| "#{key}=#{value}" }.join(", ")}"
+          puts "  by_status: #{state["tasks"]["by_status"].map { |key, value| "#{key}=#{value}" }.join(", ")}"
+          unless state["next"].empty?
+            puts ""
+            puts "next:"
+            state["next"].each { |note| puts "  - #{note}" }
+          end
+        ' "$target" "$json"
+      else
+        die "ruby is required for project inspect"
+      fi
+      ;;
+    -h|--help)
+      usage
+      ;;
+    *)
+      die "unknown project action: $action"
+      ;;
+  esac
 }
 
 cmd_validate() {
@@ -4290,6 +4614,7 @@ main() {
     seed) cmd_seed "$@" ;;
     doctor) cmd_doctor "$@" ;;
     migrate) cmd_migrate "$@" ;;
+    project) cmd_project "$@" ;;
     bootstrap-guide) cmd_bootstrap_guide "$@" ;;
     session-guide) cmd_session_guide "$@" ;;
     role) cmd_role "$@" ;;

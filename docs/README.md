@@ -6,4 +6,5 @@
 |---|---|
 | `installation.md` | 로컬 CLI와 향후 Homebrew 설치 방향 |
 | `distribution.md` | 전역 명령 등록, release, Homebrew Formula 준비 기준 |
+| `project_state.md` | 프로젝트 상태 조회와 정규화 기준 |
 | `shared_status.md` | 다중 Agent/worktree 상태 동기화 사용법 |
