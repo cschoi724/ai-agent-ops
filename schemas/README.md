@@ -55,6 +55,7 @@ CLI는 front matter를 읽어 schema로 검증하고, 본문은 사람이 읽는
 | `runtime_export.schema.json` | `aiops export runtime` JSON | 외부 runtime adapter가 읽을 Task/Role/Handoff snapshot |
 | `bootstrap_options.schema.json` | `runtime/bootstrap_options.json` | Bootstrap 선택 후보 catalog |
 | `project_snapshot.schema.json` | `aiops project snapshot --json` JSON | Agent가 먼저 읽는 프로젝트 상태 계약과 통제 신호 |
+| `policy_rules.schema.json` | `runtime/policy_rules.json` | 운영 판단 규칙 catalog |
 
 ## 단계별 적용
 
@@ -69,6 +70,8 @@ CLI는 front matter를 읽어 schema로 검증하고, 본문은 사람이 읽는
 10단계 이후 다중 worktree 운영을 위해 `canonical_status_ref`, `status_ref`, `status_ref_sha`, `worktree_path`, `base_ref` 계열 필드를 optional로 기록한다. 기존 프로젝트 migration 충돌을 줄이기 위해 첫 단계에서는 required로 강제하지 않는다.
 
 Workflow catalog 단계 이후 `runtime/workflows.json`은 상태별 checkpoint와 canonical publish 정책을 제공한다. Markdown workflow 문서는 설명 계층이고, CLI는 catalog를 읽어 상태 전이 출력과 검증을 보강한다.
+
+Policy rules 단계 이후 `runtime/policy_rules.json`은 health, snapshot, validate에서 사용하는 운영 판단 규칙을 데이터화하기 위한 catalog 역할을 한다. 첫 단계에서는 schema와 validator로 구조를 고정하고, 실제 판정 로직 연결은 이후 단계에서 점진적으로 진행한다.
 
 ## 호환성 원칙
 

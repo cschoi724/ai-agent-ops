@@ -19,6 +19,7 @@ Usage:
   aiops validate [project] [--target DIR] [--strict]
   aiops validate task FILE [--strict]
   aiops validate handoff FILE [--strict]
+  aiops validate policy-rules [--core DIR]
   aiops validate workflow-catalog [--target DIR|--core DIR]
   aiops validate project-snapshot FILE
   aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
@@ -63,6 +64,7 @@ Examples:
   aiops validate project --target /path/to/project --strict
   aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
   aiops validate handoff .ai_project/handoffs/T-YYYYMMDD-001_execution_to_verification.md --strict
+  aiops validate policy-rules
   aiops validate workflow-catalog
   aiops validate project-snapshot /tmp/project_snapshot.json
   aiops task create --title "로그인 화면 구현" --workflow feature --role "Lead Role"
@@ -4388,6 +4390,125 @@ cmd_validate() {
       validate_front_matter handoff "$file" "$strict"
       info "ok: handoff metadata"
       ;;
+    policy-rules)
+      core=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --core)
+            shift
+            [ "$#" -gt 0 ] || die "--core requires a value"
+            core="$1"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown validate policy-rules option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      if [ -n "$core" ]; then
+        core="$(abs_path "$core")"
+      else
+        core="$(default_core_dir)"
+      fi
+      rules_path="$core/runtime/policy_rules.json"
+      schema_path="$core/schemas/policy_rules.schema.json"
+      [ -f "$rules_path" ] || die "policy rules catalog not found: $rules_path"
+      [ -f "$schema_path" ] || die "policy rules schema not found: $schema_path"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for policy rules validation"
+
+      info "AI Ops policy rules validate"
+      info "catalog: $rules_path"
+      ruby -rjson -e '
+        path = ARGV[0]
+        schema_path = ARGV[1]
+        catalog = JSON.parse(File.read(path))
+        schema = JSON.parse(File.read(schema_path))
+
+        abort("schema_error: catalog must be an object") unless catalog.is_a?(Hash)
+        abort("schema_error: schema file must define aiops.policy_rules.v1") unless schema.dig("properties", "schema", "const") == "aiops.policy_rules.v1"
+
+        id_pattern = /\A[a-z][a-z0-9_\/-]*\z/
+        allowed_top_level = %w[schema version generated_from strict_levels rules]
+        extra_top_level = catalog.keys - allowed_top_level
+        abort("schema_error: unknown top-level keys #{extra_top_level.join(", ")}") unless extra_top_level.empty?
+        abort("schema_error: schema must be aiops.policy_rules.v1") unless catalog["schema"] == "aiops.policy_rules.v1"
+        abort("schema_error: version must be a non-empty string") unless catalog["version"].is_a?(String) && !catalog["version"].empty?
+
+        if catalog.key?("generated_from")
+          generated_from = catalog["generated_from"]
+          abort("schema_error: generated_from must be an array") unless generated_from.is_a?(Array)
+          abort("schema_error: generated_from must contain strings") unless generated_from.all? { |item| item.is_a?(String) && !item.empty? }
+          abort("schema_error: generated_from must be unique") unless generated_from.uniq.length == generated_from.length
+        end
+
+        levels = catalog["strict_levels"]
+        abort("schema_error: strict_levels must be a non-empty array") unless levels.is_a?(Array) && !levels.empty?
+        level_ids = []
+        levels.each do |level|
+          abort("schema_error: strict level must be an object") unless level.is_a?(Hash)
+          allowed_level_keys = %w[id label description]
+          extra_level_keys = level.keys - allowed_level_keys
+          abort("schema_error: strict level unknown keys #{extra_level_keys.join(", ")}") unless extra_level_keys.empty?
+          id = level["id"]
+          abort("schema_error: strict level id must be a valid identifier") unless id.is_a?(String) && id.match?(id_pattern)
+          abort("schema_error: strict level label missing #{id}") unless level["label"].is_a?(String) && !level["label"].empty?
+          abort("schema_error: strict level description missing #{id}") unless level["description"].is_a?(String) && !level["description"].empty?
+          level_ids << id
+        end
+        abort("schema_error: strict level ids must be unique") unless level_ids.uniq.length == level_ids.length
+
+        rules = catalog["rules"]
+        abort("schema_error: rules must be a non-empty array") unless rules.is_a?(Array) && !rules.empty?
+        rule_ids = []
+        allowed_severity = %w[info warn blocker]
+        allowed_source = %w[project_snapshot project_health project_validate]
+        rules.each do |rule|
+          abort("schema_error: rule must be an object") unless rule.is_a?(Hash)
+          allowed_rule_keys = %w[id description severity applies_to source when message]
+          extra_rule_keys = rule.keys - allowed_rule_keys
+          abort("schema_error: rule unknown keys #{extra_rule_keys.join(", ")}") unless extra_rule_keys.empty?
+          id = rule["id"]
+          abort("schema_error: rule id must be a valid identifier") unless id.is_a?(String) && id.match?(id_pattern)
+          abort("schema_error: rule description missing #{id}") unless rule["description"].is_a?(String) && !rule["description"].empty?
+          abort("schema_error: rule severity invalid #{id}") unless rule["severity"].is_a?(String) && allowed_severity.include?(rule["severity"])
+          abort("schema_error: rule source invalid #{id}") unless rule["source"].is_a?(String) && allowed_source.include?(rule["source"])
+          abort("schema_error: rule message missing #{id}") unless rule["message"].is_a?(String) && !rule["message"].empty?
+
+          applies_to = rule["applies_to"]
+          abort("schema_error: rule applies_to missing #{id}") unless applies_to.is_a?(Array) && !applies_to.empty?
+          abort("schema_error: rule applies_to must be unique #{id}") unless applies_to.uniq.length == applies_to.length
+          applies_to.each do |level|
+            abort("schema_error: rule applies_to unknown level #{id}: #{level}") unless level.is_a?(String) && level_ids.include?(level)
+          end
+
+          condition = rule["when"]
+          abort("schema_error: rule when must be a non-empty object #{id}") unless condition.is_a?(Hash) && !condition.empty?
+          condition.each do |key, value|
+            abort("schema_error: rule when key invalid #{id}: #{key}") unless key.is_a?(String) && key.match?(/\A[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*\z/)
+            valid_value =
+              value.nil? ||
+              value == true ||
+              value == false ||
+              (value.is_a?(String) && !value.empty?) ||
+              (value.is_a?(Array) && !value.empty? && value.all? { |item| item.is_a?(String) && !item.empty? } && value.uniq.length == value.length)
+            abort("schema_error: rule when value invalid #{id}: #{key}") unless valid_value
+          end
+
+          rule_ids << id
+        end
+        abort("schema_error: rule ids must be unique") unless rule_ids.uniq.length == rule_ids.length
+
+        puts "ok: schema"
+        puts "ok: levels #{level_ids.join(", ")}"
+        puts "ok: rules #{rules.length}"
+      ' "$rules_path" "$schema_path"
+      info "ok: policy rules"
+      ;;
     workflow-catalog)
       target="$(pwd)"
       core=""
@@ -6570,6 +6691,7 @@ cmd_release_check() {
     "$core/schemas/bootstrap_options.schema.json" \
     "$core/schemas/runtime_export.schema.json" \
     "$core/schemas/project_snapshot.schema.json" \
+    "$core/schemas/policy_rules.schema.json" \
     "$core/adapters/README.md" \
     "$core/adapters/langgraph/README.md" \
     "$core/adapters/openai_agents/README.md" \
@@ -6585,6 +6707,7 @@ cmd_release_check() {
     "$core/policies/versioning_policy.md" \
     "$core/runtime/workflow.md" \
     "$core/runtime/workflows.json" \
+    "$core/runtime/policy_rules.json" \
     "$core/runtime/task_queue.md" \
     "$core/runtime/bootstrap_options.json" \
     "$core/templates/ci/github-actions/aiops.yml" \
@@ -6625,6 +6748,13 @@ cmd_release_check() {
     info "ok: workflow catalog validation"
   else
     info "warn: workflow catalog validation failed"
+    warnings=$((warnings + 1))
+  fi
+
+  if "$core/bin/aiops" validate policy-rules --core "$core" >/dev/null 2>&1; then
+    info "ok: policy rules validation"
+  else
+    info "warn: policy rules validation failed"
     warnings=$((warnings + 1))
   fi
 

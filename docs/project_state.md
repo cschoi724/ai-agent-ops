@@ -220,3 +220,15 @@ Task 상태 전이 후 `aiops task transition`은 catalog를 읽어 아래 정�
 - `required`: 다른 Agent가 의존하기 전 canonical 반영 필요
 
 브랜치 이름은 고정하지 않는다. `origin/develop`이 아니라 프로젝트별 `canonical_status_ref`가 기준이다.
+
+## Policy Rules
+
+`runtime/policy_rules.json`은 snapshot, health, validate가 사용하는 운영 판단 규칙을 데이터화하기 위한 catalog다.
+
+```sh
+aiops validate policy-rules
+```
+
+현재 단계에서는 catalog 구조와 schema 검증을 먼저 고정한다. 즉, `core_missing`, `project_config_missing`, `required_project_file_missing`, `canonical_status_stale` 같은 규칙을 기계가 읽을 수 있는 형태로 선언하지만, 기존 snapshot/health 계산을 한 번에 모두 교체하지는 않는다.
+
+이후 단계에서는 같은 project snapshot을 입력으로 받아 policy rule 결과를 `checks`와 `control` 판단에 점진적으로 연결한다.

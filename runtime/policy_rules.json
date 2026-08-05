@@ -1,0 +1,118 @@
+{
+  "schema": "aiops.policy_rules.v1",
+  "version": "1",
+  "generated_from": [
+    "docs/project_state.md",
+    "policies/shared_status_policy.md",
+    "schemas/project_snapshot.schema.json"
+  ],
+  "strict_levels": [
+    {
+      "id": "basic",
+      "label": "Basic",
+      "description": "Small or solo projects. Keep blockers focused on missing core setup and invalid contracts."
+    },
+    {
+      "id": "team",
+      "label": "Team",
+      "description": "Multi-agent or branch/worktree projects. Require shared status discipline and stronger task metadata."
+    },
+    {
+      "id": "regulated",
+      "label": "Regulated",
+      "description": "Strict audit-oriented operation. Treat missing evidence, approval, and shared status as release blockers."
+    }
+  ],
+  "rules": [
+    {
+      "id": "core_missing",
+      "description": ".ai core must be connected before AI Ops can operate.",
+      "severity": "blocker",
+      "applies_to": ["basic", "team", "regulated"],
+      "source": "project_snapshot",
+      "when": {
+        "core.present": false
+      },
+      "message": ".ai core missing; run aiops seed first."
+    },
+    {
+      "id": "project_config_missing",
+      "description": ".ai_project must exist before project task work can start.",
+      "severity": "blocker",
+      "applies_to": ["basic", "team", "regulated"],
+      "source": "project_snapshot",
+      "when": {
+        "project.present": false
+      },
+      "message": ".ai_project missing; run bootstrap before task work."
+    },
+    {
+      "id": "required_project_file_missing",
+      "description": "Bootstrap output must include the required project operating files.",
+      "severity": "blocker",
+      "applies_to": ["basic", "team", "regulated"],
+      "source": "project_snapshot",
+      "when": {
+        "checks.required_file_missing": "present"
+      },
+      "message": "Required .ai_project files are missing."
+    },
+    {
+      "id": "required_project_dir_missing",
+      "description": "Bootstrap output must include the required task queue directories.",
+      "severity": "blocker",
+      "applies_to": ["basic", "team", "regulated"],
+      "source": "project_snapshot",
+      "when": {
+        "checks.required_dir_missing": "present"
+      },
+      "message": "Required .ai_project task directories are missing."
+    },
+    {
+      "id": "canonical_status_ref_required_for_team",
+      "description": "Team and worktree operation should define a canonical status ref.",
+      "severity": "warn",
+      "applies_to": ["team", "regulated"],
+      "source": "project_snapshot",
+      "when": {
+        "source_refs.canonical_status_ref": null,
+        "project.team_pattern": ["multi_team", "division_based"],
+        "project.coordination": ["parallel_with_locks", "multi_agent_worktree"]
+      },
+      "message": "Team-based operation should define canonical_status_ref."
+    },
+    {
+      "id": "canonical_status_stale",
+      "description": "Task transitions should not proceed from a stale shared status basis.",
+      "severity": "warn",
+      "applies_to": ["team", "regulated"],
+      "source": "project_snapshot",
+      "when": {
+        "source_refs.status_ref_state": "recorded_stale"
+      },
+      "message": "Recorded canonical status SHA is stale; run aiops sync-status."
+    },
+    {
+      "id": "task_metadata_incomplete",
+      "description": "Registered tasks should include status, workflow, and target role metadata.",
+      "severity": "warn",
+      "applies_to": ["basic", "team", "regulated"],
+      "source": "project_snapshot",
+      "when": {
+        "checks.task_metadata_incomplete": "present"
+      },
+      "message": "Some tasks are missing required operating metadata."
+    },
+    {
+      "id": "core_version_drift",
+      "description": "Project operating model should record the same core version as the connected AI Ops core.",
+      "severity": "warn",
+      "applies_to": ["basic", "team", "regulated"],
+      "source": "project_snapshot",
+      "when": {
+        "checks.core_version_drift": "present"
+      },
+      "message": ".ai_project core_version differs from current core."
+    }
+  ]
+}

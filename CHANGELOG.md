@@ -14,6 +14,8 @@
 
 - `aiops project snapshot --json` 명령과 `schemas/project_snapshot.schema.json` 추가
 - snapshot에 `control`, `checks`, `source_refs`, Agent/user 분리 `next`를 포함해 Agent 통제 신호를 구조화
+- `runtime/policy_rules.json`, `schemas/policy_rules.schema.json`, `aiops validate policy-rules` 추가
+- policy rule catalog 검증 E2E와 release-check 연결 추가
 
 ### Changed
 
