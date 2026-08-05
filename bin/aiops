@@ -5548,6 +5548,27 @@ cmd_action() {
           value.to_s.split(",").map(&:strip).reject(&:empty?)
         end
 
+        def normalize_intended_action(action)
+          normalized = action.to_s.strip.downcase.tr("-", "_")
+          aliases = {
+            "pr" => "create_pr",
+            "pull_request" => "create_pr",
+            "create_pull_request" => "create_pr",
+            "open_pr" => "create_pr",
+            "lock" => "task_lock",
+            "task_lock" => "task_lock",
+            "unlock" => "task_unlock",
+            "task_unlock" => "task_unlock",
+            "handoff" => "create_handoff",
+            "create_handoff" => "create_handoff",
+            "external_config" => "external_configuration_changes",
+            "external_configuration" => "external_configuration_changes",
+            "external_configuration_change" => "external_configuration_changes",
+            "external_configuration_changes" => "external_configuration_changes"
+          }
+          aliases.fetch(normalized, normalized)
+        end
+
         def normalize(value)
           case value
           when Hash
@@ -5600,7 +5621,25 @@ cmd_action() {
 
         project_dir = File.join(target, ".ai_project")
         task = front_matter(task_file)
-        intended_actions = csv(intends_raw)
+        allowed_intended_actions = %w[
+          read_source
+          edit_allowed_paths
+          edit_paths
+          run_tests
+          task_transition
+          task_lock
+          task_unlock
+          create_handoff
+          commit
+          push
+          create_pr
+          merge
+          deploy
+          external_configuration_changes
+        ]
+        intended_actions = csv(intends_raw).map { |action| normalize_intended_action(action) }
+        unknown_actions = intended_actions - allowed_intended_actions
+        abort("error: unknown intended action(s): #{unknown_actions.uniq.join(", ")}") unless unknown_actions.empty?
         requested_paths = csv(paths_raw)
         allowed_paths = list(task["allowed_paths"])
         snapshot = project_snapshot(aiops_path, target)

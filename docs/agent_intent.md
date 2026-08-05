@@ -82,6 +82,8 @@ Action Plan 결과에 `requires_user_approval`이 있으면 승인 전에는 해
 
 `create_pr`, `commit`, `push`, `merge`, `deploy`, `external_configuration_changes`는 사용자 승인 대상이다.
 
+Agent가 `pr`, `pull_request`, `open_pr`처럼 흔한 별칭을 입력하더라도 Action Plan 생성기는 `create_pr`로 정규화한다. 알 수 없는 intended action은 schema-invalid plan을 출력하지 않고 실패해야 한다.
+
 예:
 
 ```text
