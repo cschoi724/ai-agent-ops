@@ -307,4 +307,78 @@ ruby -rjson -e '
 ' "$tmpdir/partial-snapshot.json" "$tmpdir/partial-action-plan.json"
 "$repo_root/bin/aiops" action validate "$tmpdir/partial-action-plan.json" >/dev/null
 
+no_core_project="$tmpdir/no-core"
+mkdir -p \
+  "$no_core_project/.ai_project/tasks/active" \
+  "$no_core_project/.ai_project/tasks/backlog" \
+  "$no_core_project/.ai_project/tasks/archive"
+for file in current_context.md source_of_truth.md task_board.md ops_decisions.md ops_issues.md; do
+  printf '# %s\n' "$file" > "$no_core_project/.ai_project/$file"
+done
+cat > "$no_core_project/.ai_project/operating_model.md" <<'EOF'
+---
+schema: aiops.operating_model.v1
+project: NoCoreActionPlanProject
+operating_mode: solo_light
+workflow_policy: standard_vnext
+knowledge_mode: minimal
+---
+
+# No Core Action Plan Project
+EOF
+
+cat > "$no_core_project/.ai_project/agent_registry.md" <<'EOF'
+---
+schema: aiops.agent_registry.v1
+project: NoCoreActionPlanProject
+agents:
+  - agent: Development Agent
+    status: enabled
+    team: Product Team
+    roles:
+      - Execution Role
+    capabilities:
+      - implementation
+---
+
+# Agent Registry
+EOF
+
+cat > "$no_core_project/.ai_project/tasks/active/T-20260805-304.md" <<'EOF'
+---
+schema: aiops.task.v1
+id: T-20260805-304
+title: No core action plan task
+status: approved
+workflow: feature
+target_role: Execution Role
+target_agent: Development Agent
+allowed_paths:
+  - src/
+source_of_truth:
+  - .ai_project/source_of_truth.md
+---
+
+# No core action plan task
+EOF
+
+"$repo_root/bin/aiops" project snapshot --target "$no_core_project" --json > "$tmpdir/no-core-snapshot.json"
+"$repo_root/bin/aiops" action plan \
+  --target "$no_core_project" \
+  --role execution \
+  --task T-20260805-304 \
+  --json \
+  > "$tmpdir/no-core-action-plan.json"
+
+ruby -rjson -e '
+  snapshot = JSON.parse(File.read(ARGV[0]))
+  plan = JSON.parse(File.read(ARGV[1]))
+  abort("no-core snapshot should be blocked") unless snapshot.dig("health", "overall") == "blocked"
+  abort("no-core snapshot should block task start") unless snapshot.dig("control", "can_start_task") == false
+  abort("no-core action evidence snapshot health mismatch") unless plan.dig("evidence", "snapshot_health") == snapshot.dig("health", "overall")
+  abort("no-core action evidence can_start_task mismatch") unless plan.dig("evidence", "can_start_task") == snapshot.dig("control", "can_start_task")
+  abort("no-core blocker evidence missing") unless plan.dig("evidence", "snapshot_blockers").include?("core_missing")
+' "$tmpdir/no-core-snapshot.json" "$tmpdir/no-core-action-plan.json"
+"$repo_root/bin/aiops" action validate "$tmpdir/no-core-action-plan.json" >/dev/null
+
 printf '%s\n' "ok: action plan"

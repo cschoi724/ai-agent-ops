@@ -5495,14 +5495,16 @@ cmd_action() {
       [ -d "$target/.ai_project" ] || die ".ai_project missing; bootstrap project first"
       task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
       command -v ruby >/dev/null 2>&1 || die "ruby is required for action plan"
+      aiops_path="$(script_dir)/$(basename "$0")"
 
       ruby -ryaml -rjson -rdate -rtime -rfind -ropen3 -e '
-        target = ARGV[0]
-        role = ARGV[1]
-        task_id = ARGV[2]
-        task_file = ARGV[3]
-        intends_raw = ARGV[4]
-        paths_raw = ARGV[5]
+        aiops_path = ARGV[0]
+        target = ARGV[1]
+        role = ARGV[2]
+        task_id = ARGV[3]
+        task_file = ARGV[4]
+        intends_raw = ARGV[5]
+        paths_raw = ARGV[6]
 
         def front_matter(path)
           return {} unless File.file?(path)
@@ -5559,21 +5561,14 @@ cmd_action() {
           end
         end
 
-        def git(target, *args)
-          stdout, _stderr, status = Open3.capture3("git", "-C", target, *args)
-          return nil unless status.success?
-          stdout.strip
-        end
-
-        def runtime_status_ref(path)
-          data = {}
-          return data unless File.file?(path)
-          File.foreach(path) do |line|
-            key, value = line.split(":", 2)
-            next unless key && value
-            data[key.strip] = value.strip
+        def project_snapshot(aiops_path, target)
+          stdout, stderr, status = Open3.capture3(aiops_path, "project", "snapshot", "--target", target, "--json")
+          unless status.success?
+            abort("error: project snapshot failed before action plan\n#{stderr}#{stdout}")
           end
-          data
+          JSON.parse(stdout)
+        rescue JSON::ParserError => error
+          abort("error: project snapshot returned invalid JSON: #{error.message}")
         end
 
         def clean_relative_path(path)
@@ -5604,56 +5599,24 @@ cmd_action() {
         end
 
         project_dir = File.join(target, ".ai_project")
-        operating_path = File.join(project_dir, "operating_model.md")
         task = front_matter(task_file)
-        operating = front_matter(operating_path)
         intended_actions = csv(intends_raw)
         requested_paths = csv(paths_raw)
         allowed_paths = list(task["allowed_paths"])
-        source_refs = runtime_status_ref(File.join(project_dir, ".runtime", "status_ref"))
-        status_ref = operating["canonical_status_ref"] || legacy_field(operating_path, "canonical_status_ref")
-        status_ref = nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(status_ref.to_s)
-        git_inside = git(target, "rev-parse", "--is-inside-work-tree") == "true"
-        status_ref_sha = git_inside && status_ref ? git(target, "rev-parse", "--verify", "#{status_ref}^{commit}") : nil
-        recorded_sha = source_refs["status_ref_sha"]
-        status_ref_state =
-          if !status_ref
-            "unresolved"
-          elsif !status_ref_sha
-            "ref_not_found_locally"
-          elsif recorded_sha.nil? || recorded_sha.empty?
-            "not_recorded"
-          elsif recorded_sha == status_ref_sha
-            "recorded_current"
-          else
-            "recorded_stale"
-          end
-
-        snapshot_blockers = []
-        if !Dir.exist?(project_dir)
-          snapshot_blockers << "project_config_missing"
-        else
-          %w[
-            operating_model.md
-            agent_registry.md
-            current_context.md
-            source_of_truth.md
-            task_board.md
-            ops_decisions.md
-            ops_issues.md
-          ].each do |name|
-            snapshot_blockers << "required_file_missing" unless File.file?(File.join(project_dir, name))
-          end
-          %w[tasks tasks/active tasks/backlog tasks/archive].each do |name|
-            snapshot_blockers << "required_dir_missing" unless Dir.exist?(File.join(project_dir, name))
-          end
-        end
-        if status_ref && status_ref_state == "ref_not_found_locally"
-          snapshot_blockers << "canonical_status_ref_unavailable"
-        end
-        snapshot_health = snapshot_blockers.empty? ? "ok" : "blocked"
-        snapshot_can_start_task = snapshot_blockers.empty?
-        snapshot_can_transition = snapshot_can_start_task && !%w[ref_not_found_locally not_recorded recorded_stale].include?(status_ref_state)
+        snapshot = project_snapshot(aiops_path, target)
+        source_refs = snapshot.fetch("source_refs", {})
+        control = snapshot.fetch("control", {})
+        snapshot_health = snapshot.dig("health", "overall")
+        snapshot_can_start_task = control["can_start_task"] == true
+        snapshot_can_transition = control["can_transition"] == true
+        status_ref_state = source_refs["status_ref_state"]
+        status_ref = source_refs["canonical_status_ref"]
+        status_ref_sha = source_refs["canonical_status_sha"]
+        recorded_sha = source_refs["recorded_status_sha"]
+        snapshot_blockers = snapshot.fetch("checks", [])
+          .select { |check| check.is_a?(Hash) && check["severity"] == "blocker" }
+          .map { |check| check["id"] }
+          .compact
 
         blocked_actions = []
         warnings = []
@@ -5728,12 +5691,13 @@ cmd_action() {
             "status_ref_state" => status_ref_state,
             "canonical_status_ref" => status_ref,
             "canonical_status_sha" => status_ref_sha,
+            "recorded_status_sha" => recorded_sha,
             "snapshot_blockers" => snapshot_blockers
           }
         })
 
         puts JSON.pretty_generate(plan)
-      ' "$target" "$role" "$task_id" "$task_file" "$intends" "$paths"
+      ' "$aiops_path" "$target" "$role" "$task_id" "$task_file" "$intends" "$paths"
       ;;
     validate)
       file=""
