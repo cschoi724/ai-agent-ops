@@ -24,10 +24,48 @@ if "$repo_root/bin/aiops" validate workflow-catalog --core "$invalid_core" >/tmp
   exit 1
 fi
 
-grep -q 'schema_error: version missing' /tmp/aiops-e2e-workflow-catalog-missing-version.out || {
+grep -q 'schema_error: version must be a non-empty string' /tmp/aiops-e2e-workflow-catalog-missing-version.out || {
   printf '%s\n' "workflow catalog missing version error not reported" >&2
   exit 1
 }
+
+for invalid_case in numeric_version unknown_workflow_key unknown_status_key; do
+  case "$invalid_case" in
+    numeric_version)
+      ruby -rjson -e '
+        data = JSON.parse(File.read(ARGV[0]))
+        data["version"] = 1
+        File.write(ARGV[1], JSON.pretty_generate(data))
+      ' "$repo_root/runtime/workflows.json" "$invalid_core/runtime/workflows.json"
+      expected='schema_error: version must be a non-empty string'
+      ;;
+    unknown_workflow_key)
+      ruby -rjson -e '
+        data = JSON.parse(File.read(ARGV[0]))
+        data["workflows"]["feature"]["unknown_key"] = true
+        File.write(ARGV[1], JSON.pretty_generate(data))
+      ' "$repo_root/runtime/workflows.json" "$invalid_core/runtime/workflows.json"
+      expected='schema_error: workflow feature unknown keys unknown_key'
+      ;;
+    unknown_status_key)
+      ruby -rjson -e '
+        data = JSON.parse(File.read(ARGV[0]))
+        data["workflows"]["feature"]["statuses"]["approved"]["unknown_key"] = true
+        File.write(ARGV[1], JSON.pretty_generate(data))
+      ' "$repo_root/runtime/workflows.json" "$invalid_core/runtime/workflows.json"
+      expected='schema_error: feature.approved unknown keys unknown_key'
+      ;;
+  esac
+
+  if "$repo_root/bin/aiops" validate workflow-catalog --core "$invalid_core" >/tmp/aiops-e2e-workflow-catalog-invalid.out 2>&1; then
+    printf '%s\n' "workflow catalog $invalid_case should fail" >&2
+    exit 1
+  fi
+  grep -q "$expected" /tmp/aiops-e2e-workflow-catalog-invalid.out || {
+    printf '%s\n' "workflow catalog $invalid_case error not reported" >&2
+    exit 1
+  }
+done
 
 ruby -rjson -e '
   catalog = JSON.parse(File.read(ARGV[0]))

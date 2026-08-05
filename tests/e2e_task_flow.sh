@@ -64,6 +64,50 @@ grep -q 'invalid transition: scoped -> done by Execution Role' /tmp/aiops-e2e-ta
   exit 1
 }
 
+cat > "$tmpdir/.ai_project/tasks/active/T-20260727-002.md" <<'EOF'
+---
+schema: aiops.task.v1
+id: T-20260727-002
+title: Atomic failed transition
+status: proposed
+type: feature
+priority: medium
+workflow: feature
+target_agent: Development Agent
+target_role: Direction Role
+required_capabilities:
+  - planning
+depends_on: []
+blocks: []
+locked_by:
+lock_session:
+updated_at: 2026-08-05
+---
+
+# Atomic failed transition
+EOF
+
+"$repo_root/bin/aiops" validate task "$tmpdir/.ai_project/tasks/active/T-20260727-002.md" --strict >/tmp/aiops-e2e-task-atomic-before-validate.out
+cp "$tmpdir/.ai_project/tasks/active/T-20260727-002.md" /tmp/aiops-e2e-task-atomic-before.md
+if "$repo_root/bin/aiops" task transition T-20260727-002 \
+  --target "$tmpdir" \
+  --to approved \
+  --role "Direction Role" \
+  --by "Lead Agent" \
+  >/tmp/aiops-e2e-task-atomic-failed-transition.out 2>&1; then
+  printf '%s\n' "invalid metadata transition should fail" >&2
+  exit 1
+fi
+
+grep -q 'transition produced invalid task metadata' /tmp/aiops-e2e-task-atomic-failed-transition.out || {
+  printf '%s\n' "invalid metadata transition error missing" >&2
+  exit 1
+}
+cmp -s /tmp/aiops-e2e-task-atomic-before.md "$tmpdir/.ai_project/tasks/active/T-20260727-002.md" || {
+  printf '%s\n' "failed invalid metadata transition mutated task file" >&2
+  exit 1
+}
+
 "$repo_root/bin/aiops" task transition T-20260727-001 \
   --target "$tmpdir" \
   --to approved \

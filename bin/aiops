@@ -3864,14 +3864,22 @@ cmd_validate() {
       ruby -rjson -e '
         path = ARGV[0]
         catalog = JSON.parse(File.read(path))
+        abort("schema_error: catalog must be an object") unless catalog.is_a?(Hash)
         allowed_top_level = %w[schema version default_workflow generated_from workflows]
         extra_top_level = catalog.keys - allowed_top_level
         abort("schema_error: unknown top-level keys #{extra_top_level.join(", ")}") unless extra_top_level.empty?
         abort("schema_error: schema must be aiops.workflow_catalog.v1") unless catalog["schema"] == "aiops.workflow_catalog.v1"
-        abort("schema_error: version missing") if catalog["version"].to_s.empty?
+        abort("schema_error: version must be a non-empty string") unless catalog["version"].is_a?(String) && !catalog["version"].empty?
+        if catalog.key?("generated_from")
+          generated_from = catalog["generated_from"]
+          abort("schema_error: generated_from must be an array") unless generated_from.is_a?(Array)
+          abort("schema_error: generated_from must contain strings") unless generated_from.all? { |item| item.is_a?(String) && !item.empty? }
+          abort("schema_error: generated_from must be unique") unless generated_from.uniq.length == generated_from.length
+        end
         workflows = catalog["workflows"]
         abort("schema_error: workflows must be an object") unless workflows.is_a?(Hash) && !workflows.empty?
         default_workflow = catalog["default_workflow"]
+        abort("schema_error: default_workflow must be a string") unless default_workflow.is_a?(String) && !default_workflow.empty?
         abort("schema_error: default_workflow missing") unless workflows.key?(default_workflow)
 
         allowed_publish = %w[not_required optional recommended required]
@@ -3907,8 +3915,24 @@ cmd_validate() {
 
         workflows.each do |workflow_id, entry|
           abort("schema_error: workflow #{workflow_id} must be an object") unless entry.is_a?(Hash)
-          abort("schema_error: workflow #{workflow_id} label missing") if entry["label"].to_s.empty?
-          abort("schema_error: workflow #{workflow_id} description missing") if entry["description"].to_s.empty?
+          workflow_keys = %w[label description inherits statuses transitions]
+          extra_workflow_keys = entry.keys - workflow_keys
+          abort("schema_error: workflow #{workflow_id} unknown keys #{extra_workflow_keys.join(", ")}") unless extra_workflow_keys.empty?
+          abort("schema_error: workflow #{workflow_id} label missing") unless entry["label"].is_a?(String) && !entry["label"].empty?
+          abort("schema_error: workflow #{workflow_id} description missing") unless entry["description"].is_a?(String) && !entry["description"].empty?
+          if entry.key?("inherits")
+            abort("schema_error: workflow #{workflow_id} inherits must be string or null") unless entry["inherits"].nil? || entry["inherits"].is_a?(String)
+            abort("schema_error: workflow #{workflow_id} inherits missing workflow #{entry["inherits"]}") if entry["inherits"].is_a?(String) && !workflows.key?(entry["inherits"])
+          else
+            abort("schema_error: workflow #{workflow_id} statuses missing") unless entry["statuses"].is_a?(Hash) && !entry["statuses"].empty?
+            abort("schema_error: workflow #{workflow_id} transitions missing") unless entry["transitions"].is_a?(Array) && !entry["transitions"].empty?
+          end
+          if entry.key?("statuses")
+            abort("schema_error: workflow #{workflow_id} statuses must be an object") unless entry["statuses"].is_a?(Hash)
+          end
+          if entry.key?("transitions")
+            abort("schema_error: workflow #{workflow_id} transitions must be an array") unless entry["transitions"].is_a?(Array)
+          end
           resolved = resolve_workflow(workflows, workflow_id)
           statuses = resolved["statuses"]
           transitions = resolved["transitions"]
@@ -3917,18 +3941,29 @@ cmd_validate() {
 
           statuses.each do |status, meta|
             abort("schema_error: invalid status #{workflow_id}.#{status}") unless allowed_statuses.include?(status)
+            abort("schema_error: #{workflow_id}.#{status} must be an object") unless meta.is_a?(Hash)
+            status_keys = %w[checkpoint canonical_publish meaning]
+            extra_status_keys = meta.keys - status_keys
+            abort("schema_error: #{workflow_id}.#{status} unknown keys #{extra_status_keys.join(", ")}") unless extra_status_keys.empty?
             abort("schema_error: #{workflow_id}.#{status} checkpoint must be boolean") unless meta["checkpoint"] == true || meta["checkpoint"] == false
-            abort("schema_error: #{workflow_id}.#{status} canonical_publish invalid") unless allowed_publish.include?(meta["canonical_publish"])
-            abort("schema_error: #{workflow_id}.#{status} meaning missing") if meta["meaning"].to_s.empty?
+            abort("schema_error: #{workflow_id}.#{status} canonical_publish invalid") unless meta["canonical_publish"].is_a?(String) && allowed_publish.include?(meta["canonical_publish"])
+            abort("schema_error: #{workflow_id}.#{status} meaning missing") unless meta["meaning"].is_a?(String) && !meta["meaning"].empty?
           end
 
           transitions.each do |transition|
+            abort("schema_error: transition must be an object #{workflow_id}") unless transition.is_a?(Hash)
+            transition_keys = %w[from to allowed_roles next_role]
+            extra_transition_keys = transition.keys - transition_keys
+            abort("schema_error: transition unknown keys #{workflow_id}: #{extra_transition_keys.join(", ")}") unless extra_transition_keys.empty?
             from = transition["from"]
             to = transition["to"]
             roles = transition["allowed_roles"]
+            abort("schema_error: transition from missing #{workflow_id}") unless from.is_a?(String) && !from.empty?
+            abort("schema_error: transition to missing #{workflow_id}") unless to.is_a?(String) && !to.empty?
             abort("schema_error: transition from invalid #{workflow_id}: #{from}") unless statuses.key?(from)
             abort("schema_error: transition to invalid #{workflow_id}: #{to}") unless statuses.key?(to)
             abort("schema_error: transition roles missing #{workflow_id}: #{from}->#{to}") unless roles.is_a?(Array) && !roles.empty?
+            abort("schema_error: transition roles must be unique #{workflow_id}: #{from}->#{to}") unless roles.uniq.length == roles.length
             roles.each do |role|
               abort("schema_error: transition role invalid #{workflow_id}: #{role}") unless allowed_roles.include?(role)
             end
@@ -4361,10 +4396,13 @@ EOF
       date_value="$(date +%Y-%m-%d)"
       actor_label="${actor:-$role}"
 
+      transition_tmp="${TMPDIR:-/tmp}/aiops-task-transition-${task_id}-$$.md"
+      cp "$task_file" "$transition_tmp" || die "failed to stage task transition"
+
       case "$to_status" in
         in_progress)
           if [ -n "$status_ref" ]; then
-            task_update_front_matter "$task_file" \
+            task_update_front_matter "$transition_tmp" \
               "status=$to_status" \
               "target_role=$next_role" \
               "updated_at=$date_value" \
@@ -4375,7 +4413,7 @@ EOF
               "base_ref=$status_ref" \
               "base_sha=$status_ref_sha"
           else
-            task_update_front_matter "$task_file" \
+            task_update_front_matter "$transition_tmp" \
               "status=$to_status" \
               "target_role=$next_role" \
               "updated_at=$date_value" \
@@ -4385,7 +4423,7 @@ EOF
           ;;
         *)
           if [ -n "$status_ref" ]; then
-            task_update_front_matter "$task_file" \
+            task_update_front_matter "$transition_tmp" \
               "status=$to_status" \
               "target_role=${next_role:-__AIOPS_NULL__}" \
               "updated_at=$date_value" \
@@ -4399,7 +4437,7 @@ EOF
               "base_ref=$status_ref" \
               "base_sha=$status_ref_sha"
           else
-            task_update_front_matter "$task_file" \
+            task_update_front_matter "$transition_tmp" \
               "status=$to_status" \
               "target_role=${next_role:-__AIOPS_NULL__}" \
               "updated_at=$date_value" \
@@ -4412,8 +4450,12 @@ EOF
           ;;
       esac
 
-      task_append_event "$task_file" "transition: $from_status -> $to_status" "$actor_label" "$reason"
-      validate_front_matter task "$task_file" yes >/dev/null || die "transition produced invalid task metadata"
+      task_append_event "$transition_tmp" "transition: $from_status -> $to_status" "$actor_label" "$reason"
+      if ! validate_front_matter task "$transition_tmp" yes >/dev/null; then
+        rm -f "$transition_tmp"
+        die "transition produced invalid task metadata"
+      fi
+      mv "$transition_tmp" "$task_file" || die "failed to apply task transition"
 
       info "AI Ops task transition"
       info "task_id: $task_id"
