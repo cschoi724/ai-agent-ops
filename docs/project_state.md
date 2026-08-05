@@ -248,7 +248,8 @@ Action plan은 source of truth가 아니다. Task, project context, Git/canonica
 
 - 현재 Role과 Task가 맞는지 확인
 - `allowed_paths` 밖 수정 의도가 있는지 확인
-- `commit`, `push`, `merge`, `deploy`가 사용자 승인 필요 행동으로 표시되는지 확인
+- `task_transition`, `task_lock`, `task_unlock`, `create_handoff` 같은 운영 상태 변경 의도를 구조화
+- `commit`, `push`, `create_pr`, `merge`, `deploy`, `external_configuration_changes`가 사용자 승인 필요 행동으로 표시되는지 확인
 - stale canonical 상태에서 Task 상태 전이 의도가 차단되는지 확인
 
-이 명령은 실제 파일 수정, commit, push, merge, deploy를 수행하지 않는다.
+이 명령은 실제 파일 수정, 상태 전이, lock 변경, handoff 생성, commit, push, PR, merge, deploy, 외부 설정 변경을 수행하지 않는다.

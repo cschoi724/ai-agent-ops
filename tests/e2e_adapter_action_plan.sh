@@ -38,4 +38,11 @@ grep -q 'Action Plan은 사용자가 직접 매번 입력해야 하는 명령이
   exit 1
 }
 
+for action in task_lock task_unlock create_handoff create_pr external_configuration_changes; do
+  grep -q "$action" "$repo_root/docs/agent_intent.md" || {
+    printf '%s\n' "agent intent missing intended action $action" >&2
+    exit 1
+  }
+done
+
 printf '%s\n' "ok: adapter action plan"

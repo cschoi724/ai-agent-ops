@@ -26,7 +26,7 @@ assert_snapshot_contract() {
     %w[can_start_task can_transition can_commit can_push can_merge].each do |key|
       abort("control #{key} not boolean") unless [true, false].include?(control[key])
     end
-    %w[commit push merge].each do |action|
+    %w[commit push create_pr merge deploy external_configuration_changes].each do |action|
       abort("approval missing #{action}") unless control.fetch("requires_user_approval").include?(action)
     end
 

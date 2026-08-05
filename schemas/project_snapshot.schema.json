@@ -179,7 +179,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["commit", "push", "merge", "deploy", "external_configuration_changes"]
+            "enum": ["commit", "push", "create_pr", "merge", "deploy", "external_configuration_changes"]
           },
           "uniqueItems": true
         },

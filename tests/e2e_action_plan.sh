@@ -121,6 +121,24 @@ ruby -rjson -e '
   --target "$project" \
   --role execution \
   --task T-20260805-301 \
+  --intends task_lock,task_unlock,create_handoff,create_pr,external_configuration_changes \
+  --json \
+  > "$tmpdir/extended-actions-plan.json"
+
+"$repo_root/bin/aiops" action validate "$tmpdir/extended-actions-plan.json" >/dev/null
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  expected = %w[task_lock task_unlock create_handoff create_pr external_configuration_changes]
+  missing = expected - data["intended_actions"]
+  abort("extended intended actions missing #{missing.join(",")}") unless missing.empty?
+  abort("create_pr approval missing") unless data["requires_user_approval"].include?("create_pr")
+  abort("external configuration approval missing") unless data["requires_user_approval"].include?("external_configuration_changes")
+' "$tmpdir/extended-actions-plan.json"
+
+"$repo_root/bin/aiops" action plan \
+  --target "$project" \
+  --role execution \
+  --task T-20260805-301 \
   --intends edit_paths \
   --paths docs/plan.md \
   --json \

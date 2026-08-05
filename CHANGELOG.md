@@ -28,6 +28,7 @@
 - `inspect`, `context`, `health`의 핵심 상태 해석을 snapshot 기준과 맞추고 상태 일관성 E2E를 추가
 - `project context`의 작업 전 권장 확인 순서가 snapshot을 먼저 읽도록 조정
 - Codex / Claude adapter와 Role Session prompt가 실제 작업 전 `aiops action plan`으로 의도, blocker, 승인 필요 항목을 확인하도록 안내 강화
+- Action Plan intended action에 `task_lock`, `task_unlock`, `create_pr`, `external_configuration_changes`를 추가해 adapter 안내와 schema 계약을 일치
 
 ## 0.10.0 - 2026-08-05
 

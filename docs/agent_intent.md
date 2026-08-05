@@ -20,7 +20,7 @@ Agent는 이 요청을 CLI 명령에 기계적으로 1:1 매핑하지 않는다.
 - 사용자의 질문에 답하기 위해 필요한 최소 범위만 조회한다.
 - 같은 정보를 방금 확인했다면 불필요하게 같은 명령을 반복하지 않는다.
 - 파일 수정, 상태 전이, handoff 생성, commit, push, PR, merge, deploy처럼 프로젝트 상태나 소스에 영향을 주는 행동 전에는 action plan을 생성해 의도한 행동, 승인 필요 항목, 차단 항목을 확인한다.
-- 상태 전이, 파일 수정, 마이그레이션 적용, commit, push, PR, merge, deploy는 사용자 승인 후 진행한다.
+- 상태 전이, 파일 수정, 마이그레이션 적용, commit, push, PR, merge, deploy, 외부 설정 변경은 사용자 승인 후 진행한다.
 - CLI 출력은 사용자에게 그대로 던지지 않고, 사람이 이해하기 쉬운 판단과 다음 조치로 요약한다.
 - 프로젝트마다 branch/PR/worktree 전략이 다를 수 있으므로 `origin/develop` 같은 이름을 고정 가정하지 않는다.
 
@@ -33,7 +33,7 @@ Agent는 이 요청을 CLI 명령에 기계적으로 1:1 매핑하지 않는다.
 | 상세 상태 확인 | `aiops project inspect` | 현재 운영 모델, Task 분포, Git 상태를 자세히 봐야 할 때 |
 | Role Session 시작 | `aiops project context --role ROLE` | 특정 Role이 지금 무엇을 할 수 있는지 확인할 때 |
 | Task 시작 가능 여부 | `aiops project context --role ROLE --task TASK_ID` | Task의 상태, 허용 경로, 다음 전이를 확인할 때 |
-| 작업 전 의도 검토 | `aiops action plan --role ROLE --task TASK_ID --intends ACTIONS --paths PATHS --json` | Agent가 실제 수정, 상태 전이, handoff, commit/push/merge/deploy 전에 의도한 행동과 승인/차단 항목을 구조화해야 할 때 |
+| 작업 전 의도 검토 | `aiops action plan --role ROLE --task TASK_ID --intends ACTIONS --paths PATHS --json` | Agent가 실제 수정, 상태 전이, lock, handoff, commit/push/PR/merge/deploy, 외부 설정 변경 전에 의도한 행동과 승인/차단 항목을 구조화해야 할 때 |
 | 구성 정합성 점검 | `aiops validate project --strict` | schema와 문서 간 관계를 확인할 때 |
 | 기존 프로젝트 업데이트 | `aiops migrate --plan` | 적용 전 영향 범위를 설명해야 할 때 |
 | 다중 worktree 상태 이상 | `aiops status-ref`, `aiops sync-status`, `aiops worktree doctor` | 공용 상태 기준과 로컬 worktree 상태가 의심될 때 |
@@ -52,12 +52,35 @@ Action Plan은 사용자가 직접 매번 입력해야 하는 명령이 아니�
 - 제품 코드 또는 운영 문서 파일 수정
 - Task 상태 전이 또는 lock 변경
 - handoff 생성 또는 다음 Role 인계
-- commit, push, PR, merge, deploy
+- commit, push, PR, merge, deploy, 외부 설정 변경
 - 외부 서비스 설정 변경
 
 Action Plan 결과에 `blocked_actions`가 있으면 해당 행동을 진행하지 않는다. Agent는 blocker의 이유와 evidence를 사용자에게 요약하고, 필요한 사용자 결정 또는 선행 조치를 요청한다.
 
-Action Plan 결과에 `requires_user_approval`이 있으면 승인 전에는 해당 행동을 실행하지 않는다. 특히 `commit`, `push`, `merge`, `deploy`, `external_configuration_changes`는 Action Plan이 있더라도 사용자 승인 없이 진행하지 않는다.
+Action Plan 결과에 `requires_user_approval`이 있으면 승인 전에는 해당 행동을 실행하지 않는다. 특히 `commit`, `push`, `create_pr`, `merge`, `deploy`, `external_configuration_changes`는 Action Plan이 있더라도 사용자 승인 없이 진행하지 않는다.
+
+### Intended Action 매핑
+
+문서나 사용자가 자연어로 말하는 행동은 아래 intended action으로 표현한다.
+
+| 자연어 행동 | intended action |
+|---|---|
+| 문서/소스 읽기 | `read_source` |
+| 허용 경로 안 파일 수정 | `edit_paths` |
+| Task의 허용 경로 자체 변경 | `edit_allowed_paths` |
+| 테스트/검증 명령 실행 | `run_tests` |
+| Task 상태 전이 | `task_transition` |
+| Task lock 획득 | `task_lock` |
+| Task lock 해제 | `task_unlock` |
+| Role 인계 문서 생성 | `create_handoff` |
+| commit 생성 | `commit` |
+| push 실행 | `push` |
+| PR 생성 | `create_pr` |
+| merge 실행 | `merge` |
+| deploy 실행 | `deploy` |
+| 외부 서비스 또는 저장소 설정 변경 | `external_configuration_changes` |
+
+`create_pr`, `commit`, `push`, `merge`, `deploy`, `external_configuration_changes`는 사용자 승인 대상이다.
 
 예:
 
