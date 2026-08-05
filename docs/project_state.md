@@ -232,3 +232,23 @@ aiops validate policy-rules
 현재 단계에서는 catalog 구조와 schema 검증을 먼저 고정한다. 즉, `core_missing`, `project_config_missing`, `required_project_file_missing`, `canonical_status_stale` 같은 규칙을 기계가 읽을 수 있는 형태로 선언하지만, 기존 snapshot/health 계산을 한 번에 모두 교체하지는 않는다.
 
 이후 단계에서는 같은 project snapshot을 입력으로 받아 policy rule 결과를 `checks`와 `control` 판단에 점진적으로 연결한다.
+
+## Action Plan
+
+`aiops action plan`은 Agent가 작업을 시작하기 전에 의도한 행동을 구조화해 확인하는 계약이다.
+
+```sh
+aiops action plan --role execution --task T-YYYYMMDD-001 --json
+aiops action validate /tmp/action_plan.json
+```
+
+Action plan은 source of truth가 아니다. Task, project context, Git/canonical 상태를 읽어 만든 작업 전 검토 결과다.
+
+주요 목적:
+
+- 현재 Role과 Task가 맞는지 확인
+- `allowed_paths` 밖 수정 의도가 있는지 확인
+- `commit`, `push`, `merge`, `deploy`가 사용자 승인 필요 행동으로 표시되는지 확인
+- stale canonical 상태에서 Task 상태 전이 의도가 차단되는지 확인
+
+이 명령은 실제 파일 수정, commit, push, merge, deploy를 수행하지 않는다.
