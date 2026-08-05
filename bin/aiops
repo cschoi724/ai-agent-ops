@@ -3265,6 +3265,49 @@ EOF
       task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
       from_status="$(task_yaml_field "$task_file" status)"
       locked_by="$(task_yaml_field "$task_file" locked_by)"
+      status_ref="$(canonical_status_ref_value "$target")"
+      status_ref_sha=""
+      canonical_status=""
+      canonical_task_path=""
+
+      if [ -n "$status_ref" ]; then
+        git_require_repo "$target"
+        status_ref_sha="$(git_ref_sha "$target" "$status_ref")" || die "canonical_status_ref not found locally: $status_ref; run aiops sync-status"
+        local_status_ref_sha="$(task_yaml_field "$task_file" status_ref_sha)"
+
+        if [ -n "$local_status_ref_sha" ] && [ "$local_status_ref_sha" != "$status_ref_sha" ]; then
+          info "AI Ops canonical transition guard"
+          info "task_id: $task_id"
+          info "local_status: $from_status"
+          info "canonical_status_ref: $status_ref"
+          info "local_status_ref_sha: $local_status_ref_sha"
+          info "canonical_status_sha: $status_ref_sha"
+          info "next: run aiops sync-status and reload task state"
+          die "local task status_ref_sha is stale against canonical_status_ref"
+        fi
+
+        canonical_task_path="$(task_find_file_in_ref "$target" "$status_ref" "$task_id" || true)"
+        if [ -n "$canonical_task_path" ]; then
+          tmp_task="${TMPDIR:-/tmp}/aiops-canonical-transition-task.$$"
+          git -C "$target" show "$status_ref:$canonical_task_path" > "$tmp_task" || {
+            rm -f "$tmp_task"
+            die "failed to read task from $status_ref: $canonical_task_path"
+          }
+          canonical_status="$(task_yaml_field "$tmp_task" status)"
+          rm -f "$tmp_task"
+
+          if [ -z "$local_status_ref_sha" ] && [ -n "$canonical_status" ] && [ "$canonical_status" != "$from_status" ]; then
+            info "AI Ops canonical transition guard"
+            info "task_id: $task_id"
+            info "local_status: $from_status"
+            info "canonical_status: $canonical_status"
+            info "canonical_status_ref: $status_ref"
+            info "canonical_status_sha: $status_ref_sha"
+            info "next: run aiops sync-status and reload task state"
+            die "local task state is stale against canonical_status_ref"
+          fi
+        fi
+      fi
 
       if [ -n "$locked_by" ]; then
         if [ -z "$actor" ] || [ "$actor" != "$locked_by" ]; then
@@ -3282,21 +3325,48 @@ EOF
 
       case "$to_status" in
         in_progress)
-          task_update_front_matter "$task_file" \
-            "status=$to_status" \
-            "target_role=$next_role" \
-            "updated_at=$date_value" \
-            "locked_by=${actor_label}" \
-            "locked_at=$date_value"
+          if [ -n "$status_ref" ]; then
+            task_update_front_matter "$task_file" \
+              "status=$to_status" \
+              "target_role=$next_role" \
+              "updated_at=$date_value" \
+              "locked_by=${actor_label}" \
+              "locked_at=$date_value" \
+              "status_ref=$status_ref" \
+              "status_ref_sha=$status_ref_sha" \
+              "base_ref=$status_ref" \
+              "base_sha=$status_ref_sha"
+          else
+            task_update_front_matter "$task_file" \
+              "status=$to_status" \
+              "target_role=$next_role" \
+              "updated_at=$date_value" \
+              "locked_by=${actor_label}" \
+              "locked_at=$date_value"
+          fi
           ;;
         *)
-          task_update_front_matter "$task_file" \
-            "status=$to_status" \
-            "target_role=${next_role:-__AIOPS_NULL__}" \
-            "updated_at=$date_value" \
-            "locked_by=__AIOPS_NULL__" \
-            "locked_at=__AIOPS_NULL__" \
-            "lock_session=__AIOPS_NULL__"
+          if [ -n "$status_ref" ]; then
+            task_update_front_matter "$task_file" \
+              "status=$to_status" \
+              "target_role=${next_role:-__AIOPS_NULL__}" \
+              "updated_at=$date_value" \
+              "locked_by=__AIOPS_NULL__" \
+              "locked_at=__AIOPS_NULL__" \
+              "lock_session=__AIOPS_NULL__" \
+              "status_ref=$status_ref" \
+              "status_ref_sha=$status_ref_sha" \
+              "base_ref=$status_ref" \
+              "base_sha=$status_ref_sha"
+          else
+            task_update_front_matter "$task_file" \
+              "status=$to_status" \
+              "target_role=${next_role:-__AIOPS_NULL__}" \
+              "updated_at=$date_value" \
+              "locked_by=__AIOPS_NULL__" \
+              "locked_at=__AIOPS_NULL__" \
+              "lock_session=__AIOPS_NULL__"
+          fi
           ;;
       esac
 
@@ -3309,6 +3379,11 @@ EOF
       info "to: $to_status"
       info "role: $role"
       info "next_role: $next_role"
+      if [ -n "$status_ref" ]; then
+        info "canonical_status_ref: $status_ref"
+        info "canonical_status_sha: $status_ref_sha"
+        info "canonical_task_status: ${canonical_status:-unresolved}"
+      fi
       ;;
 
     lock)

@@ -79,3 +79,17 @@ JSON 출력은 source of truth가 아니라, 현재 프로젝트 파일과 Git �
 - `blocked`: blocker와 다음 의사결정
 
 이 검증의 목적은 Agent가 현재 Task 상태를 믿어도 되는지 판단할 근거를 늘리는 것이다. strict 실패 기준으로 올리는 것은 마이그레이션 지원 이후 별도 승인으로 진행한다.
+
+## 상태 전이 보호
+
+`canonical_status_ref`가 있는 프로젝트에서는 `aiops task transition`도 canonical 기준을 확인한다.
+
+전이 전에 확인하는 내용:
+
+- 현재 canonical ref가 로컬에서 해석되는가
+- Task에 기록된 `status_ref_sha`가 현재 canonical SHA와 같은가
+- `status_ref_sha`가 없다면 로컬 Task 상태와 canonical Task 상태가 같은가
+
+불일치가 있으면 오래된 worktree 상태로 판단하고 전이를 차단한다. 전이가 허용되면 Task에 현재 `status_ref`, `status_ref_sha`, `base_ref`, `base_sha`를 기록한다.
+
+이 보호장치는 다중 worktree 환경에서 이미 완료된 Task를 다시 완료 처리하거나, 오래된 dependency 상태를 기준으로 작업을 진행하는 문제를 줄이기 위한 것이다.
