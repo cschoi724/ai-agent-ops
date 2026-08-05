@@ -71,6 +71,26 @@ grep -q 'invalid transition: scoped -> done by Execution Role' /tmp/aiops-e2e-ta
   --by "Lead Agent" \
   >/tmp/aiops-e2e-task-approved.out
 
+cp "$tmpdir/.ai_project/tasks/active/T-20260727-001.md" /tmp/aiops-e2e-task-before-blocked.md
+if "$repo_root/bin/aiops" task transition T-20260727-001 \
+  --target "$tmpdir" \
+  --to blocked \
+  --role "Execution Role" \
+  --by "Dev Agent" \
+  >/tmp/aiops-e2e-task-blocked-missing-fields.out 2>&1; then
+  printf '%s\n' "blocked transition without blocker should fail" >&2
+  exit 1
+fi
+
+grep -q 'blocked transition requires --blocker' /tmp/aiops-e2e-task-blocked-missing-fields.out || {
+  printf '%s\n' "blocked transition did not require blocker before mutation" >&2
+  exit 1
+}
+cmp -s /tmp/aiops-e2e-task-before-blocked.md "$tmpdir/.ai_project/tasks/active/T-20260727-001.md" || {
+  printf '%s\n' "failed blocked transition mutated task file" >&2
+  exit 1
+}
+
 "$repo_root/bin/aiops" task transition T-20260727-001 \
   --target "$tmpdir" \
   --to in_progress \

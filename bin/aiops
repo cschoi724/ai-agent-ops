@@ -21,7 +21,7 @@ Usage:
   aiops validate workflow-catalog [--target DIR|--core DIR]
   aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
   aiops task status TASK_ID [--target DIR] [--source local|canonical]
-  aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT]
+  aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT] [--blocker TEXT] [--next-decision TEXT]
   aiops task lock TASK_ID --by AGENT [--target DIR] [--role ROLE] [--session ID]
   aiops task unlock TASK_ID --by AGENT [--target DIR]
   aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT [--target DIR]
@@ -1077,27 +1077,56 @@ task_next_role_for_status() {
 }
 
 task_transition_allowed() {
-  from="$1"
-  to="$2"
-  role="$3"
+  target="$1"
+  workflow="$2"
+  from="$3"
+  to="$4"
+  role="$5"
 
-  case "$from:$to:$role" in
-    proposed:scoped:"Lead Role"|proposed:scoped:"Direction Role") return 0 ;;
-    proposed:approved:"Direction Role"|proposed:approved:"Lead Role"|proposed:approved:"Product Owner") return 0 ;;
-    proposed:cancelled:"Direction Role"|proposed:cancelled:"Product Owner"|proposed:blocked:*) return 0 ;;
-    scoped:approved:"Direction Role"|scoped:approved:"Lead Role"|scoped:approved:"Product Owner") return 0 ;;
-    scoped:cancelled:"Direction Role"|scoped:cancelled:"Product Owner"|scoped:blocked:*) return 0 ;;
-    approved:in_progress:"Execution Role"|approved:cancelled:"Direction Role"|approved:cancelled:"Product Owner"|approved:blocked:*) return 0 ;;
-    in_progress:verification_ready:"Execution Role"|in_progress:blocked:*) return 0 ;;
-    verification_ready:verification_in_progress:"Verification Role"|verification_ready:blocked:*) return 0 ;;
-    verification_in_progress:verification_passed:"Verification Role"|verification_in_progress:rework_requested:"Verification Role"|verification_in_progress:blocked:*) return 0 ;;
-    verification_passed:completion_review:"Completion Role"|verification_passed:blocked:*) return 0 ;;
-    completion_review:done:"Completion Role"|completion_review:done:"Lead Role"|completion_review:done:"Product Owner") return 0 ;;
-    completion_review:rework_requested:"Completion Role"|completion_review:rework_requested:"Lead Role"|completion_review:blocked:*) return 0 ;;
-    rework_requested:scoped:"Lead Role"|rework_requested:approved:"Lead Role"|rework_requested:approved:"Direction Role"|rework_requested:blocked:*) return 0 ;;
-    blocked:scoped:"Lead Role"|blocked:approved:"Lead Role"|blocked:in_progress:"Execution Role"|blocked:cancelled:"Direction Role"|blocked:cancelled:"Product Owner") return 0 ;;
-    *) return 1 ;;
-  esac
+  catalog="$(workflow_catalog_path "$target" "" 2>/dev/null || true)"
+  [ -n "$catalog" ] || return 1
+  command -v ruby >/dev/null 2>&1 || return 1
+
+  ruby -rjson -e '
+    catalog_path = ARGV[0]
+    workflow_id = ARGV[1]
+    from = ARGV[2]
+    to = ARGV[3]
+    role = ARGV[4]
+    catalog = JSON.parse(File.read(catalog_path))
+    workflows = catalog["workflows"] || {}
+    default_workflow = catalog["default_workflow"]
+
+    def resolve_workflow(workflows, workflow_id, default_workflow, seen = [])
+      return {} if workflow_id.nil? || seen.include?(workflow_id)
+      entry = workflows[workflow_id] || workflows[default_workflow] || {}
+      inherited = entry["inherits"]
+      if inherited
+        parent = resolve_workflow(workflows, inherited, default_workflow, seen + [workflow_id])
+        parent.merge(entry) do |key, parent_value, child_value|
+          if key == "statuses"
+            parent_value.merge(child_value || {})
+          elsif key == "transitions"
+            child_value || parent_value
+          else
+            child_value.nil? ? parent_value : child_value
+          end
+        end
+      else
+        entry
+      end
+    end
+
+    entry = resolve_workflow(workflows, workflow_id, default_workflow)
+    transitions = entry["transitions"].is_a?(Array) ? entry["transitions"] : []
+    allowed = transitions.any? do |transition|
+      roles = transition["allowed_roles"].is_a?(Array) ? transition["allowed_roles"] : []
+      transition["from"] == from &&
+        transition["to"] == to &&
+        (roles.include?(role) || roles.include?("any"))
+    end
+    exit(allowed ? 0 : 1)
+  ' "$catalog" "$workflow" "$from" "$to" "$role"
 }
 
 workflow_catalog_path() {
@@ -3118,9 +3147,10 @@ cmd_project() {
           status_meta = (workflow_entry["statuses"] || {})[status] || {}
           transitions = workflow_entry["transitions"].is_a?(Array) ? workflow_entry["transitions"] : []
           valid_next = transitions.select do |transition|
+            roles = list(transition["allowed_roles"])
             transition.is_a?(Hash) &&
               transition["from"] == status &&
-              list(transition["allowed_roles"]).include?(role)
+              (roles.include?(role) || roles.include?("any"))
           end.map do |transition|
             to = transition["to"]
             meta = (workflow_entry["statuses"] || {})[to] || {}
@@ -3834,7 +3864,11 @@ cmd_validate() {
       ruby -rjson -e '
         path = ARGV[0]
         catalog = JSON.parse(File.read(path))
+        allowed_top_level = %w[schema version default_workflow generated_from workflows]
+        extra_top_level = catalog.keys - allowed_top_level
+        abort("schema_error: unknown top-level keys #{extra_top_level.join(", ")}") unless extra_top_level.empty?
         abort("schema_error: schema must be aiops.workflow_catalog.v1") unless catalog["schema"] == "aiops.workflow_catalog.v1"
+        abort("schema_error: version missing") if catalog["version"].to_s.empty?
         workflows = catalog["workflows"]
         abort("schema_error: workflows must be an object") unless workflows.is_a?(Hash) && !workflows.empty?
         default_workflow = catalog["default_workflow"]
@@ -4199,6 +4233,8 @@ EOF
       role=""
       actor=""
       reason="task transition"
+      blocker=""
+      next_decision=""
 
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -4226,6 +4262,16 @@ EOF
             shift
             [ "$#" -gt 0 ] || die "--reason requires a value"
             reason="$1"
+            ;;
+          --blocker)
+            shift
+            [ "$#" -gt 0 ] || die "--blocker requires a value"
+            blocker="$1"
+            ;;
+          --next-decision)
+            shift
+            [ "$#" -gt 0 ] || die "--next-decision requires a value"
+            next_decision="$1"
             ;;
           -*)
             die "unknown task transition option: $1"
@@ -4297,8 +4343,15 @@ EOF
         fi
       fi
 
-      if ! task_transition_allowed "$from_status" "$to_status" "$role"; then
+      if ! task_transition_allowed "$target" "$workflow" "$from_status" "$to_status" "$role"; then
         die "invalid transition: $from_status -> $to_status by $role"
+      fi
+
+      if [ "$to_status" = "blocked" ]; then
+        [ -n "$blocker" ] || blocker="$(task_yaml_field "$task_file" blocker)"
+        [ -n "$next_decision" ] || next_decision="$(task_yaml_field "$task_file" next_decision)"
+        [ -n "$blocker" ] || die "blocked transition requires --blocker"
+        [ -n "$next_decision" ] || die "blocked transition requires --next-decision"
       fi
 
       next_role="$(task_next_role_for_status "$to_status")"
@@ -4339,6 +4392,8 @@ EOF
               "locked_by=__AIOPS_NULL__" \
               "locked_at=__AIOPS_NULL__" \
               "lock_session=__AIOPS_NULL__" \
+              "blocker=${blocker:-__AIOPS_NULL__}" \
+              "next_decision=${next_decision:-__AIOPS_NULL__}" \
               "status_ref=$status_ref" \
               "status_ref_sha=$status_ref_sha" \
               "base_ref=$status_ref" \
@@ -4350,7 +4405,9 @@ EOF
               "updated_at=$date_value" \
               "locked_by=__AIOPS_NULL__" \
               "locked_at=__AIOPS_NULL__" \
-              "lock_session=__AIOPS_NULL__"
+              "lock_session=__AIOPS_NULL__" \
+              "blocker=${blocker:-__AIOPS_NULL__}" \
+              "next_decision=${next_decision:-__AIOPS_NULL__}"
           fi
           ;;
       esac
@@ -5834,6 +5891,13 @@ cmd_release_check() {
     info "note: ruby not available; schema JSON syntax not checked"
   fi
 
+  if "$core/bin/aiops" validate workflow-catalog --core "$core" >/dev/null 2>&1; then
+    info "ok: workflow catalog validation"
+  else
+    info "warn: workflow catalog validation failed"
+    warnings=$((warnings + 1))
+  fi
+
   release_tmp="${TMPDIR:-/tmp}/aiops-release-check-project.$$"
   rm -rf "$release_tmp"
   if (
@@ -5867,6 +5931,21 @@ cmd_release_check() {
       info "warn: CHANGELOG missing section for $version"
       warnings=$((warnings + 1))
     fi
+    if awk '
+      /^## Unreleased/ { in_unreleased = 1; next }
+      /^## / && in_unreleased { exit }
+      in_unreleased && /^- / { found = 1 }
+      END { exit(found ? 0 : 1) }
+    ' "$core/CHANGELOG.md"; then
+      if [ "$allow_pending_release" = "yes" ]; then
+        info "note: CHANGELOG has pending Unreleased entries"
+      else
+        info "warn: CHANGELOG has pending Unreleased entries; finalize release notes or use --allow-pending-release"
+        warnings=$((warnings + 1))
+      fi
+    else
+      info "ok: CHANGELOG Unreleased is empty"
+    fi
   fi
 
   formula="$core/Formula/ai-agent-ops.rb"
@@ -5885,7 +5964,7 @@ cmd_release_check() {
       warnings=$((warnings + 1))
     fi
 
-    for formula_dir in bootstrap core models policies runtime schemas templates workflows; do
+    for formula_dir in bootstrap core docs models policies runtime schemas templates workflows; do
       if grep -q "libexec.install.*\"$formula_dir\"" "$formula"; then
         info "ok: Formula installs $formula_dir"
       else

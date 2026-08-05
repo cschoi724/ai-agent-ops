@@ -136,6 +136,10 @@ grep -q 'to: in_progress' /tmp/aiops-e2e-project-context.out || {
   printf '%s\n' "project context did not report next transition" >&2
   exit 1
 }
+grep -q 'to: blocked' /tmp/aiops-e2e-project-context.out || {
+  printf '%s\n' "project context did not report any-role blocked transition" >&2
+  exit 1
+}
 grep -q 'canonical_publish: not_required' /tmp/aiops-e2e-project-context.out || {
   printf '%s\n' "project context did not report next checkpoint policy" >&2
   exit 1
@@ -161,6 +165,7 @@ ruby -rjson -e '
   next_transition = data["valid_next_transitions"].find { |item| item["to"] == "in_progress" }
   abort("missing next transition") unless next_transition
   abort("wrong checkpoint policy") unless next_transition["canonical_publish"] == "not_required"
+  abort("missing blocked transition") unless data["valid_next_transitions"].any? { |item| item["to"] == "blocked" }
   abort("missing recommended inspect") unless data["recommended_checks"].any? { |item| item.include?("aiops project inspect") }
 ' /tmp/aiops-e2e-project-context.json
 

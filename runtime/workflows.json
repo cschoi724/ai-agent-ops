@@ -115,6 +115,30 @@
           "next_role": "Execution Role"
         },
         {
+          "from": "proposed",
+          "to": "blocked",
+          "allowed_roles": [
+            "any"
+          ],
+          "next_role": "Lead Role"
+        },
+        {
+          "from": "scoped",
+          "to": "blocked",
+          "allowed_roles": [
+            "any"
+          ],
+          "next_role": "Lead Role"
+        },
+        {
+          "from": "approved",
+          "to": "blocked",
+          "allowed_roles": [
+            "any"
+          ],
+          "next_role": "Lead Role"
+        },
+        {
           "from": "in_progress",
           "to": "verification_ready",
           "allowed_roles": [
@@ -123,12 +147,28 @@
           "next_role": "Verification Role"
         },
         {
+          "from": "in_progress",
+          "to": "blocked",
+          "allowed_roles": [
+            "any"
+          ],
+          "next_role": "Lead Role"
+        },
+        {
           "from": "verification_ready",
           "to": "verification_in_progress",
           "allowed_roles": [
             "Verification Role"
           ],
           "next_role": "Verification Role"
+        },
+        {
+          "from": "verification_ready",
+          "to": "blocked",
+          "allowed_roles": [
+            "any"
+          ],
+          "next_role": "Lead Role"
         },
         {
           "from": "verification_in_progress",
@@ -147,12 +187,28 @@
           "next_role": "Lead Role"
         },
         {
+          "from": "verification_in_progress",
+          "to": "blocked",
+          "allowed_roles": [
+            "any"
+          ],
+          "next_role": "Lead Role"
+        },
+        {
           "from": "verification_passed",
           "to": "completion_review",
           "allowed_roles": [
             "Completion Role"
           ],
           "next_role": "Completion Role"
+        },
+        {
+          "from": "verification_passed",
+          "to": "blocked",
+          "allowed_roles": [
+            "any"
+          ],
+          "next_role": "Lead Role"
         },
         {
           "from": "completion_review",
@@ -174,6 +230,14 @@
           "next_role": "Lead Role"
         },
         {
+          "from": "completion_review",
+          "to": "blocked",
+          "allowed_roles": [
+            "any"
+          ],
+          "next_role": "Lead Role"
+        },
+        {
           "from": "rework_requested",
           "to": "scoped",
           "allowed_roles": [
@@ -189,6 +253,14 @@
             "Direction Role"
           ],
           "next_role": "Execution Role"
+        },
+        {
+          "from": "rework_requested",
+          "to": "blocked",
+          "allowed_roles": [
+            "any"
+          ],
+          "next_role": "Lead Role"
         },
         {
           "from": "blocked",

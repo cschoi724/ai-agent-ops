@@ -11,6 +11,24 @@ grep -q 'ok: workflow catalog' /tmp/aiops-e2e-workflow-catalog-validate.out || {
   exit 1
 }
 
+invalid_core="$tmpdir/invalid-core"
+mkdir -p "$invalid_core/runtime"
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  data.delete("version")
+  File.write(ARGV[1], JSON.pretty_generate(data))
+' "$repo_root/runtime/workflows.json" "$invalid_core/runtime/workflows.json"
+
+if "$repo_root/bin/aiops" validate workflow-catalog --core "$invalid_core" >/tmp/aiops-e2e-workflow-catalog-missing-version.out 2>&1; then
+  printf '%s\n' "workflow catalog missing version should fail" >&2
+  exit 1
+fi
+
+grep -q 'schema_error: version missing' /tmp/aiops-e2e-workflow-catalog-missing-version.out || {
+  printf '%s\n' "workflow catalog missing version error not reported" >&2
+  exit 1
+}
+
 ruby -rjson -e '
   catalog = JSON.parse(File.read(ARGV[0]))
   abort("wrong schema") unless catalog["schema"] == "aiops.workflow_catalog.v1"
@@ -22,6 +40,8 @@ ruby -rjson -e '
   abort("in_progress should not require publish") unless statuses.fetch("in_progress").fetch("canonical_publish") == "not_required"
   abort("verification_ready should be recommended") unless statuses.fetch("verification_ready").fetch("canonical_publish") == "recommended"
   abort("bugfix should inherit feature") unless catalog.fetch("workflows").fetch("bugfix").fetch("inherits") == "feature"
+  transitions = feature.fetch("transitions")
+  abort("approved blocked transition missing") unless transitions.any? { |item| item["from"] == "approved" && item["to"] == "blocked" && item["allowed_roles"].include?("any") }
 ' "$repo_root/runtime/workflows.json"
 
 ln -s "$repo_root" "$tmpdir/.ai"

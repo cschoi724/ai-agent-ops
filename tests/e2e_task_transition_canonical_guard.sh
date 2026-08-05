@@ -129,11 +129,11 @@ grep -q 'canonical_status_ref: origin/develop' /tmp/aiops-e2e-transition-guard-p
   printf '%s\n' "transition did not report canonical ref" >&2
   exit 1
 }
-grep -Eq '^status_ref_sha: [0-9a-f]+' "$project/.ai_project/tasks/active/T-20260805-004.md" || {
+grep -Eq "^status_ref_sha: ['\"]?[0-9a-f]+" "$project/.ai_project/tasks/active/T-20260805-004.md" || {
   printf '%s\n' "transition did not record status_ref_sha" >&2
   exit 1
 }
-grep -Eq '^base_sha: [0-9a-f]+' "$project/.ai_project/tasks/active/T-20260805-004.md" || {
+grep -Eq "^base_sha: ['\"]?[0-9a-f]+" "$project/.ai_project/tasks/active/T-20260805-004.md" || {
   printf '%s\n' "transition did not record base_sha" >&2
   exit 1
 }
