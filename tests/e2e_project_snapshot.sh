@@ -6,15 +6,13 @@ tmpdir="$(mktemp -d /tmp/aiops-e2e-project-snapshot.XXXXXX)"
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
 assert_snapshot_contract() {
+  "$repo_root/bin/aiops" validate project-snapshot "$1" >/dev/null
   ruby -rjson -e '
     data = JSON.parse(File.read(ARGV[0]))
-    schema = JSON.parse(File.read(ARGV[1]))
 
     abort("wrong schema") unless data["schema"] == "aiops.project_snapshot.v1"
-    abort("schema const missing") unless schema.dig("properties", "schema", "const") == "aiops.project_snapshot.v1"
     %w[schema core_version generated_at target source_refs core project agents tasks workflow health control checks next].each do |key|
       abort("missing required snapshot key #{key}") unless data.key?(key)
-      abort("schema required missing #{key}") unless schema.fetch("required").include?(key)
     end
 
     abort("health overall invalid") unless %w[ok warning blocked].include?(data.dig("health", "overall"))
@@ -45,7 +43,7 @@ assert_snapshot_contract() {
       abort("next action missing") unless step["action"].is_a?(String) && !step["action"].empty?
       abort("next command or message missing") unless step["command"].is_a?(String) || step["message"].is_a?(String)
     end
-  ' "$1" "$repo_root/schemas/project_snapshot.schema.json"
+  ' "$1"
 }
 
 empty_project="$tmpdir/empty"
@@ -82,8 +80,21 @@ assert_snapshot_contract "$tmpdir/fast.json"
 ruby -rjson -e '
   data = JSON.parse(File.read(ARGV[0]))
   abort("fast project should be present") unless data.dig("project", "present") == true
+  abort("fast project name should be a string") unless data.dig("project", "name").is_a?(String)
+  abort("fast operating_mode should be a string") unless data.dig("project", "operating_mode").is_a?(String)
+  abort("fast workflow_policy should be a string") unless data.dig("project", "workflow_policy").is_a?(String)
+  abort("fast placeholder warning missing") unless data["checks"].any? { |check| check["id"] == "project_field_type_invalid" }
   abort("fast project should have unresolved status ref") unless data.dig("source_refs", "status_ref_state") == "unresolved"
 ' "$tmpdir/fast.json"
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  data["project"]["name"] = { "placeholder" => "PROJECT_NAME" }
+  File.write(ARGV[1], JSON.pretty_generate(data))
+' "$tmpdir/fast.json" "$tmpdir/invalid-snapshot.json"
+if "$repo_root/bin/aiops" validate project-snapshot "$tmpdir/invalid-snapshot.json" >/dev/null 2>&1; then
+  printf '%s\n' "invalid project snapshot unexpectedly passed" >&2
+  exit 1
+fi
 
 guided_project="$tmpdir/guided"
 mkdir -p "$guided_project"
@@ -92,6 +103,27 @@ cp -R "$repo_root/templates/ai_project/guided_full" "$guided_project/.ai_project
 mkdir -p "$guided_project/.ai_project/tasks/active" "$guided_project/.ai_project/tasks/backlog" "$guided_project/.ai_project/tasks/archive"
 "$repo_root/bin/aiops" project snapshot --target "$guided_project" --json > "$tmpdir/guided.json"
 assert_snapshot_contract "$tmpdir/guided.json"
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  abort("guided project name should be a string") unless data.dig("project", "name").is_a?(String)
+  abort("guided operating_mode should be a string") unless data.dig("project", "operating_mode").is_a?(String)
+  abort("guided workflow_policy should be a string") unless data.dig("project", "workflow_policy").is_a?(String)
+  abort("guided placeholder warning missing") unless data["checks"].any? { |check| check["id"] == "project_field_type_invalid" }
+' "$tmpdir/guided.json"
+
+space_project="$tmpdir/space project"
+mkdir -p "$space_project"
+"$repo_root/bin/aiops" project snapshot --target "$space_project" --json > "$tmpdir/space.json"
+assert_snapshot_contract "$tmpdir/space.json"
+ruby -rjson -rshellwords -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  target = ARGV[1]
+  command = data.fetch("next").find { |step| step["action"] == "seed_project" }.fetch("command")
+  parts = Shellwords.split(command)
+  index = parts.index("--target")
+  abort("seed command missing --target") unless index
+  abort("space target was not preserved") unless parts[index + 1] == target
+' "$tmpdir/space.json" "$space_project"
 
 remote="$tmpdir/remote.git"
 stale_project="$tmpdir/stale"

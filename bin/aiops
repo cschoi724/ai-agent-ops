@@ -20,6 +20,7 @@ Usage:
   aiops validate task FILE [--strict]
   aiops validate handoff FILE [--strict]
   aiops validate workflow-catalog [--target DIR|--core DIR]
+  aiops validate project-snapshot FILE
   aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
   aiops task status TASK_ID [--target DIR] [--source local|canonical]
   aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT] [--blocker TEXT] [--next-decision TEXT]
@@ -63,6 +64,7 @@ Examples:
   aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
   aiops validate handoff .ai_project/handoffs/T-YYYYMMDD-001_execution_to_verification.md --strict
   aiops validate workflow-catalog
+  aiops validate project-snapshot /tmp/project_snapshot.json
   aiops task create --title "로그인 화면 구현" --workflow feature --role "Lead Role"
   aiops task status T-YYYYMMDD-001 --source canonical
   aiops task transition T-YYYYMMDD-001 --to approved --role "Direction Role"
@@ -2671,8 +2673,23 @@ cmd_project() {
       target="$(abs_path "$target")"
       command -v ruby >/dev/null 2>&1 || die "ruby is required for project snapshot"
 
-      ruby -ryaml -rjson -rdate -rtime -rfind -ropen3 -e '
+      ruby -ryaml -rjson -rdate -rtime -rfind -ropen3 -rshellwords -e '
         target = ARGV[0]
+
+        def scalar_string(value)
+          case value
+          when String
+            value
+          when Integer, Float, TrueClass, FalseClass
+            value.to_s
+          else
+            nil
+          end
+        end
+
+        def invalid_scalar?(value)
+          !(value.nil? || value.is_a?(String) || value.is_a?(Integer) || value.is_a?(Float) || value == true || value == false)
+        end
 
         def front_matter(path)
           return {} unless File.file?(path)
@@ -2719,8 +2736,10 @@ cmd_project() {
           value = data[key]
           value = legacy_field(path, key) || table_value(path, key) if value.nil? || value == ""
           return nil if value.nil?
-          return nil if value.to_s.empty?
-          return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value.to_s)
+          value = scalar_string(value)
+          return nil if value.nil?
+          return nil if value.empty?
+          return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value)
           value
         end
 
@@ -2942,6 +2961,18 @@ cmd_project() {
         end
 
         if project["present"]
+          %w[project operating_mode workflow_policy].each do |key|
+            raw_value = operating[key]
+            if invalid_scalar?(raw_value)
+              add_check.call("project_field_type_invalid", "warn", "high", "operating_model #{key} is not a scalar; snapshot normalized it", {
+                "path" => ".ai_project/operating_model.md",
+                "field" => key,
+                "raw_type" => raw_value.class.name,
+                "normalized_value" => key == "project" ? project["name"] : project[key]
+              })
+            end
+          end
+
           case status_ref_state
           when "unresolved"
             add_check.call("canonical_status_ref_unresolved", "warn", "medium", "canonical_status_ref is unresolved", { "source" => ".ai_project/operating_model.md" })
@@ -2998,11 +3029,12 @@ cmd_project() {
         end
 
         next_steps = []
+        escaped_target = Shellwords.escape(target)
         unless core["present"]
           next_steps << {
             "audience" => "agent",
             "action" => "seed_project",
-            "command" => "aiops seed --target #{target} --adapter both"
+            "command" => "aiops seed --target #{escaped_target} --adapter both"
           }
           next_steps << {
             "audience" => "user",
@@ -3014,7 +3046,7 @@ cmd_project() {
           next_steps << {
             "audience" => "agent",
             "action" => "bootstrap_project",
-            "command" => "aiops bootstrap-guide --target #{target}"
+            "command" => "aiops bootstrap-guide --target #{escaped_target}"
           }
           next_steps << {
             "audience" => "user",
@@ -3026,7 +3058,7 @@ cmd_project() {
           next_steps << {
             "audience" => "agent",
             "action" => "sync_status",
-            "command" => "aiops sync-status --target #{target}"
+            "command" => "aiops sync-status --target #{escaped_target}"
           }
           next_steps << {
             "audience" => "user",
@@ -3038,7 +3070,7 @@ cmd_project() {
           next_steps << {
             "audience" => "agent",
             "action" => "validate_project",
-            "command" => "aiops validate project --target #{target} --strict"
+            "command" => "aiops validate project --target #{escaped_target} --strict"
           }
         end
 
@@ -4438,6 +4470,127 @@ cmd_validate() {
         puts "ok: checkpoint metadata"
       ' "$catalog"
       info "ok: workflow catalog"
+      ;;
+    project-snapshot)
+      file=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          -*)
+            die "unknown validate project-snapshot option: $1"
+            ;;
+          *)
+            [ -z "$file" ] || die "validate project-snapshot requires exactly one FILE"
+            file="$1"
+            ;;
+        esac
+        shift
+      done
+      [ -n "$file" ] || die "validate project-snapshot requires exactly one FILE"
+      [ -f "$file" ] || die "project snapshot file not found: $file"
+
+      core="$(default_core_dir)"
+      schema="$core/schemas/project_snapshot.schema.json"
+      [ -f "$schema" ] || die "project snapshot schema not found: $schema"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for project snapshot validation"
+
+      info "AI Ops project snapshot validate"
+      info "snapshot: $file"
+      ruby -rjson -e '
+        data = JSON.parse(File.read(ARGV[0]))
+        schema = JSON.parse(File.read(ARGV[1]))
+        errors = []
+
+        def valid_type?(value, type)
+          case type
+          when "object" then value.is_a?(Hash)
+          when "array" then value.is_a?(Array)
+          when "string" then value.is_a?(String)
+          when "integer" then value.is_a?(Integer)
+          when "number" then value.is_a?(Numeric)
+          when "boolean" then value == true || value == false
+          when "null" then value.nil?
+          else true
+          end
+        end
+
+        def validate_schema(value, schema, path, errors)
+          return unless schema.is_a?(Hash)
+
+          if schema.key?("const") && value != schema["const"]
+            errors << "#{path}: expected const #{schema["const"].inspect}, got #{value.inspect}"
+          end
+
+          if schema.key?("enum") && !schema["enum"].include?(value)
+            errors << "#{path}: expected one of #{schema["enum"].inspect}, got #{value.inspect}"
+          end
+
+          if schema.key?("type")
+            types = Array(schema["type"])
+            unless types.any? { |type| valid_type?(value, type) }
+              errors << "#{path}: expected type #{types.join("|")}, got #{value.class}"
+              return
+            end
+          end
+
+          if value.is_a?(String) && schema.key?("minLength") && value.length < schema["minLength"].to_i
+            errors << "#{path}: shorter than minLength #{schema["minLength"]}"
+          end
+
+          if value.is_a?(Numeric) && schema.key?("minimum") && value < schema["minimum"]
+            errors << "#{path}: smaller than minimum #{schema["minimum"]}"
+          end
+
+          if value.is_a?(Array)
+            if schema["uniqueItems"] && value.uniq.length != value.length
+              errors << "#{path}: array items must be unique"
+            end
+            if schema["items"].is_a?(Hash)
+              value.each_with_index do |item, index|
+                validate_schema(item, schema["items"], "#{path}[#{index}]", errors)
+              end
+            end
+          end
+
+          if value.is_a?(Hash)
+            Array(schema["required"]).each do |key|
+              errors << "#{path}.#{key}: required property missing" unless value.key?(key)
+            end
+
+            properties = schema["properties"].is_a?(Hash) ? schema["properties"] : {}
+            properties.each do |key, child_schema|
+              validate_schema(value[key], child_schema, "#{path}.#{key}", errors) if value.key?(key)
+            end
+
+            additional = schema.fetch("additionalProperties", true)
+            extra_keys = value.keys - properties.keys
+            if additional == false && !extra_keys.empty?
+              errors << "#{path}: unknown properties #{extra_keys.join(", ")}"
+            elsif additional.is_a?(Hash)
+              extra_keys.each do |key|
+                validate_schema(value[key], additional, "#{path}.#{key}", errors)
+              end
+            end
+
+            if schema["anyOf"].is_a?(Array)
+              matched = schema["anyOf"].any? do |candidate|
+                candidate_errors = []
+                validate_schema(value, candidate, path, candidate_errors)
+                candidate_errors.empty?
+              end
+              errors << "#{path}: did not match anyOf" unless matched
+            end
+          end
+        end
+
+        validate_schema(data, schema, "$", errors)
+        abort("schema_error:\n" + errors.join("\n")) unless errors.empty?
+        puts "ok: schema"
+      ' "$file" "$schema"
+      info "ok: project snapshot"
       ;;
     project)
       target="$(pwd)"
@@ -6421,17 +6574,7 @@ cmd_release_check() {
     "$core/bin/aiops" knowledge lint --target "$release_tmp" >/dev/null
     "$core/bin/aiops" export runtime --target "$release_tmp" >/dev/null
     "$core/bin/aiops" project snapshot --target "$release_tmp" --json > "$release_tmp/project_snapshot.json"
-    ruby -rjson -e '
-      data = JSON.parse(File.read(ARGV[0]))
-      schema = JSON.parse(File.read(ARGV[1]))
-      abort("snapshot schema mismatch") unless data["schema"] == "aiops.project_snapshot.v1"
-      %w[schema core_version generated_at target source_refs core project agents tasks workflow health control checks next].each do |key|
-        abort("snapshot missing #{key}") unless data.key?(key)
-        abort("schema missing required #{key}") unless schema.fetch("required").include?(key)
-      end
-      abort("snapshot health invalid") unless %w[ok warning blocked].include?(data.dig("health", "overall"))
-      abort("snapshot control missing approval") unless %w[commit push merge].all? { |action| data.dig("control", "requires_user_approval").include?(action) }
-    ' "$release_tmp/project_snapshot.json" "$core/schemas/project_snapshot.schema.json"
+    "$core/bin/aiops" validate project-snapshot "$release_tmp/project_snapshot.json" >/dev/null
   ); then
     info "ok: seeded project release gate"
   else
