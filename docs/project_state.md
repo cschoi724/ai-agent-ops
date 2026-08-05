@@ -60,6 +60,14 @@ aiops project inspect --json
 
 `project inspect`는 사람이 읽기 쉬운 상세 점검에 가깝다. Agent가 가장 먼저 읽어야 하는 표준 상태 계약은 `project snapshot --json`이다.
 
+`inspect`, `context`, `health`는 snapshot과 같은 핵심 의미를 사용해야 한다. 특히 아래 값은 서로 충돌하면 안 된다.
+
+- 프로젝트 이름, 운영 모드, workflow 정책
+- Git branch/head
+- `canonical_status_ref`와 status ref 상태
+- Task 상태 분포
+- health overall
+
 ## JSON 출력
 
 외부 도구나 후속 자동화를 위해 JSON 출력도 제공한다.
@@ -98,6 +106,13 @@ aiops project context --role execution --task T-YYYYMMDD-001 --json
 - 세션 시작 전 권장 확인 명령
 
 Role Session은 이 출력을 기준으로 “내가 지금 이 Task를 맡아도 되는지”, “다음 상태로 어떻게 넘겨야 하는지”, “어떤 파일 밖으로 나가면 안 되는지”를 확인한다.
+
+작업 전 권장 순서는 snapshot을 먼저 읽고, 이후 Role/Task별 context를 확인하는 방식이다.
+
+```sh
+aiops project snapshot --json
+aiops project context --role execution --task T-YYYYMMDD-001 --json
+```
 
 현재 schema:
 

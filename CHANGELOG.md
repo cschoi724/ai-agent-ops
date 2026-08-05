@@ -22,6 +22,8 @@
 - `aiops validate project-snapshot FILE` 명령으로 snapshot JSON Schema 계약을 검증하도록 강화
 - snapshot 생성 시 템플릿 placeholder가 YAML 객체로 파싱되어도 문자열 필드 계약을 깨지 않도록 정규화
 - snapshot의 `next.command`가 공백 포함 target 경로를 보존하도록 quoting 처리
+- `inspect`, `context`, `health`의 핵심 상태 해석을 snapshot 기준과 맞추고 상태 일관성 E2E를 추가
+- `project context`의 작업 전 권장 확인 순서가 snapshot을 먼저 읽도록 조정
 
 ## 0.10.0 - 2026-08-05
 

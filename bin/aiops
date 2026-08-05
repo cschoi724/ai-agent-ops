@@ -2947,6 +2947,35 @@ cmd_project() {
           add_check.call("project_config_missing", "blocker", "high", ".ai_project missing; run bootstrap first", { "path" => ".ai_project" })
         end
 
+        if project["present"]
+          required_files = %w[
+            operating_model.md
+            agent_registry.md
+            current_context.md
+            source_of_truth.md
+            task_board.md
+            ops_decisions.md
+            ops_issues.md
+          ]
+          required_files.each do |name|
+            path = File.join(project_dir, name)
+            if File.file?(path)
+              add_check.call("required_file_present", "info", "high", ".ai_project/#{name} exists", { "path" => ".ai_project/#{name}" })
+            else
+              add_check.call("required_file_missing", "blocker", "high", ".ai_project/#{name} missing", { "path" => ".ai_project/#{name}" })
+            end
+          end
+
+          %w[tasks tasks/active tasks/backlog tasks/archive].each do |name|
+            path = File.join(project_dir, name)
+            if Dir.exist?(path)
+              add_check.call("required_dir_present", "info", "high", ".ai_project/#{name} exists", { "path" => ".ai_project/#{name}" })
+            else
+              add_check.call("required_dir_missing", "blocker", "high", ".ai_project/#{name} missing", { "path" => ".ai_project/#{name}" })
+            end
+          end
+        end
+
         if File.file?(workflow_catalog_path) && workflow_catalog.is_a?(Hash) && workflow_catalog["schema"] == "aiops.workflow_catalog.v1"
           add_check.call("workflow_catalog_present", "info", "high", "workflow catalog is readable", { "path" => ".ai/runtime/workflows.json" })
         elsif core["present"]
@@ -3160,6 +3189,17 @@ cmd_project() {
           target = ARGV[0]
           json = ARGV[1] == "yes"
 
+          def scalar_string(value)
+            case value
+            when String
+              value
+            when Integer, Float, TrueClass, FalseClass
+              value.to_s
+            else
+              nil
+            end
+          end
+
           def front_matter(path)
             return {} unless File.file?(path)
             text = File.read(path)
@@ -3207,8 +3247,10 @@ cmd_project() {
               value = legacy_field(path, key) || table_value(path, key)
             end
             return nil if value.nil?
-            return nil if value.to_s.empty?
-            return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value.to_s)
+            value = scalar_string(value)
+            return nil if value.nil?
+            return nil if value.empty?
+            return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value)
             value
           end
 
@@ -3485,13 +3527,24 @@ cmd_project() {
       catalog="$(workflow_catalog_path "$target" "" 2>/dev/null || true)"
       command -v ruby >/dev/null 2>&1 || die "ruby is required for project context"
 
-      ruby -ryaml -rjson -rdate -ropen3 -e '
+      ruby -ryaml -rjson -rdate -ropen3 -rshellwords -e '
         target = ARGV[0]
         role = ARGV[1]
         task_file = ARGV[2]
         task_id = ARGV[3]
         catalog_path = ARGV[4]
         as_json = ARGV[5] == "yes"
+
+        def scalar_string(value)
+          case value
+          when String
+            value
+          when Integer, Float, TrueClass, FalseClass
+            value.to_s
+          else
+            nil
+          end
+        end
 
         def front_matter(path)
           return {} unless File.file?(path)
@@ -3538,8 +3591,10 @@ cmd_project() {
           value = data[key]
           value = legacy_field(path, key) || table_value(path, key) if value.nil? || value == ""
           return nil if value.nil?
-          return nil if value.to_s.empty?
-          return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value.to_s)
+          value = scalar_string(value)
+          return nil if value.nil?
+          return nil if value.empty?
+          return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value)
           value
         end
 
@@ -3568,6 +3623,10 @@ cmd_project() {
           else
             value
           end
+        end
+
+        def command_target(target)
+          Shellwords.escape(target)
         end
 
         def resolve_workflow(workflows, workflow_id, default_workflow, seen = [])
@@ -3706,11 +3765,12 @@ cmd_project() {
           "approval_required_for" => ["commit", "push", "merge", "deploy", "external configuration changes"],
           "forbidden_actions" => forbidden_actions,
           "recommended_checks" => begin
-            checks = ["aiops project inspect --target #{target}", "aiops validate project --target #{target} --strict"]
-            checks << "aiops status-ref --target #{target}" if status_ref
-            checks << "aiops sync-status --target #{target}" if status_ref
-            checks << "aiops task status #{task["id"]} --target #{target}" if task
-            checks << "aiops task status #{task["id"]} --target #{target} --source canonical" if task && status_ref
+            escaped_target = command_target(target)
+            checks = ["aiops project snapshot --target #{escaped_target} --json", "aiops project inspect --target #{escaped_target}", "aiops validate project --target #{escaped_target} --strict"]
+            checks << "aiops status-ref --target #{escaped_target}" if status_ref
+            checks << "aiops sync-status --target #{escaped_target}" if status_ref
+            checks << "aiops task status #{task["id"]} --target #{escaped_target}" if task
+            checks << "aiops task status #{task["id"]} --target #{escaped_target} --source canonical" if task && status_ref
             checks
           end
         })
@@ -3815,6 +3875,17 @@ cmd_project() {
         target = ARGV[0]
         as_json = ARGV[1] == "yes"
 
+        def scalar_string(value)
+          case value
+          when String
+            value
+          when Integer, Float, TrueClass, FalseClass
+            value.to_s
+          else
+            nil
+          end
+        end
+
         def front_matter(path)
           return {} unless File.file?(path)
           text = File.read(path)
@@ -3860,8 +3931,10 @@ cmd_project() {
           value = data[key]
           value = legacy_field(path, key) || table_value(path, key) if value.nil? || value == ""
           return nil if value.nil?
-          return nil if value.to_s.empty?
-          return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value.to_s)
+          value = scalar_string(value)
+          return nil if value.nil?
+          return nil if value.empty?
+          return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value)
           value
         end
 
