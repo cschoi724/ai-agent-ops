@@ -29,7 +29,7 @@ grep -q 'schema_error: version must be a non-empty string' /tmp/aiops-e2e-workfl
   exit 1
 }
 
-for invalid_case in numeric_version unknown_workflow_key unknown_status_key; do
+for invalid_case in numeric_version invalid_workflow_id unknown_workflow_key unknown_status_key; do
   case "$invalid_case" in
     numeric_version)
       ruby -rjson -e '
@@ -38,6 +38,16 @@ for invalid_case in numeric_version unknown_workflow_key unknown_status_key; do
         File.write(ARGV[1], JSON.pretty_generate(data))
       ' "$repo_root/runtime/workflows.json" "$invalid_core/runtime/workflows.json"
       expected='schema_error: version must be a non-empty string'
+      ;;
+    invalid_workflow_id)
+      ruby -rjson -e '
+        data = JSON.parse(File.read(ARGV[0]))
+        feature = data["workflows"].delete("feature")
+        data["workflows"]["Feature!"] = feature
+        data["default_workflow"] = "Feature!"
+        File.write(ARGV[1], JSON.pretty_generate(data))
+      ' "$repo_root/runtime/workflows.json" "$invalid_core/runtime/workflows.json"
+      expected='schema_error: default_workflow pattern invalid Feature!'
       ;;
     unknown_workflow_key)
       ruby -rjson -e '

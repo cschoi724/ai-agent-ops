@@ -3865,6 +3865,7 @@ cmd_validate() {
         path = ARGV[0]
         catalog = JSON.parse(File.read(path))
         abort("schema_error: catalog must be an object") unless catalog.is_a?(Hash)
+        id_pattern = /\A[a-z][a-z0-9_\/-]*\z/
         allowed_top_level = %w[schema version default_workflow generated_from workflows]
         extra_top_level = catalog.keys - allowed_top_level
         abort("schema_error: unknown top-level keys #{extra_top_level.join(", ")}") unless extra_top_level.empty?
@@ -3880,6 +3881,7 @@ cmd_validate() {
         abort("schema_error: workflows must be an object") unless workflows.is_a?(Hash) && !workflows.empty?
         default_workflow = catalog["default_workflow"]
         abort("schema_error: default_workflow must be a string") unless default_workflow.is_a?(String) && !default_workflow.empty?
+        abort("schema_error: default_workflow pattern invalid #{default_workflow}") unless default_workflow.match?(id_pattern)
         abort("schema_error: default_workflow missing") unless workflows.key?(default_workflow)
 
         allowed_publish = %w[not_required optional recommended required]
@@ -3914,6 +3916,7 @@ cmd_validate() {
         end
 
         workflows.each do |workflow_id, entry|
+          abort("schema_error: workflow id pattern invalid #{workflow_id}") unless workflow_id.match?(id_pattern)
           abort("schema_error: workflow #{workflow_id} must be an object") unless entry.is_a?(Hash)
           workflow_keys = %w[label description inherits statuses transitions]
           extra_workflow_keys = entry.keys - workflow_keys
@@ -3922,6 +3925,7 @@ cmd_validate() {
           abort("schema_error: workflow #{workflow_id} description missing") unless entry["description"].is_a?(String) && !entry["description"].empty?
           if entry.key?("inherits")
             abort("schema_error: workflow #{workflow_id} inherits must be string or null") unless entry["inherits"].nil? || entry["inherits"].is_a?(String)
+            abort("schema_error: workflow #{workflow_id} inherits pattern invalid #{entry["inherits"]}") if entry["inherits"].is_a?(String) && !entry["inherits"].match?(id_pattern)
             abort("schema_error: workflow #{workflow_id} inherits missing workflow #{entry["inherits"]}") if entry["inherits"].is_a?(String) && !workflows.key?(entry["inherits"])
           else
             abort("schema_error: workflow #{workflow_id} statuses missing") unless entry["statuses"].is_a?(Hash) && !entry["statuses"].empty?
