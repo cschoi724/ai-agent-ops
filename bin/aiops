@@ -623,6 +623,201 @@ validate_project_relationships() {
   fi
 }
 
+validate_project_status_requirements() {
+  target="$1"
+  project_dir="$target/.ai_project"
+
+  info ""
+  info "validate: status requirements"
+
+  if command -v ruby >/dev/null 2>&1; then
+    ruby -ryaml -rdate -rfind -e '
+      target = ARGV[0]
+      project_dir = File.join(target, ".ai_project")
+      warnings = 0
+
+      def front_matter(path)
+        return {} unless File.file?(path)
+        text = File.read(path)
+        return {} unless text.start_with?("---\n")
+        lines = text.lines
+        closing = nil
+        lines[1..].each_with_index do |line, idx|
+          if line.strip == "---"
+            closing = idx + 1
+            break
+          end
+        end
+        return {} unless closing
+        YAML.safe_load(lines[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+      rescue Psych::SyntaxError
+        {}
+      end
+
+      def legacy_field(path, key)
+        return nil unless File.file?(path)
+        File.foreach(path) do |line|
+          if line =~ /^[[:space:]]*#{Regexp.escape(key)}:[[:space:]]*(.*)$/
+            value = Regexp.last_match(1).strip
+            return nil if value.empty?
+            return value.gsub(/\A`|`\z/, "")
+          end
+        end
+        nil
+      end
+
+      def list(value)
+        case value
+        when Array then value.compact.map(&:to_s).reject(&:empty?)
+        when nil then []
+        else value.to_s.split(",").map(&:strip).reject(&:empty?)
+        end
+      end
+
+      def present?(value)
+        case value
+        when Array then !list(value).empty?
+        when Hash then value.values.any? { |item| present?(item) }
+        else
+          !value.nil? && !value.to_s.empty? && !%w[null unresolved pending_decision none].include?(value.to_s)
+        end
+      end
+
+      def path_exists?(target, value)
+        return false unless present?(value)
+        path = value.to_s
+        path = File.join(target, path) unless path.start_with?("/")
+        File.exist?(path)
+      end
+
+      def warn(message)
+        puts "warn: #{message}"
+        1
+      end
+
+      def require_field(task, field, label = nil)
+        present?(task["data"][field]) || present?(task["legacy"][field]) ? nil : (label || field)
+      end
+
+      def require_list(task, field, label = nil)
+        !list(task["data"][field]).empty? ? nil : (label || field)
+      end
+
+      def require_path(task, field, target, label = nil)
+        value = task["data"][field] || task["legacy"][field]
+        path_exists?(target, value) ? nil : (label || field)
+      end
+
+      task_files = []
+      task_root = File.join(project_dir, "tasks")
+      if Dir.exist?(task_root)
+        Find.find(task_root) do |entry|
+          task_files << entry if File.file?(entry) && File.basename(entry).end_with?(".md")
+        end
+      end
+      task_files.sort!
+
+      tasks = task_files.map do |path|
+        data = front_matter(path)
+        legacy = {}
+        %w[id status workflow target_role target_agent approved_by locked_by lock_session report_to qa_to status_ref status_ref_sha base_ref base_sha worktree_path].each do |field|
+          legacy[field] = legacy_field(path, field)
+        end
+        branch = data["branch"].is_a?(Hash) ? data["branch"] : {}
+        pr = data["pr"].is_a?(Hash) ? data["pr"] : {}
+        {
+          "path" => path,
+          "relative" => path.sub(%r{\A#{Regexp.escape(target)}/?}, ""),
+          "data" => data,
+          "legacy" => legacy,
+          "id" => data["id"] || legacy["id"] || File.basename(path, ".md"),
+          "status" => data["status"] || legacy["status"],
+          "branch" => branch,
+          "pr" => pr
+        }
+      end
+
+      tasks.each do |task|
+        label = task["relative"]
+        status = task["status"].to_s
+        missing = []
+
+        case status
+        when "proposed"
+          missing << require_field(task, "title")
+          missing << require_field(task, "created_by")
+        when "scoped"
+          missing << require_list(task, "allowed_paths")
+          missing << require_list(task, "source_of_truth")
+          missing << require_field(task, "target_role")
+        when "approved"
+          missing << require_list(task, "allowed_paths")
+          missing << require_list(task, "source_of_truth")
+          missing << require_field(task, "target_role")
+          missing << require_field(task, "approved_by")
+          missing << require_field(task, "report_to")
+        when "in_progress"
+          missing << require_list(task, "allowed_paths")
+          missing << require_list(task, "source_of_truth")
+          missing << require_field(task, "target_role")
+          missing << require_field(task, "locked_by")
+          missing << require_field(task, "lock_session")
+          missing << "branch.name" unless present?(task["branch"]["name"]) || present?(task["data"]["worktree_path"]) || present?(task["legacy"]["worktree_path"])
+          missing << "base_ref" unless present?(task["data"]["base_ref"]) || present?(task["legacy"]["base_ref"])
+          missing << "base_sha" unless present?(task["data"]["base_sha"]) || present?(task["legacy"]["base_sha"])
+          missing << require_field(task, "report_to")
+        when "verification_ready"
+          missing << require_field(task, "report_to")
+          missing << require_path(task, "report_to", target, "report_to file")
+          missing << require_field(task, "qa_to")
+          missing << require_field(task, "status_ref")
+          missing << require_field(task, "status_ref_sha")
+        when "verification_in_progress"
+          missing << require_field(task, "qa_to")
+          missing << require_field(task, "locked_by")
+          missing << require_field(task, "lock_session")
+        when "verification_passed"
+          missing << require_field(task, "qa_to")
+          missing << require_path(task, "qa_to", target, "qa_to file")
+          missing << require_field(task, "status_ref")
+          missing << require_field(task, "status_ref_sha")
+        when "completion_review"
+          missing << require_field(task, "report_to")
+          missing << require_field(task, "qa_to")
+          missing << require_path(task, "qa_to", target, "qa_to file")
+          missing << require_field(task, "status_ref")
+          missing << require_field(task, "status_ref_sha")
+        when "done"
+          missing << require_field(task, "report_to")
+          missing << require_field(task, "qa_to")
+          missing << require_field(task, "status_ref")
+          missing << require_field(task, "status_ref_sha")
+          missing << "pr.status or branch.name" unless present?(task["pr"]["status"]) || present?(task["branch"]["name"])
+        when "blocked"
+          missing << require_field(task, "blocker")
+          missing << require_field(task, "next_decision")
+        when "rework_requested"
+          missing << require_field(task, "qa_to")
+          missing << require_field(task, "target_role")
+        end
+
+        missing.compact!
+        missing.uniq!
+        if missing.empty?
+          puts "ok: #{label} status requirements"
+        else
+          warnings += warn("#{label} status #{status} missing evidence: #{missing.join(", ")}")
+        end
+      end
+
+      puts "status_requirement_warnings: #{warnings}"
+      puts "ok: status requirements report_only"
+    ' "$target"
+  else
+    info "note: ruby not available; status requirements skipped"
+  fi
+}
+
 validate_project() {
   target="$1"
   strict="$2"
@@ -716,6 +911,7 @@ validate_project() {
   fi
 
   validate_project_relationships "$target"
+  validate_project_status_requirements "$target"
 
   [ "$failed" -eq 0 ] || return 1
   info ""

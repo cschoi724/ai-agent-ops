@@ -15,6 +15,7 @@
 - `aiops project inspect`, `aiops project inspect --json` 명령 추가
 - 프로젝트 상태 조회와 정규화 기준 문서 `docs/project_state.md` 추가
 - `aiops validate project --strict`에 Task, Agent, Role, Workflow, Source of Truth, canonical ref 관계 검증 추가
+- `aiops validate project --strict`에 Task 상태별 운영 증거 report-only 검증 추가
 
 ## 0.9.0 - 2026-07-31
 
