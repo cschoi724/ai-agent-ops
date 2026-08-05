@@ -183,4 +183,121 @@ ruby -rjson -e '
   abort("context should recommend snapshot first") unless context["recommended_checks"].first.include?("aiops project snapshot")
 ' "$tmpdir/snapshot.json" "$tmpdir/inspect.json" "$tmpdir/health.json" "$tmpdir/context.json"
 
+partial_project="$tmpdir/partial"
+mkdir -p "$partial_project/.ai_project"
+ln -s "$repo_root" "$partial_project/.ai"
+cat > "$partial_project/.ai_project/operating_model.md" <<EOF
+---
+schema: aiops.operating_model.v1
+project: PartialProject
+core_version: $core_version
+operating_mode: solo_light
+workflow_policy: standard_vnext
+knowledge_mode: minimal
+---
+
+# Partial Project Operating Model
+EOF
+
+"$repo_root/bin/aiops" project snapshot --target "$partial_project" --json > "$tmpdir/partial-snapshot.json"
+"$repo_root/bin/aiops" validate project-snapshot "$tmpdir/partial-snapshot.json" >/dev/null
+"$repo_root/bin/aiops" project health --target "$partial_project" --json > "$tmpdir/partial-health.json"
+
+ruby -rjson -e '
+  snapshot = JSON.parse(File.read(ARGV[0]))
+  health = JSON.parse(File.read(ARGV[1]))
+
+  abort("partial snapshot should be blocked") unless snapshot.dig("health", "overall") == "blocked"
+  abort("partial snapshot should block task start") unless snapshot.dig("control", "can_start_task") == false
+  abort("partial health should be blocked") unless health["overall"] == "blocked"
+  abort("partial overall mismatch") unless snapshot.dig("health", "overall") == health["overall"]
+  abort("snapshot required file blocker missing") unless snapshot["checks"].any? { |check| check["id"] == "required_file_missing" && check["severity"] == "blocker" }
+  abort("snapshot required dir blocker missing") unless snapshot["checks"].any? { |check| check["id"] == "required_dir_missing" && check["severity"] == "blocker" }
+' "$tmpdir/partial-snapshot.json" "$tmpdir/partial-health.json"
+
+space_project="$tmpdir/space project"
+mkdir -p \
+  "$space_project/.ai_project/tasks/active" \
+  "$space_project/.ai_project/tasks/backlog" \
+  "$space_project/.ai_project/tasks/archive"
+ln -s "$repo_root" "$space_project/.ai"
+
+for file in current_context.md source_of_truth.md task_board.md ops_decisions.md ops_issues.md; do
+  printf '# %s\n' "$file" > "$space_project/.ai_project/$file"
+done
+
+cat > "$space_project/.ai_project/operating_model.md" <<EOF
+---
+schema: aiops.operating_model.v1
+project: SpaceProject
+core_version: $core_version
+operating_mode: solo_light
+workflow_policy: standard_vnext
+knowledge_mode: minimal
+active_roles:
+  - Execution Role
+---
+
+# Space Project Operating Model
+EOF
+
+cat > "$space_project/.ai_project/agent_registry.md" <<'EOF'
+---
+schema: aiops.agent_registry.v1
+project: SpaceProject
+agents:
+  - agent: Development Agent
+    status: enabled
+    team: Product Team
+    roles:
+      - Execution Role
+    capabilities:
+      - implementation
+---
+
+# Space Project Agent Registry
+EOF
+
+cat > "$space_project/.ai_project/tasks/active/T-20260805-202.md" <<'EOF'
+---
+schema: aiops.task.v1
+id: T-20260805-202
+title: Space path task
+status: approved
+type: feature
+priority: medium
+workflow: feature
+target_agent: Development Agent
+target_role: Execution Role
+required_capabilities:
+  - implementation
+allowed_paths:
+  - src/
+source_of_truth:
+  - .ai_project/source_of_truth.md
+depends_on: []
+blocks: []
+locked_by:
+lock_session:
+updated_at: 2026-08-05
+report_to: .ai_project/reports/T-20260805-202_task-report.md
+qa_to: .ai_project/qa/T-20260805-202_qa-report.md
+---
+
+# Space path task
+EOF
+
+"$repo_root/bin/aiops" project context --target "$space_project" --role execution --task T-20260805-202 --json > "$tmpdir/space-context.json"
+ruby -rjson -rshellwords -e '
+  context = JSON.parse(File.read(ARGV[0]))
+  target = ARGV[1]
+  context.fetch("recommended_checks").each do |command|
+    next unless command.include?("--target")
+    parts = Shellwords.split(command)
+    index = parts.index("--target")
+    abort("recommended command missing --target: #{command}") unless index
+    abort("recommended command target was not preserved: #{command}") unless parts[index + 1] == target
+  end
+' "$tmpdir/space-context.json" "$space_project"
+
 printf '%s\n' "ok: project state consistency"
