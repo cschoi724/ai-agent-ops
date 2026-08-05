@@ -3160,6 +3160,17 @@ cmd_project() {
           target = ARGV[0]
           json = ARGV[1] == "yes"
 
+          def scalar_string(value)
+            case value
+            when String
+              value
+            when Integer, Float, TrueClass, FalseClass
+              value.to_s
+            else
+              nil
+            end
+          end
+
           def front_matter(path)
             return {} unless File.file?(path)
             text = File.read(path)
@@ -3207,8 +3218,10 @@ cmd_project() {
               value = legacy_field(path, key) || table_value(path, key)
             end
             return nil if value.nil?
-            return nil if value.to_s.empty?
-            return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value.to_s)
+            value = scalar_string(value)
+            return nil if value.nil?
+            return nil if value.empty?
+            return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value)
             value
           end
 
@@ -3493,6 +3506,17 @@ cmd_project() {
         catalog_path = ARGV[4]
         as_json = ARGV[5] == "yes"
 
+        def scalar_string(value)
+          case value
+          when String
+            value
+          when Integer, Float, TrueClass, FalseClass
+            value.to_s
+          else
+            nil
+          end
+        end
+
         def front_matter(path)
           return {} unless File.file?(path)
           text = File.read(path)
@@ -3538,8 +3562,10 @@ cmd_project() {
           value = data[key]
           value = legacy_field(path, key) || table_value(path, key) if value.nil? || value == ""
           return nil if value.nil?
-          return nil if value.to_s.empty?
-          return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value.to_s)
+          value = scalar_string(value)
+          return nil if value.nil?
+          return nil if value.empty?
+          return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value)
           value
         end
 
@@ -3706,7 +3732,7 @@ cmd_project() {
           "approval_required_for" => ["commit", "push", "merge", "deploy", "external configuration changes"],
           "forbidden_actions" => forbidden_actions,
           "recommended_checks" => begin
-            checks = ["aiops project inspect --target #{target}", "aiops validate project --target #{target} --strict"]
+            checks = ["aiops project snapshot --target #{target} --json", "aiops project inspect --target #{target}", "aiops validate project --target #{target} --strict"]
             checks << "aiops status-ref --target #{target}" if status_ref
             checks << "aiops sync-status --target #{target}" if status_ref
             checks << "aiops task status #{task["id"]} --target #{target}" if task
@@ -3815,6 +3841,17 @@ cmd_project() {
         target = ARGV[0]
         as_json = ARGV[1] == "yes"
 
+        def scalar_string(value)
+          case value
+          when String
+            value
+          when Integer, Float, TrueClass, FalseClass
+            value.to_s
+          else
+            nil
+          end
+        end
+
         def front_matter(path)
           return {} unless File.file?(path)
           text = File.read(path)
@@ -3860,8 +3897,10 @@ cmd_project() {
           value = data[key]
           value = legacy_field(path, key) || table_value(path, key) if value.nil? || value == ""
           return nil if value.nil?
-          return nil if value.to_s.empty?
-          return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value.to_s)
+          value = scalar_string(value)
+          return nil if value.nil?
+          return nil if value.empty?
+          return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value)
           value
         end
 
