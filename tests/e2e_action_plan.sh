@@ -147,6 +147,65 @@ grep -q 'missing edit_paths blocker' /tmp/aiops-e2e-action-plan-invalid-blocker.
   exit 1
 }
 
+"$repo_root/bin/aiops" action plan \
+  --target "$project" \
+  --role execution \
+  --task T-20260805-301 \
+  --intends edit_paths \
+  --paths src/../docs/plan.md \
+  --json \
+  > "$tmpdir/traversal-plan.json"
+
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  abort("traversal edit_paths blocker missing") unless data["blocked_actions"].any? { |item| item["action"] == "edit_paths" }
+' "$tmpdir/traversal-plan.json"
+"$repo_root/bin/aiops" action validate "$tmpdir/traversal-plan.json" >/dev/null
+
+cat > "$project/.ai_project/tasks/active/T-20260805-302.md" <<'EOF'
+---
+schema: aiops.task.v1
+id: T-20260805-302
+title: Root allowed task
+status: approved
+type: feature
+priority: medium
+workflow: feature
+target_agent: Development Agent
+target_role: Execution Role
+required_capabilities:
+  - implementation
+allowed_paths:
+  - .
+source_of_truth:
+  - .ai_project/source_of_truth.md
+depends_on: []
+blocks: []
+locked_by:
+lock_session:
+updated_at: 2026-08-05
+report_to: .ai_project/reports/T-20260805-302_task-report.md
+qa_to: .ai_project/qa/T-20260805-302_qa-report.md
+---
+
+# Root allowed task
+EOF
+
+"$repo_root/bin/aiops" action plan \
+  --target "$project" \
+  --role execution \
+  --task T-20260805-302 \
+  --intends edit_paths \
+  --paths src/Login.swift \
+  --json \
+  > "$tmpdir/root-allowed-plan.json"
+
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  abort("root allowed path should not be blocked") if data["blocked_actions"].any? { |item| item["action"] == "edit_paths" }
+' "$tmpdir/root-allowed-plan.json"
+"$repo_root/bin/aiops" action validate "$tmpdir/root-allowed-plan.json" >/dev/null
+
 printf '%s\n' "advance canonical" > "$project/canonical.txt"
 git -C "$project" add canonical.txt >/dev/null
 git -C "$project" commit -m "advance canonical" >/dev/null
@@ -170,6 +229,21 @@ ruby -rjson -e '
 
 ruby -rjson -e '
   data = JSON.parse(File.read(ARGV[0]))
+  data["blocked_actions"] = []
+  File.write(ARGV[1], JSON.pretty_generate(data))
+' "$tmpdir/stale-transition-plan.json" "$tmpdir/invalid-missing-transition-blocker.json"
+if "$repo_root/bin/aiops" action validate "$tmpdir/invalid-missing-transition-blocker.json" >/tmp/aiops-e2e-action-plan-invalid-transition.out 2>&1; then
+  printf '%s\n' "action validate should fail missing task_transition blocker" >&2
+  exit 1
+fi
+grep -q 'missing task_transition blocker' /tmp/aiops-e2e-action-plan-invalid-transition.out || {
+  printf '%s\n' "missing task_transition blocker error absent" >&2
+  cat /tmp/aiops-e2e-action-plan-invalid-transition.out >&2
+  exit 1
+}
+
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
   data["requires_user_approval"] = []
   File.write(ARGV[1], JSON.pretty_generate(data))
 ' "$tmpdir/plan.json" "$tmpdir/invalid-missing-approval.json"
@@ -182,5 +256,55 @@ grep -q 'missing approval actions commit' /tmp/aiops-e2e-action-plan-invalid-app
   cat /tmp/aiops-e2e-action-plan-invalid-approval.out >&2
   exit 1
 }
+
+partial_project="$tmpdir/partial"
+mkdir -p "$partial_project/.ai_project/tasks/active"
+ln -s "$repo_root" "$partial_project/.ai"
+cat > "$partial_project/.ai_project/operating_model.md" <<'EOF'
+---
+schema: aiops.operating_model.v1
+project: PartialActionPlanProject
+operating_mode: solo_light
+workflow_policy: standard_vnext
+knowledge_mode: minimal
+---
+
+# Partial Action Plan Project
+EOF
+
+cat > "$partial_project/.ai_project/tasks/active/T-20260805-303.md" <<'EOF'
+---
+schema: aiops.task.v1
+id: T-20260805-303
+title: Partial action plan task
+status: approved
+workflow: feature
+target_role: Execution Role
+target_agent: Development Agent
+allowed_paths:
+  - src/
+source_of_truth:
+  - .ai_project/source_of_truth.md
+---
+
+# Partial action plan task
+EOF
+
+"$repo_root/bin/aiops" project snapshot --target "$partial_project" --json > "$tmpdir/partial-snapshot.json"
+"$repo_root/bin/aiops" action plan \
+  --target "$partial_project" \
+  --role execution \
+  --task T-20260805-303 \
+  --json \
+  > "$tmpdir/partial-action-plan.json"
+
+ruby -rjson -e '
+  snapshot = JSON.parse(File.read(ARGV[0]))
+  plan = JSON.parse(File.read(ARGV[1]))
+  abort("partial snapshot should be blocked") unless snapshot.dig("health", "overall") == "blocked"
+  abort("action evidence snapshot health mismatch") unless plan.dig("evidence", "snapshot_health") == snapshot.dig("health", "overall")
+  abort("action evidence can_start_task mismatch") unless plan.dig("evidence", "can_start_task") == snapshot.dig("control", "can_start_task")
+' "$tmpdir/partial-snapshot.json" "$tmpdir/partial-action-plan.json"
+"$repo_root/bin/aiops" action validate "$tmpdir/partial-action-plan.json" >/dev/null
 
 printf '%s\n' "ok: action plan"

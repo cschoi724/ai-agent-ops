@@ -5576,12 +5576,30 @@ cmd_action() {
           data
         end
 
+        def clean_relative_path(path)
+          value = path.to_s.strip
+          return nil if value.empty? || value.start_with?("/")
+          parts = []
+          value.split("/").each do |part|
+            next if part.empty? || part == "."
+            if part == ".."
+              return nil if parts.empty?
+              parts.pop
+            else
+              parts << part
+            end
+          end
+          parts.empty? ? "." : parts.join("/")
+        end
+
         def path_allowed?(path, allowed_paths)
+          normalized = clean_relative_path(path)
+          return false unless normalized
           return true if allowed_paths.empty?
-          normalized = path.sub(%r{\A\./}, "")
           allowed_paths.any? do |allowed|
-            prefix = allowed.sub(%r{\A\./}, "")
-            normalized == prefix || normalized.start_with?(prefix.end_with?("/") ? prefix : "#{prefix}/")
+            prefix = clean_relative_path(allowed)
+            next false unless prefix
+            prefix == "." || normalized == prefix || normalized.start_with?(prefix.end_with?("/") ? prefix : "#{prefix}/")
           end
         end
 
@@ -5610,6 +5628,32 @@ cmd_action() {
           else
             "recorded_stale"
           end
+
+        snapshot_blockers = []
+        if !Dir.exist?(project_dir)
+          snapshot_blockers << "project_config_missing"
+        else
+          %w[
+            operating_model.md
+            agent_registry.md
+            current_context.md
+            source_of_truth.md
+            task_board.md
+            ops_decisions.md
+            ops_issues.md
+          ].each do |name|
+            snapshot_blockers << "required_file_missing" unless File.file?(File.join(project_dir, name))
+          end
+          %w[tasks tasks/active tasks/backlog tasks/archive].each do |name|
+            snapshot_blockers << "required_dir_missing" unless Dir.exist?(File.join(project_dir, name))
+          end
+        end
+        if status_ref && status_ref_state == "ref_not_found_locally"
+          snapshot_blockers << "canonical_status_ref_unavailable"
+        end
+        snapshot_health = snapshot_blockers.empty? ? "ok" : "blocked"
+        snapshot_can_start_task = snapshot_blockers.empty?
+        snapshot_can_transition = snapshot_can_start_task && !%w[ref_not_found_locally not_recorded recorded_stale].include?(status_ref_state)
 
         blocked_actions = []
         warnings = []
@@ -5678,12 +5722,13 @@ cmd_action() {
           "blocked_actions" => blocked_actions,
           "warnings" => warnings,
           "evidence" => {
-            "snapshot_health" => blocked_actions.empty? ? "ok" : "blocked",
-            "can_start_task" => true,
-            "can_transition" => !blocked_actions.any? { |item| item["action"] == "task_transition" },
+            "snapshot_health" => snapshot_health,
+            "can_start_task" => snapshot_can_start_task,
+            "can_transition" => snapshot_can_transition,
             "status_ref_state" => status_ref_state,
             "canonical_status_ref" => status_ref,
-            "canonical_status_sha" => status_ref_sha
+            "canonical_status_sha" => status_ref_sha,
+            "snapshot_blockers" => snapshot_blockers
           }
         })
 
@@ -5778,14 +5823,46 @@ cmd_action() {
         missing_approval -= data.fetch("requires_user_approval", [])
         errors << "$.requires_user_approval: missing approval actions #{missing_approval.join(", ")}" unless missing_approval.empty?
 
+        def clean_relative_path(path)
+          value = path.to_s.strip
+          return nil if value.empty? || value.start_with?("/")
+          parts = []
+          value.split("/").each do |part|
+            next if part.empty? || part == "."
+            if part == ".."
+              return nil if parts.empty?
+              parts.pop
+            else
+              parts << part
+            end
+          end
+          parts.empty? ? "." : parts.join("/")
+        end
+
+        def path_allowed?(path, allowed)
+          normalized = clean_relative_path(path)
+          return false unless normalized
+          return true if allowed.empty?
+          allowed.any? do |prefix_raw|
+            prefix = clean_relative_path(prefix_raw)
+            next false unless prefix
+            prefix == "." || normalized == prefix || normalized.start_with?(prefix.end_with?("/") ? prefix : "#{prefix}/")
+          end
+        end
+
         if data.fetch("intended_actions", []).include?("edit_paths") || data.fetch("intended_actions", []).include?("edit_allowed_paths")
           requested = data.fetch("requested_paths", [])
           allowed = data.fetch("allowed_paths", [])
-          outside = requested.reject do |path|
-            allowed.empty? || allowed.any? { |prefix| path == prefix || path.start_with?(prefix.end_with?("/") ? prefix : "#{prefix}/") }
-          end
+          outside = requested.reject { |path| path_allowed?(path, allowed) }
           has_blocker = data.fetch("blocked_actions", []).any? { |item| item["action"] == "edit_paths" }
           errors << "$.blocked_actions: missing edit_paths blocker" if outside.any? && !has_blocker
+        end
+
+        stale_states = %w[ref_not_found_locally not_recorded recorded_stale]
+        if data.fetch("intended_actions", []).include?("task_transition") &&
+            (stale_states.include?(data.dig("evidence", "status_ref_state").to_s) || data.dig("evidence", "can_transition") == false)
+          has_blocker = data.fetch("blocked_actions", []).any? { |item| item["action"] == "task_transition" }
+          errors << "$.blocked_actions: missing task_transition blocker" unless has_blocker
         end
 
         abort("schema_error:\n" + errors.join("\n")) unless errors.empty?
