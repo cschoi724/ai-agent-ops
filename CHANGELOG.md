@@ -20,6 +20,7 @@
 - `runtime/workflows.json` workflow catalog와 checkpoint/canonical publish 정책 추가
 - `aiops validate workflow-catalog` 명령과 `task transition` checkpoint 출력 추가
 - `aiops project context --role ROLE [--task TASK_ID] [--json]` Agent Context Contract 출력 추가
+- `aiops project health [--json]` 운영 준비도 요약 추가
 
 ## 0.9.0 - 2026-07-31
 

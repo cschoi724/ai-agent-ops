@@ -69,6 +69,7 @@ YourProject/
 | `aiops doctor --strict` | 설치와 운영 구성을 엄격 점검 |
 | `aiops project inspect` | 현재 프로젝트 운영 상태를 읽기 전용으로 요약 |
 | `aiops project context --role ROLE` | Role Session이 따라야 할 현재 실행 계약 출력 |
+| `aiops project health` | 운영 가능 여부와 다음 조치를 짧게 요약 |
 | `aiops bootstrap-guide` | 현재 상태에 맞는 다음 Agent 입력 안내 |
 | `aiops session-guide` | 운영 구성 이후 열 Role Session 선택 |
 | `aiops role prompt ROLE` | Codex/Claude 공통 Role Session 첫 문구 생성 |

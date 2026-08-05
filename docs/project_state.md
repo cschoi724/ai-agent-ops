@@ -74,6 +74,35 @@ Role Session은 이 출력을 기준으로 “내가 지금 이 Task를 맡아�
 aiops.project_context.v1
 ```
 
+## Project Health
+
+`aiops project health`는 현재 프로젝트를 바로 운영해도 되는지 짧게 요약한다.
+
+```sh
+aiops project health
+aiops project health --json
+```
+
+이 명령은 파일을 수정하지 않는다. `inspect`, schema, workflow catalog, canonical status ref, migration 신호를 사람이 읽기 쉬운 건강 상태로 압축한다.
+
+주요 출력:
+
+- `overall`: `ok`, `warning`, `blocked`
+- `readiness.bootstrap`: bootstrap 완료 여부
+- `readiness.task_work`: Task 작업 착수 가능 여부
+- `readiness.multi_agent`: 다중 Agent/worktree 운영 준비 상태
+- `readiness.migration`: 마이그레이션 필요 여부
+- `checks`: `ok`, `warn`, `blocker` 단위의 상세 신호
+- `next`: 다음에 실행할 추천 명령 또는 조치
+
+현재 schema:
+
+```text
+aiops.project_health.v1
+```
+
+`health`는 빠른 판단을 위한 파생 요약이다. 실제 운영 기준은 `.ai_project/` 문서, workflow catalog, Git 상태, schema 검증 결과를 함께 확인한다.
+
 ## 관계 검증
 
 `aiops validate project --strict`는 schema 검증 후 문서 간 관계도 함께 점검한다.
