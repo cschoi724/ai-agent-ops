@@ -17,6 +17,8 @@
 - `aiops validate project --strict`에 Task, Agent, Role, Workflow, Source of Truth, canonical ref 관계 검증 추가
 - `aiops validate project --strict`에 Task 상태별 운영 증거 report-only 검증 추가
 - `aiops task transition`에 canonical status ref 기반 stale 상태 전이 보호 추가
+- `runtime/workflows.json` workflow catalog와 checkpoint/canonical publish 정책 추가
+- `aiops validate workflow-catalog` 명령과 `task transition` checkpoint 출력 추가
 
 ## 0.9.0 - 2026-07-31
 

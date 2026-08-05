@@ -16,6 +16,7 @@ Usage:
   aiops validate [project] [--target DIR] [--strict]
   aiops validate task FILE [--strict]
   aiops validate handoff FILE [--strict]
+  aiops validate workflow-catalog [--target DIR|--core DIR]
   aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
   aiops task status TASK_ID [--target DIR] [--source local|canonical]
   aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT]
@@ -55,6 +56,7 @@ Examples:
   aiops validate project --target /path/to/project --strict
   aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
   aiops validate handoff .ai_project/handoffs/T-YYYYMMDD-001_execution_to_verification.md --strict
+  aiops validate workflow-catalog
   aiops task create --title "로그인 화면 구현" --workflow feature --role "Lead Role"
   aiops task status T-YYYYMMDD-001 --source canonical
   aiops task transition T-YYYYMMDD-001 --to approved --role "Direction Role"
@@ -1092,6 +1094,75 @@ task_transition_allowed() {
     blocked:scoped:"Lead Role"|blocked:approved:"Lead Role"|blocked:in_progress:"Execution Role"|blocked:cancelled:"Direction Role"|blocked:cancelled:"Product Owner") return 0 ;;
     *) return 1 ;;
   esac
+}
+
+workflow_catalog_path() {
+  target="$1"
+  core="${2:-}"
+
+  if [ -n "$target" ] && [ -f "$target/.ai/runtime/workflows.json" ]; then
+    printf '%s\n' "$target/.ai/runtime/workflows.json"
+    return 0
+  fi
+
+  if [ -n "$core" ] && [ -f "$core/runtime/workflows.json" ]; then
+    printf '%s\n' "$core/runtime/workflows.json"
+    return 0
+  fi
+
+  default_core="$(default_core_dir)"
+  if [ -f "$default_core/runtime/workflows.json" ]; then
+    printf '%s\n' "$default_core/runtime/workflows.json"
+    return 0
+  fi
+
+  return 1
+}
+
+workflow_status_field() {
+  target="$1"
+  workflow="$2"
+  status="$3"
+  field="$4"
+
+  catalog="$(workflow_catalog_path "$target" "" 2>/dev/null || true)"
+  [ -n "$catalog" ] || return 0
+  command -v ruby >/dev/null 2>&1 || return 0
+
+  ruby -rjson -e '
+    catalog_path = ARGV[0]
+    workflow_id = ARGV[1]
+    status_id = ARGV[2]
+    field = ARGV[3]
+    catalog = JSON.parse(File.read(catalog_path))
+    workflows = catalog["workflows"] || {}
+    default_workflow = catalog["default_workflow"]
+
+    def workflow_entry(workflows, workflow_id, default_workflow)
+      workflows[workflow_id] || workflows[default_workflow] || {}
+    end
+
+    def resolve_status(workflows, workflow_id, status_id, default_workflow, seen = [])
+      return nil if workflow_id.nil? || seen.include?(workflow_id)
+      entry = workflow_entry(workflows, workflow_id, default_workflow)
+      statuses = entry["statuses"] || {}
+      return statuses[status_id] if statuses.key?(status_id)
+      inherited = entry["inherits"]
+      return resolve_status(workflows, inherited, status_id, default_workflow, seen + [workflow_id]) if inherited
+      return nil if workflow_id == default_workflow
+      resolve_status(workflows, default_workflow, status_id, default_workflow, seen + [workflow_id])
+    end
+
+    status = resolve_status(workflows, workflow_id, status_id, default_workflow)
+    exit 0 unless status
+    value = status[field]
+    case value
+    when true then puts "true"
+    when false then puts "false"
+    when nil then exit 0
+    else puts value
+    end
+  ' "$catalog" "$workflow" "$status" "$field"
 }
 
 task_require_project() {
@@ -2928,6 +2999,119 @@ cmd_validate() {
       validate_front_matter handoff "$file" "$strict"
       info "ok: handoff metadata"
       ;;
+    workflow-catalog)
+      target="$(pwd)"
+      core=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --core)
+            shift
+            [ "$#" -gt 0 ] || die "--core requires a value"
+            core="$1"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown validate workflow-catalog option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      target="$(abs_path "$target")"
+      if [ -n "$core" ]; then
+        core="$(abs_path "$core")"
+      fi
+      catalog="$(workflow_catalog_path "$target" "$core")" || die "workflow catalog not found"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for workflow catalog validation"
+
+      info "AI Ops workflow catalog validate"
+      info "catalog: $catalog"
+      ruby -rjson -e '
+        path = ARGV[0]
+        catalog = JSON.parse(File.read(path))
+        abort("schema_error: schema must be aiops.workflow_catalog.v1") unless catalog["schema"] == "aiops.workflow_catalog.v1"
+        workflows = catalog["workflows"]
+        abort("schema_error: workflows must be an object") unless workflows.is_a?(Hash) && !workflows.empty?
+        default_workflow = catalog["default_workflow"]
+        abort("schema_error: default_workflow missing") unless workflows.key?(default_workflow)
+
+        allowed_publish = %w[not_required optional recommended required]
+        allowed_statuses = %w[
+          proposed scoped approved in_progress verification_ready
+          verification_in_progress verification_passed completion_review done
+          blocked rework_requested cancelled
+        ]
+        allowed_roles = [
+          nil, "Direction Role", "Lead Role", "Execution Role", "Verification Role",
+          "Completion Role", "Release Role", "Ops Governance Role", "Product Owner", "any"
+        ]
+
+        def resolve_workflow(workflows, workflow_id, seen = [])
+          abort("schema_error: circular workflow inheritance #{workflow_id}") if seen.include?(workflow_id)
+          entry = workflows[workflow_id]
+          abort("schema_error: missing inherited workflow #{workflow_id}") unless entry.is_a?(Hash)
+          if entry["inherits"]
+            parent = resolve_workflow(workflows, entry["inherits"], seen + [workflow_id])
+            parent.merge(entry) do |key, parent_value, child_value|
+              if key == "statuses"
+                parent_value.merge(child_value || {})
+              elsif key == "transitions"
+                child_value || parent_value
+              else
+                child_value.nil? ? parent_value : child_value
+              end
+            end
+          else
+            entry
+          end
+        end
+
+        workflows.each do |workflow_id, entry|
+          abort("schema_error: workflow #{workflow_id} must be an object") unless entry.is_a?(Hash)
+          abort("schema_error: workflow #{workflow_id} label missing") if entry["label"].to_s.empty?
+          abort("schema_error: workflow #{workflow_id} description missing") if entry["description"].to_s.empty?
+          resolved = resolve_workflow(workflows, workflow_id)
+          statuses = resolved["statuses"]
+          transitions = resolved["transitions"]
+          abort("schema_error: workflow #{workflow_id} statuses missing") unless statuses.is_a?(Hash) && !statuses.empty?
+          abort("schema_error: workflow #{workflow_id} transitions missing") unless transitions.is_a?(Array) && !transitions.empty?
+
+          statuses.each do |status, meta|
+            abort("schema_error: invalid status #{workflow_id}.#{status}") unless allowed_statuses.include?(status)
+            abort("schema_error: #{workflow_id}.#{status} checkpoint must be boolean") unless meta["checkpoint"] == true || meta["checkpoint"] == false
+            abort("schema_error: #{workflow_id}.#{status} canonical_publish invalid") unless allowed_publish.include?(meta["canonical_publish"])
+            abort("schema_error: #{workflow_id}.#{status} meaning missing") if meta["meaning"].to_s.empty?
+          end
+
+          transitions.each do |transition|
+            from = transition["from"]
+            to = transition["to"]
+            roles = transition["allowed_roles"]
+            abort("schema_error: transition from invalid #{workflow_id}: #{from}") unless statuses.key?(from)
+            abort("schema_error: transition to invalid #{workflow_id}: #{to}") unless statuses.key?(to)
+            abort("schema_error: transition roles missing #{workflow_id}: #{from}->#{to}") unless roles.is_a?(Array) && !roles.empty?
+            roles.each do |role|
+              abort("schema_error: transition role invalid #{workflow_id}: #{role}") unless allowed_roles.include?(role)
+            end
+            next_role = transition["next_role"]
+            abort("schema_error: next_role invalid #{workflow_id}: #{next_role}") unless allowed_roles.include?(next_role)
+          end
+        end
+
+        puts "ok: schema"
+        puts "ok: workflows #{workflows.keys.sort.join(", ")}"
+        puts "ok: checkpoint metadata"
+      ' "$catalog"
+      info "ok: workflow catalog"
+      ;;
     project)
       target="$(pwd)"
       strict="no"
@@ -3264,6 +3448,7 @@ EOF
       target="$(abs_path "$target")"
       task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
       from_status="$(task_yaml_field "$task_file" status)"
+      workflow="$(task_yaml_field "$task_file" workflow)"
       locked_by="$(task_yaml_field "$task_file" locked_by)"
       status_ref="$(canonical_status_ref_value "$target")"
       status_ref_sha=""
@@ -3320,6 +3505,9 @@ EOF
       fi
 
       next_role="$(task_next_role_for_status "$to_status")"
+      checkpoint="$(workflow_status_field "$target" "$workflow" "$to_status" checkpoint)"
+      canonical_publish="$(workflow_status_field "$target" "$workflow" "$to_status" canonical_publish)"
+      status_meaning="$(workflow_status_field "$target" "$workflow" "$to_status" meaning)"
       date_value="$(date +%Y-%m-%d)"
       actor_label="${actor:-$role}"
 
@@ -3377,8 +3565,26 @@ EOF
       info "task_id: $task_id"
       info "from: $from_status"
       info "to: $to_status"
+      info "workflow: $workflow"
       info "role: $role"
       info "next_role: $next_role"
+      [ -z "$checkpoint" ] || info "checkpoint: $checkpoint"
+      [ -z "$canonical_publish" ] || info "canonical_publish: $canonical_publish"
+      [ -z "$status_meaning" ] || info "status_meaning: $status_meaning"
+      case "$canonical_publish" in
+        not_required)
+          info "checkpoint_note: local/task branch state is enough for this status"
+          ;;
+        optional)
+          info "checkpoint_note: canonical publish is optional for this status"
+          ;;
+        recommended)
+          info "checkpoint_note: publish this checkpoint to the project canonical status ref when the next Agent should continue from it"
+          ;;
+        required)
+          info "checkpoint_note: publish this checkpoint to the project canonical status ref before other Agents rely on it"
+          ;;
+      esac
       if [ -n "$status_ref" ]; then
         info "canonical_status_ref: $status_ref"
         info "canonical_status_sha: $status_ref_sha"
@@ -3962,6 +4168,7 @@ cmd_role() {
       info ""
       info "먼저 다음 문서를 확인해줘."
       info "- .ai/runtime/workflow.md"
+      info "- .ai/runtime/workflows.json"
       info "- .ai/runtime/task_queue.md"
       info "- .ai/runtime/role_handoff.md"
       info "- .ai/policies/shared_status_policy.md"
@@ -4547,7 +4754,7 @@ cmd_export() {
             "adapter_contract" => {
               "task_graph" => "tasks[].depends_on / tasks[].blocks",
               "role_assignment" => "tasks[].target_role and agents[].roles",
-              "state_transitions" => "tasks[].status plus runtime/workflow.md",
+              "state_transitions" => "tasks[].status plus runtime/workflows.json",
               "handoff_events" => "handoffs[]",
               "approval_checkpoints" => "approval_checkpoints[]"
             }
@@ -4754,12 +4961,14 @@ cmd_release_check() {
     "$core/.github/workflows/ci.yml" \
     "$core/docs/installation.md" \
     "$core/docs/distribution.md" \
+    "$core/docs/project_state.md" \
     "$core/docs/shared_status.md" \
     "$core/scripts/test.sh" \
     "$core/bin/aiops" \
     "$core/schemas/README.md" \
     "$core/schemas/task.schema.json" \
     "$core/schemas/workflow.schema.json" \
+    "$core/schemas/workflow_catalog.schema.json" \
     "$core/schemas/handoff.schema.json" \
     "$core/schemas/agent_registry.schema.json" \
     "$core/schemas/operating_model.schema.json" \
@@ -4779,6 +4988,7 @@ cmd_release_check() {
     "$core/policies/session_orchestration_policy.md" \
     "$core/policies/versioning_policy.md" \
     "$core/runtime/workflow.md" \
+    "$core/runtime/workflows.json" \
     "$core/runtime/task_queue.md" \
     "$core/runtime/bootstrap_options.json" \
     "$core/templates/ci/github-actions/aiops.yml" \

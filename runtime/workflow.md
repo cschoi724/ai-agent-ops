@@ -8,6 +8,8 @@
 
 이 문서는 조직형 AI Agent 운영체계의 기본 실행 흐름을 정의한다.
 
+기계가 읽는 workflow catalog는 `.ai/runtime/workflows.json`이다. 이 문서는 사람이 이해하기 위한 설명 계층이며, CLI 검증과 checkpoint metadata는 catalog를 기준으로 확장한다.
+
 vNext workflow는 PM -> Development -> QA 순서가 아니라 책임 단계의 순서로 Task를 처리한다.
 
 ```text
@@ -72,6 +74,8 @@ proposed or scoped or approved
 ```
 
 이 흐름은 모든 workflow의 기본 뼈대다. 특정 workflow가 더 짧거나 긴 흐름을 가져야 하면 `.ai/workflows/`의 개별 workflow 문서가 명시한다.
+
+상태 중 일부는 여러 Agent가 공유해야 하는 checkpoint다. checkpoint 여부와 canonical 반영 권장 수준은 `.ai/runtime/workflows.json`의 `checkpoint`, `canonical_publish` 필드를 따른다.
 
 ## 4. 책임 단계
 

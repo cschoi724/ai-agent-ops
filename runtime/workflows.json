@@ -1,0 +1,276 @@
+{
+  "schema": "aiops.workflow_catalog.v1",
+  "version": "1",
+  "default_workflow": "feature",
+  "generated_from": [
+    "runtime/workflow.md",
+    "workflows/feature.md",
+    "workflows/bugfix.md",
+    "workflows/docs.md",
+    "workflows/ops_migration.md",
+    "bin/aiops task_transition_allowed"
+  ],
+  "workflows": {
+    "feature": {
+      "label": "Feature",
+      "description": "신규 기능, 기능 확장, 일반 구현 작업",
+      "statuses": {
+        "proposed": {
+          "checkpoint": false,
+          "canonical_publish": "optional",
+          "meaning": "요구가 Task 후보로 기록된 상태"
+        },
+        "scoped": {
+          "checkpoint": false,
+          "canonical_publish": "optional",
+          "meaning": "Lead Role이 범위, 기준 문서, ownership을 정리한 상태"
+        },
+        "approved": {
+          "checkpoint": true,
+          "canonical_publish": "required",
+          "meaning": "실행이 승인되어 Execution Role이 이어받을 수 있는 상태"
+        },
+        "in_progress": {
+          "checkpoint": false,
+          "canonical_publish": "not_required",
+          "meaning": "작업 Agent가 task branch 또는 worktree에서 실행 중인 상태"
+        },
+        "verification_ready": {
+          "checkpoint": true,
+          "canonical_publish": "recommended",
+          "meaning": "구현 결과가 검증 Agent에게 인계될 준비가 된 상태"
+        },
+        "verification_in_progress": {
+          "checkpoint": false,
+          "canonical_publish": "not_required",
+          "meaning": "검증 Agent가 task branch 또는 worktree에서 검증 중인 상태"
+        },
+        "verification_passed": {
+          "checkpoint": true,
+          "canonical_publish": "recommended",
+          "meaning": "검증이 통과되어 Completion Role이 완료 판단을 할 수 있는 상태"
+        },
+        "completion_review": {
+          "checkpoint": true,
+          "canonical_publish": "recommended",
+          "meaning": "완료 확정 전 마지막 검토가 필요한 상태"
+        },
+        "done": {
+          "checkpoint": true,
+          "canonical_publish": "required",
+          "meaning": "공용 기준에서 Task 완료가 확정된 상태"
+        },
+        "blocked": {
+          "checkpoint": true,
+          "canonical_publish": "recommended",
+          "meaning": "진행이 차단되어 Lead Role 또는 사용자 결정이 필요한 상태"
+        },
+        "rework_requested": {
+          "checkpoint": true,
+          "canonical_publish": "recommended",
+          "meaning": "검증 또는 완료 검토 결과 재작업이 필요한 상태"
+        },
+        "cancelled": {
+          "checkpoint": true,
+          "canonical_publish": "required",
+          "meaning": "공용 기준에서 Task 취소가 확정된 상태"
+        }
+      },
+      "transitions": [
+        {
+          "from": "proposed",
+          "to": "scoped",
+          "allowed_roles": [
+            "Lead Role",
+            "Direction Role"
+          ],
+          "next_role": "Direction Role"
+        },
+        {
+          "from": "proposed",
+          "to": "approved",
+          "allowed_roles": [
+            "Direction Role",
+            "Lead Role",
+            "Product Owner"
+          ],
+          "next_role": "Execution Role"
+        },
+        {
+          "from": "scoped",
+          "to": "approved",
+          "allowed_roles": [
+            "Direction Role",
+            "Lead Role",
+            "Product Owner"
+          ],
+          "next_role": "Execution Role"
+        },
+        {
+          "from": "approved",
+          "to": "in_progress",
+          "allowed_roles": [
+            "Execution Role"
+          ],
+          "next_role": "Execution Role"
+        },
+        {
+          "from": "in_progress",
+          "to": "verification_ready",
+          "allowed_roles": [
+            "Execution Role"
+          ],
+          "next_role": "Verification Role"
+        },
+        {
+          "from": "verification_ready",
+          "to": "verification_in_progress",
+          "allowed_roles": [
+            "Verification Role"
+          ],
+          "next_role": "Verification Role"
+        },
+        {
+          "from": "verification_in_progress",
+          "to": "verification_passed",
+          "allowed_roles": [
+            "Verification Role"
+          ],
+          "next_role": "Completion Role"
+        },
+        {
+          "from": "verification_in_progress",
+          "to": "rework_requested",
+          "allowed_roles": [
+            "Verification Role"
+          ],
+          "next_role": "Lead Role"
+        },
+        {
+          "from": "verification_passed",
+          "to": "completion_review",
+          "allowed_roles": [
+            "Completion Role"
+          ],
+          "next_role": "Completion Role"
+        },
+        {
+          "from": "completion_review",
+          "to": "done",
+          "allowed_roles": [
+            "Completion Role",
+            "Lead Role",
+            "Product Owner"
+          ],
+          "next_role": null
+        },
+        {
+          "from": "completion_review",
+          "to": "rework_requested",
+          "allowed_roles": [
+            "Completion Role",
+            "Lead Role"
+          ],
+          "next_role": "Lead Role"
+        },
+        {
+          "from": "rework_requested",
+          "to": "scoped",
+          "allowed_roles": [
+            "Lead Role"
+          ],
+          "next_role": "Direction Role"
+        },
+        {
+          "from": "rework_requested",
+          "to": "approved",
+          "allowed_roles": [
+            "Lead Role",
+            "Direction Role"
+          ],
+          "next_role": "Execution Role"
+        },
+        {
+          "from": "blocked",
+          "to": "scoped",
+          "allowed_roles": [
+            "Lead Role"
+          ],
+          "next_role": "Direction Role"
+        },
+        {
+          "from": "blocked",
+          "to": "approved",
+          "allowed_roles": [
+            "Lead Role"
+          ],
+          "next_role": "Execution Role"
+        },
+        {
+          "from": "blocked",
+          "to": "in_progress",
+          "allowed_roles": [
+            "Execution Role"
+          ],
+          "next_role": "Execution Role"
+        },
+        {
+          "from": "proposed",
+          "to": "cancelled",
+          "allowed_roles": [
+            "Direction Role",
+            "Product Owner"
+          ],
+          "next_role": null
+        },
+        {
+          "from": "scoped",
+          "to": "cancelled",
+          "allowed_roles": [
+            "Direction Role",
+            "Product Owner"
+          ],
+          "next_role": null
+        },
+        {
+          "from": "approved",
+          "to": "cancelled",
+          "allowed_roles": [
+            "Direction Role",
+            "Product Owner"
+          ],
+          "next_role": null
+        },
+        {
+          "from": "blocked",
+          "to": "cancelled",
+          "allowed_roles": [
+            "Direction Role",
+            "Product Owner"
+          ],
+          "next_role": null
+        }
+      ]
+    },
+    "bugfix": {
+      "label": "Bugfix",
+      "description": "버그 수정, 회귀 보정",
+      "inherits": "feature"
+    },
+    "docs": {
+      "label": "Docs",
+      "description": "문서 작성, 정리, 계획 수립",
+      "inherits": "feature"
+    },
+    "ops_migration": {
+      "label": "Ops Migration",
+      "description": "AI Ops 운영 체계 도입 또는 마이그레이션",
+      "inherits": "feature"
+    },
+    "release": {
+      "label": "Release",
+      "description": "배포, 릴리즈 노트, 운영 인계",
+      "inherits": "feature"
+    }
+  }
+}

@@ -74,6 +74,7 @@ YourProject/
 | `aiops migrate --plan` | 기존 운영 프로젝트 업데이트 영향 확인 |
 | `aiops migrate --apply` | 승인된 안전 범위만 마이그레이션 |
 | `aiops validate --strict` | `.ai_project/` schema 검증 |
+| `aiops validate workflow-catalog` | workflow catalog와 checkpoint 정책 검증 |
 | `aiops task create --title TITLE` | Task 생성 |
 | `aiops status-ref` | 공용 상태 기준 ref 확인 |
 | `aiops sync-status` | canonical ref fetch/SHA 기록 |

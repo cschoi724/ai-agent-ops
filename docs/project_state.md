@@ -93,3 +93,26 @@ JSON 출력은 source of truth가 아니라, 현재 프로젝트 파일과 Git �
 불일치가 있으면 오래된 worktree 상태로 판단하고 전이를 차단한다. 전이가 허용되면 Task에 현재 `status_ref`, `status_ref_sha`, `base_ref`, `base_sha`를 기록한다.
 
 이 보호장치는 다중 worktree 환경에서 이미 완료된 Task를 다시 완료 처리하거나, 오래된 dependency 상태를 기준으로 작업을 진행하는 문제를 줄이기 위한 것이다.
+
+## Workflow Catalog와 Checkpoint
+
+`runtime/workflows.json`은 workflow 상태와 checkpoint 정책을 기계가 읽을 수 있게 정리한 catalog다.
+
+Task 상태 전이 후 `aiops task transition`은 catalog를 읽어 아래 정보를 출력한다.
+
+- `workflow`
+- `checkpoint`
+- `canonical_publish`
+- `status_meaning`
+- `checkpoint_note`
+
+`checkpoint: true`는 다른 Agent가 이어받거나 dependency 판단에 영향을 줄 수 있는 상태라는 뜻이다. 이 상태는 프로젝트가 설정한 `canonical_status_ref`에 반영하는 것이 권장되거나 필요할 수 있다.
+
+`canonical_publish` 의미:
+
+- `not_required`: 로컬 또는 task branch 상태로 충분
+- `optional`: 필요하면 canonical에 반영
+- `recommended`: 다음 Agent 인계를 위해 canonical 반영 권장
+- `required`: 다른 Agent가 의존하기 전 canonical 반영 필요
+
+브랜치 이름은 고정하지 않는다. `origin/develop`이 아니라 프로젝트별 `canonical_status_ref`가 기준이다.
