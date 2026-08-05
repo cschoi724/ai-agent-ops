@@ -9,15 +9,19 @@ Usage:
   aiops seed [--adapter codex|claude|both] [--mode link|copy] [--target DIR] [--core DIR] [--force]
   aiops doctor [--target DIR] [--strict]
   aiops migrate [--target DIR] [--plan|--apply]
+  aiops project inspect [--target DIR] [--json]
+  aiops project context --role ROLE [--target DIR] [--task TASK_ID] [--json]
+  aiops project health [--target DIR] [--json]
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
   aiops role prompt ROLE [--target DIR] [--task TASK_ID] [--adapter codex|claude|generic] [--agent NAME]
   aiops validate [project] [--target DIR] [--strict]
   aiops validate task FILE [--strict]
   aiops validate handoff FILE [--strict]
+  aiops validate workflow-catalog [--target DIR|--core DIR]
   aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
   aiops task status TASK_ID [--target DIR] [--source local|canonical]
-  aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT]
+  aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT] [--blocker TEXT] [--next-decision TEXT]
   aiops task lock TASK_ID --by AGENT [--target DIR] [--role ROLE] [--session ID]
   aiops task unlock TASK_ID --by AGENT [--target DIR]
   aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT [--target DIR]
@@ -48,10 +52,15 @@ Examples:
   aiops seed --adapter both --mode copy
   aiops doctor
   aiops migrate --plan
+  aiops project inspect
+  aiops project inspect --json
+  aiops project context --role execution --task T-YYYYMMDD-001
+  aiops project health
   aiops validate --strict
   aiops validate project --target /path/to/project --strict
   aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
   aiops validate handoff .ai_project/handoffs/T-YYYYMMDD-001_execution_to_verification.md --strict
+  aiops validate workflow-catalog
   aiops task create --title "로그인 화면 구현" --workflow feature --role "Lead Role"
   aiops task status T-YYYYMMDD-001 --source canonical
   aiops task transition T-YYYYMMDD-001 --to approved --role "Direction Role"
@@ -446,6 +455,375 @@ validate_task_file() {
   info "ok: task metadata"
 }
 
+validate_project_relationships() {
+  target="$1"
+  project_dir="$target/.ai_project"
+
+  info ""
+  info "validate: relationships"
+
+  if command -v ruby >/dev/null 2>&1; then
+    ruby -ryaml -rdate -rfind -ropen3 -e '
+      target = ARGV[0]
+      project_dir = File.join(target, ".ai_project")
+      warnings = 0
+
+      def front_matter(path)
+        return {} unless File.file?(path)
+        text = File.read(path)
+        return {} unless text.start_with?("---\n")
+        lines = text.lines
+        closing = nil
+        lines[1..].each_with_index do |line, idx|
+          if line.strip == "---"
+            closing = idx + 1
+            break
+          end
+        end
+        return {} unless closing
+        YAML.safe_load(lines[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+      rescue Psych::SyntaxError
+        {}
+      end
+
+      def legacy_field(path, key)
+        return nil unless File.file?(path)
+        File.foreach(path) do |line|
+          if line =~ /^[[:space:]]*#{Regexp.escape(key)}:[[:space:]]*(.*)$/
+            value = Regexp.last_match(1).strip
+            return nil if value.empty?
+            return value.gsub(/\A`|`\z/, "")
+          end
+        end
+        nil
+      end
+
+      def list(value)
+        case value
+        when Array then value.compact.map(&:to_s).reject(&:empty?)
+        when nil then []
+        else value.to_s.split(",").map(&:strip).reject(&:empty?)
+        end
+      end
+
+      def blankish?(value)
+        value.nil? || value.to_s.empty? || %w[null unresolved pending_decision none].include?(value.to_s)
+      end
+
+      def git(target, *args)
+        stdout, _stderr, status = Open3.capture3("git", "-C", target, *args)
+        return nil unless status.success?
+        stdout.strip
+      end
+
+      def warn(message)
+        puts "warn: #{message}"
+        1
+      end
+
+      operating = front_matter(File.join(project_dir, "operating_model.md"))
+      registry = front_matter(File.join(project_dir, "agent_registry.md"))
+      agents = registry["agents"].is_a?(Array) ? registry["agents"] : []
+      agent_names = agents.map { |agent| agent.is_a?(Hash) ? agent["agent"].to_s : nil }.compact.reject(&:empty?)
+      agent_roles = agents.flat_map { |agent| agent.is_a?(Hash) ? list(agent["roles"]) : [] }.uniq
+      declared_roles = list(operating["active_roles"]) + list(operating["deferred_roles"]) + agent_roles
+      declared_roles = declared_roles.uniq
+
+      workflow_names = %w[feature bugfix docs ops_migration release]
+      ai_workflows = File.join(target, ".ai", "workflows")
+      if Dir.exist?(ai_workflows)
+        Dir.glob(File.join(ai_workflows, "*.md")).each do |path|
+          workflow_names << File.basename(path, ".md")
+        end
+      end
+      workflow_names = workflow_names.uniq
+
+      task_files = []
+      task_root = File.join(project_dir, "tasks")
+      if Dir.exist?(task_root)
+        Find.find(task_root) do |entry|
+          task_files << entry if File.file?(entry) && File.basename(entry).end_with?(".md")
+        end
+      end
+      task_files.sort!
+
+      tasks = task_files.map do |path|
+        data = front_matter(path)
+        {
+          "path" => path,
+          "relative" => path.sub(%r{\A#{Regexp.escape(target)}/?}, ""),
+          "id" => data["id"] || File.basename(path, ".md"),
+          "status" => data["status"] || legacy_field(path, "status"),
+          "workflow" => data["workflow"] || legacy_field(path, "workflow"),
+          "target_role" => data["target_role"] || legacy_field(path, "target_role"),
+          "target_agent" => data["target_agent"] || legacy_field(path, "target_agent"),
+          "depends_on" => list(data["depends_on"]),
+          "blocks" => list(data["blocks"]),
+          "source_of_truth" => list(data["source_of_truth"])
+        }
+      end
+      task_ids = tasks.map { |task| task["id"].to_s }.reject(&:empty?)
+
+      if agents.empty?
+        warnings += warn("agent_registry has no agents; target_agent relationship checks are limited")
+      else
+        puts "ok: agent registry reference set"
+      end
+
+      if workflow_names.empty?
+        warnings += warn("workflow reference set is empty")
+      else
+        puts "ok: workflow reference set"
+      end
+
+      tasks.each do |task|
+        label = task["relative"]
+        role = task["target_role"]
+        agent = task["target_agent"]
+        workflow = task["workflow"]
+
+        if !blankish?(role) && !declared_roles.include?(role.to_s)
+          warnings += warn("#{label} target_role not declared in operating_model or agent_registry: #{role}")
+        end
+
+        if !blankish?(agent) && !agent_names.include?(agent.to_s)
+          warnings += warn("#{label} target_agent not registered: #{agent}")
+        end
+
+        if !blankish?(workflow) && !workflow_names.include?(workflow.to_s)
+          warnings += warn("#{label} workflow not found in .ai/workflows: #{workflow}")
+        end
+
+        (task["depends_on"] + task["blocks"]).each do |dependency|
+          next if blankish?(dependency)
+          warnings += warn("#{label} references missing task: #{dependency}") unless task_ids.include?(dependency.to_s)
+        end
+
+        task["source_of_truth"].each do |source|
+          next if blankish?(source)
+          next if source =~ %r{\Ahttps?://}
+          next if source.start_with?("external:")
+          source_path = source.start_with?("/") ? source : File.join(target, source)
+          warnings += warn("#{label} source_of_truth missing: #{source}") unless File.exist?(source_path)
+        end
+      end
+
+      canonical_status_ref = operating["canonical_status_ref"] || legacy_field(File.join(project_dir, "operating_model.md"), "canonical_status_ref")
+      unless blankish?(canonical_status_ref)
+        if git(target, "rev-parse", "--is-inside-work-tree") == "true"
+          if git(target, "rev-parse", "--verify", "#{canonical_status_ref}^{commit}")
+            puts "ok: canonical_status_ref resolves"
+          else
+            warnings += warn("canonical_status_ref does not resolve locally: #{canonical_status_ref}")
+          end
+        else
+          warnings += warn("canonical_status_ref is set but target is not a Git worktree: #{canonical_status_ref}")
+        end
+      end
+
+      puts "relationship_warnings: #{warnings}"
+      puts "ok: relationship validation report_only"
+    ' "$target"
+  else
+    info "note: ruby not available; relationship validation skipped"
+  fi
+}
+
+validate_project_status_requirements() {
+  target="$1"
+  project_dir="$target/.ai_project"
+
+  info ""
+  info "validate: status requirements"
+
+  if command -v ruby >/dev/null 2>&1; then
+    ruby -ryaml -rdate -rfind -e '
+      target = ARGV[0]
+      project_dir = File.join(target, ".ai_project")
+      warnings = 0
+
+      def front_matter(path)
+        return {} unless File.file?(path)
+        text = File.read(path)
+        return {} unless text.start_with?("---\n")
+        lines = text.lines
+        closing = nil
+        lines[1..].each_with_index do |line, idx|
+          if line.strip == "---"
+            closing = idx + 1
+            break
+          end
+        end
+        return {} unless closing
+        YAML.safe_load(lines[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+      rescue Psych::SyntaxError
+        {}
+      end
+
+      def legacy_field(path, key)
+        return nil unless File.file?(path)
+        File.foreach(path) do |line|
+          if line =~ /^[[:space:]]*#{Regexp.escape(key)}:[[:space:]]*(.*)$/
+            value = Regexp.last_match(1).strip
+            return nil if value.empty?
+            return value.gsub(/\A`|`\z/, "")
+          end
+        end
+        nil
+      end
+
+      def list(value)
+        case value
+        when Array then value.compact.map(&:to_s).reject(&:empty?)
+        when nil then []
+        else value.to_s.split(",").map(&:strip).reject(&:empty?)
+        end
+      end
+
+      def present?(value)
+        case value
+        when Array then !list(value).empty?
+        when Hash then value.values.any? { |item| present?(item) }
+        else
+          !value.nil? && !value.to_s.empty? && !%w[null unresolved pending_decision none].include?(value.to_s)
+        end
+      end
+
+      def path_exists?(target, value)
+        return false unless present?(value)
+        path = value.to_s
+        path = File.join(target, path) unless path.start_with?("/")
+        File.exist?(path)
+      end
+
+      def warn(message)
+        puts "warn: #{message}"
+        1
+      end
+
+      def require_field(task, field, label = nil)
+        present?(task["data"][field]) || present?(task["legacy"][field]) ? nil : (label || field)
+      end
+
+      def require_list(task, field, label = nil)
+        !list(task["data"][field]).empty? ? nil : (label || field)
+      end
+
+      def require_path(task, field, target, label = nil)
+        value = task["data"][field] || task["legacy"][field]
+        path_exists?(target, value) ? nil : (label || field)
+      end
+
+      task_files = []
+      task_root = File.join(project_dir, "tasks")
+      if Dir.exist?(task_root)
+        Find.find(task_root) do |entry|
+          task_files << entry if File.file?(entry) && File.basename(entry).end_with?(".md")
+        end
+      end
+      task_files.sort!
+
+      tasks = task_files.map do |path|
+        data = front_matter(path)
+        legacy = {}
+        %w[id status workflow target_role target_agent approved_by locked_by lock_session report_to qa_to status_ref status_ref_sha base_ref base_sha worktree_path].each do |field|
+          legacy[field] = legacy_field(path, field)
+        end
+        branch = data["branch"].is_a?(Hash) ? data["branch"] : {}
+        pr = data["pr"].is_a?(Hash) ? data["pr"] : {}
+        {
+          "path" => path,
+          "relative" => path.sub(%r{\A#{Regexp.escape(target)}/?}, ""),
+          "data" => data,
+          "legacy" => legacy,
+          "id" => data["id"] || legacy["id"] || File.basename(path, ".md"),
+          "status" => data["status"] || legacy["status"],
+          "branch" => branch,
+          "pr" => pr
+        }
+      end
+
+      tasks.each do |task|
+        label = task["relative"]
+        status = task["status"].to_s
+        missing = []
+
+        case status
+        when "proposed"
+          missing << require_field(task, "title")
+          missing << require_field(task, "created_by")
+        when "scoped"
+          missing << require_list(task, "allowed_paths")
+          missing << require_list(task, "source_of_truth")
+          missing << require_field(task, "target_role")
+        when "approved"
+          missing << require_list(task, "allowed_paths")
+          missing << require_list(task, "source_of_truth")
+          missing << require_field(task, "target_role")
+          missing << require_field(task, "approved_by")
+          missing << require_field(task, "report_to")
+        when "in_progress"
+          missing << require_list(task, "allowed_paths")
+          missing << require_list(task, "source_of_truth")
+          missing << require_field(task, "target_role")
+          missing << require_field(task, "locked_by")
+          missing << require_field(task, "lock_session")
+          missing << "branch.name" unless present?(task["branch"]["name"]) || present?(task["data"]["worktree_path"]) || present?(task["legacy"]["worktree_path"])
+          missing << "base_ref" unless present?(task["data"]["base_ref"]) || present?(task["legacy"]["base_ref"])
+          missing << "base_sha" unless present?(task["data"]["base_sha"]) || present?(task["legacy"]["base_sha"])
+          missing << require_field(task, "report_to")
+        when "verification_ready"
+          missing << require_field(task, "report_to")
+          missing << require_path(task, "report_to", target, "report_to file")
+          missing << require_field(task, "qa_to")
+          missing << require_field(task, "status_ref")
+          missing << require_field(task, "status_ref_sha")
+        when "verification_in_progress"
+          missing << require_field(task, "qa_to")
+          missing << require_field(task, "locked_by")
+          missing << require_field(task, "lock_session")
+        when "verification_passed"
+          missing << require_field(task, "qa_to")
+          missing << require_path(task, "qa_to", target, "qa_to file")
+          missing << require_field(task, "status_ref")
+          missing << require_field(task, "status_ref_sha")
+        when "completion_review"
+          missing << require_field(task, "report_to")
+          missing << require_field(task, "qa_to")
+          missing << require_path(task, "qa_to", target, "qa_to file")
+          missing << require_field(task, "status_ref")
+          missing << require_field(task, "status_ref_sha")
+        when "done"
+          missing << require_field(task, "report_to")
+          missing << require_field(task, "qa_to")
+          missing << require_field(task, "status_ref")
+          missing << require_field(task, "status_ref_sha")
+          missing << "pr.status or branch.name" unless present?(task["pr"]["status"]) || present?(task["branch"]["name"])
+        when "blocked"
+          missing << require_field(task, "blocker")
+          missing << require_field(task, "next_decision")
+        when "rework_requested"
+          missing << require_field(task, "qa_to")
+          missing << require_field(task, "target_role")
+        end
+
+        missing.compact!
+        missing.uniq!
+        if missing.empty?
+          puts "ok: #{label} status requirements"
+        else
+          warnings += warn("#{label} status #{status} missing evidence: #{missing.join(", ")}")
+        end
+      end
+
+      puts "status_requirement_warnings: #{warnings}"
+      puts "ok: status requirements report_only"
+    ' "$target"
+  else
+    info "note: ruby not available; status requirements skipped"
+  fi
+}
+
 validate_project() {
   target="$1"
   strict="$2"
@@ -537,6 +915,9 @@ validate_project() {
       validate_task_file "$task" || exit 1
     done || failed=1
   fi
+
+  validate_project_relationships "$target"
+  validate_project_status_requirements "$target"
 
   [ "$failed" -eq 0 ] || return 1
   info ""
@@ -696,27 +1077,125 @@ task_next_role_for_status() {
 }
 
 task_transition_allowed() {
-  from="$1"
-  to="$2"
-  role="$3"
+  target="$1"
+  workflow="$2"
+  from="$3"
+  to="$4"
+  role="$5"
 
-  case "$from:$to:$role" in
-    proposed:scoped:"Lead Role"|proposed:scoped:"Direction Role") return 0 ;;
-    proposed:approved:"Direction Role"|proposed:approved:"Lead Role"|proposed:approved:"Product Owner") return 0 ;;
-    proposed:cancelled:"Direction Role"|proposed:cancelled:"Product Owner"|proposed:blocked:*) return 0 ;;
-    scoped:approved:"Direction Role"|scoped:approved:"Lead Role"|scoped:approved:"Product Owner") return 0 ;;
-    scoped:cancelled:"Direction Role"|scoped:cancelled:"Product Owner"|scoped:blocked:*) return 0 ;;
-    approved:in_progress:"Execution Role"|approved:cancelled:"Direction Role"|approved:cancelled:"Product Owner"|approved:blocked:*) return 0 ;;
-    in_progress:verification_ready:"Execution Role"|in_progress:blocked:*) return 0 ;;
-    verification_ready:verification_in_progress:"Verification Role"|verification_ready:blocked:*) return 0 ;;
-    verification_in_progress:verification_passed:"Verification Role"|verification_in_progress:rework_requested:"Verification Role"|verification_in_progress:blocked:*) return 0 ;;
-    verification_passed:completion_review:"Completion Role"|verification_passed:blocked:*) return 0 ;;
-    completion_review:done:"Completion Role"|completion_review:done:"Lead Role"|completion_review:done:"Product Owner") return 0 ;;
-    completion_review:rework_requested:"Completion Role"|completion_review:rework_requested:"Lead Role"|completion_review:blocked:*) return 0 ;;
-    rework_requested:scoped:"Lead Role"|rework_requested:approved:"Lead Role"|rework_requested:approved:"Direction Role"|rework_requested:blocked:*) return 0 ;;
-    blocked:scoped:"Lead Role"|blocked:approved:"Lead Role"|blocked:in_progress:"Execution Role"|blocked:cancelled:"Direction Role"|blocked:cancelled:"Product Owner") return 0 ;;
-    *) return 1 ;;
-  esac
+  catalog="$(workflow_catalog_path "$target" "" 2>/dev/null || true)"
+  [ -n "$catalog" ] || return 1
+  command -v ruby >/dev/null 2>&1 || return 1
+
+  ruby -rjson -e '
+    catalog_path = ARGV[0]
+    workflow_id = ARGV[1]
+    from = ARGV[2]
+    to = ARGV[3]
+    role = ARGV[4]
+    catalog = JSON.parse(File.read(catalog_path))
+    workflows = catalog["workflows"] || {}
+    default_workflow = catalog["default_workflow"]
+
+    def resolve_workflow(workflows, workflow_id, default_workflow, seen = [])
+      return {} if workflow_id.nil? || seen.include?(workflow_id)
+      entry = workflows[workflow_id] || workflows[default_workflow] || {}
+      inherited = entry["inherits"]
+      if inherited
+        parent = resolve_workflow(workflows, inherited, default_workflow, seen + [workflow_id])
+        parent.merge(entry) do |key, parent_value, child_value|
+          if key == "statuses"
+            parent_value.merge(child_value || {})
+          elsif key == "transitions"
+            child_value || parent_value
+          else
+            child_value.nil? ? parent_value : child_value
+          end
+        end
+      else
+        entry
+      end
+    end
+
+    entry = resolve_workflow(workflows, workflow_id, default_workflow)
+    transitions = entry["transitions"].is_a?(Array) ? entry["transitions"] : []
+    allowed = transitions.any? do |transition|
+      roles = transition["allowed_roles"].is_a?(Array) ? transition["allowed_roles"] : []
+      transition["from"] == from &&
+        transition["to"] == to &&
+        (roles.include?(role) || roles.include?("any"))
+    end
+    exit(allowed ? 0 : 1)
+  ' "$catalog" "$workflow" "$from" "$to" "$role"
+}
+
+workflow_catalog_path() {
+  target="$1"
+  core="${2:-}"
+
+  if [ -n "$target" ] && [ -f "$target/.ai/runtime/workflows.json" ]; then
+    printf '%s\n' "$target/.ai/runtime/workflows.json"
+    return 0
+  fi
+
+  if [ -n "$core" ] && [ -f "$core/runtime/workflows.json" ]; then
+    printf '%s\n' "$core/runtime/workflows.json"
+    return 0
+  fi
+
+  default_core="$(default_core_dir)"
+  if [ -f "$default_core/runtime/workflows.json" ]; then
+    printf '%s\n' "$default_core/runtime/workflows.json"
+    return 0
+  fi
+
+  return 1
+}
+
+workflow_status_field() {
+  target="$1"
+  workflow="$2"
+  status="$3"
+  field="$4"
+
+  catalog="$(workflow_catalog_path "$target" "" 2>/dev/null || true)"
+  [ -n "$catalog" ] || return 0
+  command -v ruby >/dev/null 2>&1 || return 0
+
+  ruby -rjson -e '
+    catalog_path = ARGV[0]
+    workflow_id = ARGV[1]
+    status_id = ARGV[2]
+    field = ARGV[3]
+    catalog = JSON.parse(File.read(catalog_path))
+    workflows = catalog["workflows"] || {}
+    default_workflow = catalog["default_workflow"]
+
+    def workflow_entry(workflows, workflow_id, default_workflow)
+      workflows[workflow_id] || workflows[default_workflow] || {}
+    end
+
+    def resolve_status(workflows, workflow_id, status_id, default_workflow, seen = [])
+      return nil if workflow_id.nil? || seen.include?(workflow_id)
+      entry = workflow_entry(workflows, workflow_id, default_workflow)
+      statuses = entry["statuses"] || {}
+      return statuses[status_id] if statuses.key?(status_id)
+      inherited = entry["inherits"]
+      return resolve_status(workflows, inherited, status_id, default_workflow, seen + [workflow_id]) if inherited
+      return nil if workflow_id == default_workflow
+      resolve_status(workflows, default_workflow, status_id, default_workflow, seen + [workflow_id])
+    end
+
+    status = resolve_status(workflows, workflow_id, status_id, default_workflow)
+    exit 0 unless status
+    value = status[field]
+    case value
+    when true then puts "true"
+    when false then puts "false"
+    when nil then exit 0
+    else puts value
+    end
+  ' "$catalog" "$workflow" "$status" "$field"
 }
 
 task_require_project() {
@@ -2155,6 +2634,1121 @@ cmd_doctor() {
   [ "$failed" -eq 0 ] || exit 1
 }
 
+cmd_project() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "project requires an action: inspect, context, health"
+  shift
+
+  case "$action" in
+    inspect)
+      target="$(pwd)"
+      json="no"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --json)
+            json="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown project inspect option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      target="$(abs_path "$target")"
+      if command -v ruby >/dev/null 2>&1; then
+        ruby -ryaml -rjson -rdate -rtime -rfind -ropen3 -e '
+          target = ARGV[0]
+          json = ARGV[1] == "yes"
+
+          def front_matter(path)
+            return {} unless File.file?(path)
+            text = File.read(path)
+            return {} unless text.start_with?("---\n")
+            lines = text.lines
+            closing = nil
+            lines[1..].each_with_index do |line, idx|
+              if line.strip == "---"
+                closing = idx + 1
+                break
+              end
+            end
+            return {} unless closing
+            YAML.safe_load(lines[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+          rescue Psych::SyntaxError
+            {}
+          end
+
+          def legacy_field(path, key)
+            return nil unless File.file?(path)
+            File.foreach(path) do |line|
+              if line =~ /^[[:space:]]*#{Regexp.escape(key)}:[[:space:]]*(.*)$/
+                value = Regexp.last_match(1).strip
+                return nil if value.empty?
+                return value.gsub(/\A`|`\z/, "")
+              end
+            end
+            nil
+          end
+
+          def table_value(path, key)
+            return nil unless File.file?(path)
+            File.foreach(path) do |line|
+              next unless line.include?("|")
+              cells = line.split("|").map { |cell| cell.strip.gsub(/\A`|`\z/, "") }
+              next unless cells.length >= 4
+              return cells[2] if cells[1] == key && !cells[2].empty?
+            end
+            nil
+          end
+
+          def value_from(data, path, key)
+            value = data[key]
+            if value.nil? || value == ""
+              value = legacy_field(path, key) || table_value(path, key)
+            end
+            return nil if value.nil?
+            return nil if value.to_s.empty?
+            return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value.to_s)
+            value
+          end
+
+          def normalize(value)
+            case value
+            when Hash
+              value.each_with_object({}) { |(key, item), out| out[key.to_s] = normalize(item) }
+            when Array
+              value.map { |item| normalize(item) }
+            when Date, Time
+              value.to_s
+            else
+              value
+            end
+          end
+
+          def git(target, *args)
+            stdout, _stderr, status = Open3.capture3("git", "-C", target, *args)
+            return nil unless status.success?
+            stdout.strip
+          end
+
+          def files_under(path)
+            return [] unless Dir.exist?(path)
+            files = []
+            Find.find(path) do |entry|
+              files << entry if File.file?(entry) && File.basename(entry).end_with?(".md")
+            end
+            files.sort
+          end
+
+          def core_source(ai_path)
+            if File.symlink?(ai_path)
+              link = File.readlink(ai_path)
+              if link.include?("homebrew") || link.include?("/Cellar/") || link.include?("/opt/ai-agent-ops")
+                "homebrew"
+              else
+                "symlink"
+              end
+            elsif Dir.exist?(ai_path)
+              "project_local_copy"
+            else
+              "missing"
+            end
+          end
+
+          def runtime_status_ref(path)
+            data = {}
+            return data unless File.file?(path)
+            File.foreach(path) do |line|
+              key, value = line.split(":", 2)
+              next unless key && value
+              data[key.strip] = value.strip
+            end
+            data
+          end
+
+          project_dir = File.join(target, ".ai_project")
+          ai_path = File.join(target, ".ai")
+          operating_path = File.join(project_dir, "operating_model.md")
+          registry_path = File.join(project_dir, "agent_registry.md")
+          operating = front_matter(operating_path)
+          registry = front_matter(registry_path)
+
+          core = {
+            "present" => File.exist?(ai_path),
+            "source" => core_source(ai_path),
+            "version" => File.file?(File.join(ai_path, "VERSION")) ? File.read(File.join(ai_path, "VERSION")).strip : "unknown",
+            "adapters" => {
+              "codex" => File.file?(File.join(target, "AGENTS.md")),
+              "claude" => File.file?(File.join(target, "CLAUDE.md"))
+            }
+          }
+
+          status_ref = value_from(operating, operating_path, "canonical_status_ref")
+          git_inside = git(target, "rev-parse", "--is-inside-work-tree") == "true"
+          git_branch = git_inside ? git(target, "rev-parse", "--abbrev-ref", "HEAD") : nil
+          git_head = git_inside ? git(target, "rev-parse", "--short", "HEAD") : nil
+          status_ref_sha = git_inside && status_ref ? git(target, "rev-parse", "--verify", "#{status_ref}^{commit}") : nil
+          runtime_ref = runtime_status_ref(File.join(project_dir, ".runtime", "status_ref"))
+          runtime_sha = runtime_ref["status_ref_sha"]
+          status_ref_state =
+            if !status_ref
+              "unresolved"
+            elsif !status_ref_sha
+              "ref_not_found_locally"
+            elsif runtime_sha.nil? || runtime_sha.empty?
+              "not_recorded"
+            elsif runtime_sha == status_ref_sha
+              "recorded_current"
+            else
+              "recorded_stale"
+            end
+
+          tasks = files_under(File.join(project_dir, "tasks")).map do |path|
+            data = front_matter(path)
+            relative = path.sub(%r{\A#{Regexp.escape(target)}/?}, "")
+            queue = relative[%r{\.ai_project/tasks/([^/]+)/}, 1] || "unknown"
+            {
+              "id" => data["id"] || File.basename(path, ".md"),
+              "title" => data["title"],
+              "status" => data["status"] || legacy_field(path, "status"),
+              "workflow" => data["workflow"] || legacy_field(path, "workflow"),
+              "target_role" => data["target_role"] || legacy_field(path, "target_role"),
+              "target_agent" => data["target_agent"] || legacy_field(path, "target_agent"),
+              "queue" => queue,
+              "path" => relative
+            }
+          end
+
+          task_counts_by_queue = Hash.new(0)
+          task_counts_by_status = Hash.new(0)
+          tasks.each do |task|
+            task_counts_by_queue[task["queue"] || "unknown"] += 1
+            task_counts_by_status[task["status"] || "unknown"] += 1
+          end
+
+          agents = registry["agents"].is_a?(Array) ? registry["agents"] : []
+          active_roles = operating["active_roles"]
+          unless active_roles.is_a?(Array)
+            active_roles = agents.flat_map { |agent| agent.is_a?(Hash) && agent["status"] == "enabled" ? Array(agent["roles"]) : [] }.uniq
+          end
+
+          project = {
+            "present" => Dir.exist?(project_dir),
+            "name" => value_from(operating, operating_path, "project") || File.basename(target),
+            "bootstrap_mode" => value_from(operating, operating_path, "bootstrap_mode") || "unknown",
+            "core_version" => value_from(operating, operating_path, "core_version") || "unknown",
+            "start_context" => value_from(operating, operating_path, "start_context") || "unknown",
+            "readiness_level" => value_from(operating, operating_path, "readiness_level") || "unknown",
+            "operating_mode" => value_from(operating, operating_path, "operating_mode") || "unknown",
+            "team_pattern" => value_from(operating, operating_path, "team_pattern") || "unknown",
+            "workflow_policy" => value_from(operating, operating_path, "workflow_policy") || "unknown",
+            "ownership_model" => value_from(operating, operating_path, "ownership_model") || "unknown",
+            "coordination" => value_from(operating, operating_path, "coordination") || "unknown",
+            "board_model" => value_from(operating, operating_path, "board_model") || "unknown",
+            "knowledge_mode" => value_from(operating, operating_path, "knowledge_mode") || "unknown"
+          }
+
+          state = normalize({
+            "schema" => "aiops.project_inspect.v1",
+            "target" => target,
+            "core" => core,
+            "project" => project,
+            "git" => {
+              "inside_worktree" => git_inside,
+              "branch" => git_branch,
+              "head" => git_head,
+              "canonical_status_ref" => status_ref,
+              "canonical_status_sha" => status_ref_sha,
+              "recorded_status_ref" => runtime_ref["status_ref"],
+              "recorded_status_sha" => runtime_sha,
+              "recorded_checked_at" => runtime_ref["checked_at"],
+              "status_ref_state" => status_ref_state
+            },
+            "agents" => {
+              "count" => agents.length,
+              "active_roles" => active_roles || []
+            },
+            "tasks" => {
+              "total" => tasks.length,
+              "by_queue" => task_counts_by_queue.sort.to_h,
+              "by_status" => task_counts_by_status.sort.to_h,
+              "items" => tasks
+            },
+            "next" => begin
+              notes = []
+              notes << "run aiops seed before bootstrap" unless core["present"]
+              notes << "run AI Ops bootstrap before task work" unless project["present"]
+              notes << "set canonical_status_ref for multi-worktree projects" if project["present"] && !status_ref
+              notes << "run aiops sync-status to record latest canonical SHA" if status_ref && status_ref_state != "recorded_current"
+              notes
+            end
+          })
+
+          if json
+            puts JSON.pretty_generate(state)
+            exit 0
+          end
+
+          puts "AI Ops project inspect"
+          puts "target: #{state["target"]}"
+          puts ""
+          puts "core:"
+          puts "  present: #{state["core"]["present"]}"
+          puts "  source: #{state["core"]["source"]}"
+          puts "  version: #{state["core"]["version"]}"
+          puts "  adapters: codex=#{state["core"]["adapters"]["codex"]}, claude=#{state["core"]["adapters"]["claude"]}"
+          puts ""
+          puts "project:"
+          puts "  present: #{state["project"]["present"]}"
+          puts "  name: #{state["project"]["name"]}"
+          puts "  bootstrap_mode: #{state["project"]["bootstrap_mode"]}"
+          puts "  readiness_level: #{state["project"]["readiness_level"]}"
+          puts "  operating_mode: #{state["project"]["operating_mode"]}"
+          puts "  team_pattern: #{state["project"]["team_pattern"]}"
+          puts "  workflow_policy: #{state["project"]["workflow_policy"]}"
+          puts "  knowledge_mode: #{state["project"]["knowledge_mode"]}"
+          puts ""
+          puts "git:"
+          puts "  inside_worktree: #{state["git"]["inside_worktree"]}"
+          puts "  branch: #{state["git"]["branch"] || "unknown"}"
+          puts "  head: #{state["git"]["head"] || "unknown"}"
+          puts "  canonical_status_ref: #{state["git"]["canonical_status_ref"] || "unresolved"}"
+          puts "  canonical_status_sha: #{state["git"]["canonical_status_sha"] || "unresolved"}"
+          puts "  recorded_status_sha: #{state["git"]["recorded_status_sha"] || "unrecorded"}"
+          puts "  status_ref_state: #{state["git"]["status_ref_state"]}"
+          puts ""
+          puts "agents:"
+          puts "  count: #{state["agents"]["count"]}"
+          puts "  active_roles: #{Array(state["agents"]["active_roles"]).join(", ")}"
+          puts ""
+          puts "tasks:"
+          puts "  total: #{state["tasks"]["total"]}"
+          puts "  by_queue: #{state["tasks"]["by_queue"].map { |key, value| "#{key}=#{value}" }.join(", ")}"
+          puts "  by_status: #{state["tasks"]["by_status"].map { |key, value| "#{key}=#{value}" }.join(", ")}"
+          unless state["next"].empty?
+            puts ""
+            puts "next:"
+            state["next"].each { |note| puts "  - #{note}" }
+          end
+        ' "$target" "$json"
+      else
+        die "ruby is required for project inspect"
+      fi
+      ;;
+    context)
+      target="$(pwd)"
+      role_input=""
+      task_id=""
+      json="no"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --role)
+            shift
+            [ "$#" -gt 0 ] || die "--role requires a value"
+            role_input="$1"
+            ;;
+          --task)
+            shift
+            [ "$#" -gt 0 ] || die "--task requires a value"
+            task_id="$1"
+            ;;
+          --json)
+            json="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown project context option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      [ -n "$role_input" ] || die "project context requires --role"
+      role="$(normalize_role_name "$role_input")" || die "unknown role: $role_input"
+      target="$(abs_path "$target")"
+      [ -d "$target/.ai_project" ] || die ".ai_project missing; bootstrap project first"
+
+      task_file=""
+      if [ -n "$task_id" ]; then
+        task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+      fi
+
+      catalog="$(workflow_catalog_path "$target" "" 2>/dev/null || true)"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for project context"
+
+      ruby -ryaml -rjson -rdate -ropen3 -e '
+        target = ARGV[0]
+        role = ARGV[1]
+        task_file = ARGV[2]
+        task_id = ARGV[3]
+        catalog_path = ARGV[4]
+        as_json = ARGV[5] == "yes"
+
+        def front_matter(path)
+          return {} unless File.file?(path)
+          text = File.read(path)
+          return {} unless text.start_with?("---\n")
+          lines = text.lines
+          closing = nil
+          lines[1..].each_with_index do |line, idx|
+            if line.strip == "---"
+              closing = idx + 1
+              break
+            end
+          end
+          return {} unless closing
+          YAML.safe_load(lines[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+        rescue Psych::SyntaxError
+          {}
+        end
+
+        def legacy_field(path, key)
+          return nil unless File.file?(path)
+          File.foreach(path) do |line|
+            if line =~ /^[[:space:]]*#{Regexp.escape(key)}:[[:space:]]*(.*)$/
+              value = Regexp.last_match(1).strip
+              return nil if value.empty?
+              return value.gsub(/\A`|`\z/, "")
+            end
+          end
+          nil
+        end
+
+        def table_value(path, key)
+          return nil unless File.file?(path)
+          File.foreach(path) do |line|
+            next unless line.include?("|")
+            cells = line.split("|").map { |cell| cell.strip.gsub(/\A`|`\z/, "") }
+            next unless cells.length >= 4
+            return cells[2] if cells[1] == key && !cells[2].empty?
+          end
+          nil
+        end
+
+        def value_from(data, path, key)
+          value = data[key]
+          value = legacy_field(path, key) || table_value(path, key) if value.nil? || value == ""
+          return nil if value.nil?
+          return nil if value.to_s.empty?
+          return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value.to_s)
+          value
+        end
+
+        def list(value)
+          case value
+          when Array then value.compact.map(&:to_s).reject(&:empty?)
+          when nil then []
+          else value.to_s.split(",").map(&:strip).reject(&:empty?)
+          end
+        end
+
+        def git(target, *args)
+          stdout, _stderr, status = Open3.capture3("git", "-C", target, *args)
+          return nil unless status.success?
+          stdout.strip
+        end
+
+        def normalize(value)
+          case value
+          when Hash
+            value.each_with_object({}) { |(key, item), out| out[key.to_s] = normalize(item) }
+          when Array
+            value.map { |item| normalize(item) }
+          when Date, Time
+            value.to_s
+          else
+            value
+          end
+        end
+
+        def resolve_workflow(workflows, workflow_id, default_workflow, seen = [])
+          return {} if workflow_id.nil? || seen.include?(workflow_id)
+          entry = workflows[workflow_id] || workflows[default_workflow] || {}
+          inherited = entry["inherits"]
+          if inherited
+            parent = resolve_workflow(workflows, inherited, default_workflow, seen + [workflow_id])
+            parent.merge(entry) do |key, parent_value, child_value|
+              if key == "statuses"
+                parent_value.merge(child_value || {})
+              elsif key == "transitions"
+                child_value || parent_value
+              else
+                child_value.nil? ? parent_value : child_value
+              end
+            end
+          else
+            entry
+          end
+        end
+
+        project_dir = File.join(target, ".ai_project")
+        operating_path = File.join(project_dir, "operating_model.md")
+        registry_path = File.join(project_dir, "agent_registry.md")
+        operating = front_matter(operating_path)
+        registry = front_matter(registry_path)
+        status_ref = value_from(operating, operating_path, "canonical_status_ref")
+        status_ref_sha = status_ref ? git(target, "rev-parse", "--verify", "#{status_ref}^{commit}") : nil
+        git_inside = git(target, "rev-parse", "--is-inside-work-tree") == "true"
+
+        catalog = File.file?(catalog_path) ? JSON.parse(File.read(catalog_path)) : {}
+        workflows = catalog["workflows"] || {}
+        default_workflow = catalog["default_workflow"] || "feature"
+
+        task = nil
+        valid_next = []
+        workflow_entry = {}
+        status_meta = {}
+        allowed_paths = []
+        source_of_truth = []
+        required_files = [
+          ".ai/runtime/workflows.json",
+          ".ai/runtime/workflow.md",
+          ".ai/runtime/task_queue.md",
+          ".ai/runtime/role_handoff.md",
+          ".ai/policies/shared_status_policy.md",
+          ".ai/policies/session_orchestration_policy.md",
+          ".ai_project/operating_model.md",
+          ".ai_project/agent_registry.md",
+          ".ai_project/current_context.md",
+          ".ai_project/task_board.md",
+          ".ai_project/source_of_truth.md"
+        ]
+
+        if !task_file.to_s.empty?
+          data = front_matter(task_file)
+          workflow = data["workflow"] || legacy_field(task_file, "workflow") || default_workflow
+          status = data["status"] || legacy_field(task_file, "status")
+          target_role = data["target_role"] || legacy_field(task_file, "target_role")
+          target_agent = data["target_agent"] || legacy_field(task_file, "target_agent")
+          allowed_paths = list(data["allowed_paths"])
+          source_of_truth = list(data["source_of_truth"])
+          required_files += source_of_truth
+          workflow_entry = resolve_workflow(workflows, workflow, default_workflow)
+          status_meta = (workflow_entry["statuses"] || {})[status] || {}
+          transitions = workflow_entry["transitions"].is_a?(Array) ? workflow_entry["transitions"] : []
+          valid_next = transitions.select do |transition|
+            roles = list(transition["allowed_roles"])
+            transition.is_a?(Hash) &&
+              transition["from"] == status &&
+              (roles.include?(role) || roles.include?("any"))
+          end.map do |transition|
+            to = transition["to"]
+            meta = (workflow_entry["statuses"] || {})[to] || {}
+            {
+              "to" => to,
+              "next_role" => transition["next_role"],
+              "checkpoint" => meta["checkpoint"],
+              "canonical_publish" => meta["canonical_publish"],
+              "meaning" => meta["meaning"]
+            }
+          end
+          task = {
+            "id" => data["id"] || task_id,
+            "path" => task_file.sub(%r{\A#{Regexp.escape(target)}/?}, ""),
+            "title" => data["title"],
+            "status" => status,
+            "workflow" => workflow,
+            "status_meaning" => status_meta["meaning"],
+            "checkpoint" => status_meta["checkpoint"],
+            "canonical_publish" => status_meta["canonical_publish"],
+            "target_role" => target_role,
+            "target_agent" => target_agent,
+            "allowed_paths" => allowed_paths,
+            "source_of_truth" => source_of_truth,
+            "locked_by" => data["locked_by"] || legacy_field(task_file, "locked_by"),
+            "lock_session" => data["lock_session"] || legacy_field(task_file, "lock_session"),
+            "status_ref" => data["status_ref"] || legacy_field(task_file, "status_ref"),
+            "status_ref_sha" => data["status_ref_sha"] || legacy_field(task_file, "status_ref_sha")
+          }
+        end
+
+        forbidden_actions = [
+          "commit without explicit user approval",
+          "push without explicit user approval",
+          "merge without explicit user approval",
+          "deploy without explicit user approval",
+          "edit .ai/ core instructions unless the operator explicitly approved core changes"
+        ]
+        forbidden_actions << "edit outside allowed_paths" unless allowed_paths.empty?
+
+        contract = normalize({
+          "schema" => "aiops.project_context.v1",
+          "target" => target,
+          "role" => role,
+          "project" => {
+            "name" => value_from(operating, operating_path, "project") || File.basename(target),
+            "operating_mode" => value_from(operating, operating_path, "operating_mode") || "unknown",
+            "workflow_policy" => value_from(operating, operating_path, "workflow_policy") || "unknown",
+            "knowledge_mode" => value_from(operating, operating_path, "knowledge_mode") || "unknown"
+          },
+          "git" => {
+            "inside_worktree" => git_inside,
+            "branch" => git_inside ? git(target, "rev-parse", "--abbrev-ref", "HEAD") : nil,
+            "head" => git_inside ? git(target, "rev-parse", "--short", "HEAD") : nil,
+            "canonical_status_ref" => status_ref,
+            "canonical_status_sha" => status_ref_sha
+          },
+          "task" => task,
+          "required_files" => required_files.uniq,
+          "allowed_paths" => allowed_paths,
+          "source_of_truth" => source_of_truth,
+          "valid_next_transitions" => valid_next,
+          "handoff_target" => valid_next.map { |transition| transition["next_role"] }.compact.uniq,
+          "approval_required_for" => ["commit", "push", "merge", "deploy", "external configuration changes"],
+          "forbidden_actions" => forbidden_actions,
+          "recommended_checks" => begin
+            checks = ["aiops project inspect --target #{target}", "aiops validate project --target #{target} --strict"]
+            checks << "aiops status-ref --target #{target}" if status_ref
+            checks << "aiops sync-status --target #{target}" if status_ref
+            checks << "aiops task status #{task["id"]} --target #{target}" if task
+            checks << "aiops task status #{task["id"]} --target #{target} --source canonical" if task && status_ref
+            checks
+          end
+        })
+
+        if as_json
+          puts JSON.pretty_generate(contract)
+          exit 0
+        end
+
+        puts "AI Ops project context"
+        puts "target: #{contract["target"]}"
+        puts "role: #{contract["role"]}"
+        puts "project: #{contract["project"]["name"]}"
+        puts "operating_mode: #{contract["project"]["operating_mode"]}"
+        puts "workflow_policy: #{contract["project"]["workflow_policy"]}"
+        puts ""
+        puts "git:"
+        puts "  branch: #{contract["git"]["branch"] || "unknown"}"
+        puts "  head: #{contract["git"]["head"] || "unknown"}"
+        puts "  canonical_status_ref: #{contract["git"]["canonical_status_ref"] || "unresolved"}"
+        puts "  canonical_status_sha: #{contract["git"]["canonical_status_sha"] || "unresolved"}"
+
+        if contract["task"]
+          t = contract["task"]
+          puts ""
+          puts "task:"
+          puts "  id: #{t["id"]}"
+          puts "  path: #{t["path"]}"
+          puts "  status: #{t["status"]}"
+          puts "  workflow: #{t["workflow"]}"
+          puts "  status_meaning: #{t["status_meaning"] || "unknown"}"
+          puts "  checkpoint: #{t["checkpoint"].nil? ? "unknown" : t["checkpoint"]}"
+          puts "  canonical_publish: #{t["canonical_publish"] || "unknown"}"
+          puts "  target_role: #{t["target_role"] || "unassigned"}"
+          puts "  target_agent: #{t["target_agent"] || "unassigned"}"
+          puts "  locked_by: #{t["locked_by"] || "none"}"
+          puts "  status_ref: #{t["status_ref"] || "unresolved"}"
+          puts "  status_ref_sha: #{t["status_ref_sha"] || "unresolved"}"
+        end
+
+        puts ""
+        puts "required_files:"
+        contract["required_files"].each { |file| puts "  - #{file}" }
+        puts ""
+        puts "allowed_paths:"
+        if contract["allowed_paths"].empty?
+          puts "  - unrestricted_by_task"
+        else
+          contract["allowed_paths"].each { |path| puts "  - #{path}" }
+        end
+        puts ""
+        puts "valid_next_transitions:"
+        if contract["valid_next_transitions"].empty?
+          puts "  - none"
+        else
+          contract["valid_next_transitions"].each do |transition|
+            puts "  - to: #{transition["to"]}"
+            puts "    next_role: #{transition["next_role"] || "none"}"
+            puts "    checkpoint: #{transition["checkpoint"]}"
+            puts "    canonical_publish: #{transition["canonical_publish"]}"
+          end
+        end
+        puts ""
+        puts "handoff_target: #{contract["handoff_target"].empty? ? "none" : contract["handoff_target"].join(", ")}"
+        puts ""
+        puts "forbidden_actions:"
+        contract["forbidden_actions"].each { |action| puts "  - #{action}" }
+        puts ""
+        puts "recommended_checks:"
+        contract["recommended_checks"].each { |check| puts "  - #{check}" }
+      ' "$target" "$role" "$task_file" "$task_id" "$catalog" "$json"
+      ;;
+    health)
+      target="$(pwd)"
+      json="no"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --json)
+            json="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown project health option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      target="$(abs_path "$target")"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for project health"
+
+      ruby -ryaml -rjson -rdate -rfind -ropen3 -e '
+        target = ARGV[0]
+        as_json = ARGV[1] == "yes"
+
+        def front_matter(path)
+          return {} unless File.file?(path)
+          text = File.read(path)
+          return {} unless text.start_with?("---\n")
+          lines = text.lines
+          closing = nil
+          lines[1..].each_with_index do |line, idx|
+            if line.strip == "---"
+              closing = idx + 1
+              break
+            end
+          end
+          return {} unless closing
+          YAML.safe_load(lines[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+        rescue Psych::SyntaxError
+          {}
+        end
+
+        def legacy_field(path, key)
+          return nil unless File.file?(path)
+          File.foreach(path) do |line|
+            if line =~ /^[[:space:]]*#{Regexp.escape(key)}:[[:space:]]*(.*)$/
+              value = Regexp.last_match(1).strip
+              return nil if value.empty?
+              return value.gsub(/\A`|`\z/, "")
+            end
+          end
+          nil
+        end
+
+        def table_value(path, key)
+          return nil unless File.file?(path)
+          File.foreach(path) do |line|
+            next unless line.include?("|")
+            cells = line.split("|").map { |cell| cell.strip.gsub(/\A`|`\z/, "") }
+            next unless cells.length >= 4
+            return cells[2] if cells[1] == key && !cells[2].empty?
+          end
+          nil
+        end
+
+        def value_from(data, path, key)
+          value = data[key]
+          value = legacy_field(path, key) || table_value(path, key) if value.nil? || value == ""
+          return nil if value.nil?
+          return nil if value.to_s.empty?
+          return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value.to_s)
+          value
+        end
+
+        def git(target, *args)
+          stdout, _stderr, status = Open3.capture3("git", "-C", target, *args)
+          return nil unless status.success?
+          stdout.strip
+        end
+
+        def files_under(path)
+          return [] unless Dir.exist?(path)
+          files = []
+          Find.find(path) do |entry|
+            files << entry if File.file?(entry) && File.basename(entry).end_with?(".md")
+          end
+          files.sort
+        end
+
+        def runtime_status_ref(path)
+          data = {}
+          return data unless File.file?(path)
+          File.foreach(path) do |line|
+            key, value = line.split(":", 2)
+            next unless key && value
+            data[key.strip] = value.strip
+          end
+          data
+        end
+
+        def normalize(value)
+          case value
+          when Hash
+            value.each_with_object({}) { |(key, item), out| out[key.to_s] = normalize(item) }
+          when Array
+            value.map { |item| normalize(item) }
+          when Date, Time
+            value.to_s
+          else
+            value
+          end
+        end
+
+        checks = []
+        add = lambda do |level, code, message|
+          checks << { "level" => level, "code" => code, "message" => message }
+        end
+
+        project_dir = File.join(target, ".ai_project")
+        ai_path = File.join(target, ".ai")
+        operating_path = File.join(project_dir, "operating_model.md")
+        registry_path = File.join(project_dir, "agent_registry.md")
+        core_version_path = File.join(ai_path, "VERSION")
+        workflow_catalog_path = File.join(ai_path, "runtime", "workflows.json")
+
+        core_version = File.file?(core_version_path) ? File.read(core_version_path).strip : "unknown"
+        operating = front_matter(operating_path)
+        registry = front_matter(registry_path)
+        recorded_core_version = value_from(operating, operating_path, "core_version")
+        project_name = value_from(operating, operating_path, "project") || File.basename(target)
+
+        if File.exist?(ai_path)
+          add.call("ok", "core_connected", ".ai core is connected")
+        else
+          add.call("blocker", "core_missing", ".ai core missing; run aiops seed first")
+        end
+
+        if File.file?(File.join(target, "AGENTS.md")) || File.file?(File.join(target, "CLAUDE.md"))
+          add.call("ok", "adapter_present", "at least one Agent adapter exists")
+        else
+          add.call("warn", "adapter_missing", "AGENTS.md or CLAUDE.md adapter is missing")
+        end
+
+        if Dir.exist?(project_dir)
+          add.call("ok", "project_config_present", ".ai_project exists")
+        else
+          add.call("blocker", "project_config_missing", ".ai_project missing; run bootstrap first")
+        end
+
+        required_files = %w[
+          operating_model.md
+          agent_registry.md
+          current_context.md
+          source_of_truth.md
+          task_board.md
+          ops_decisions.md
+          ops_issues.md
+        ]
+        required_files.each do |name|
+          path = File.join(project_dir, name)
+          if File.file?(path)
+            add.call("ok", "required_file_present", ".ai_project/#{name} exists")
+          else
+            add.call("blocker", "required_file_missing", ".ai_project/#{name} missing")
+          end
+        end
+
+        %w[tasks tasks/active tasks/backlog tasks/archive].each do |name|
+          path = File.join(project_dir, name)
+          if Dir.exist?(path)
+            add.call("ok", "required_dir_present", ".ai_project/#{name} exists")
+          else
+            add.call("blocker", "required_dir_missing", ".ai_project/#{name} missing")
+          end
+        end
+
+        if operating["schema"] == "aiops.operating_model.v1"
+          add.call("ok", "operating_model_schema", "operating_model schema is aiops.operating_model.v1")
+        elsif File.file?(operating_path)
+          add.call("warn", "operating_model_schema_missing", "operating_model schema missing or legacy")
+        end
+
+        if registry["schema"] == "aiops.agent_registry.v1"
+          add.call("ok", "agent_registry_schema", "agent_registry schema is aiops.agent_registry.v1")
+        elsif File.file?(registry_path)
+          add.call("warn", "agent_registry_schema_missing", "agent_registry schema missing or legacy")
+        end
+
+        if File.file?(workflow_catalog_path)
+          begin
+            catalog = JSON.parse(File.read(workflow_catalog_path))
+            if catalog["schema"] == "aiops.workflow_catalog.v1" && catalog["workflows"].is_a?(Hash)
+              add.call("ok", "workflow_catalog_valid", "workflow catalog is readable")
+            else
+              add.call("blocker", "workflow_catalog_invalid", "workflow catalog schema is invalid")
+            end
+          rescue JSON::ParserError
+            add.call("blocker", "workflow_catalog_unreadable", "workflow catalog JSON cannot be parsed")
+          end
+        else
+          add.call("blocker", "workflow_catalog_missing", ".ai/runtime/workflows.json missing")
+        end
+
+        if recorded_core_version && core_version != "unknown" && recorded_core_version == core_version
+          add.call("ok", "core_version_current", ".ai_project core_version matches current core")
+        elsif Dir.exist?(project_dir) && core_version != "unknown"
+          add.call("warn", "migration_needed", ".ai_project core_version differs or is missing")
+        end
+
+        status_ref = value_from(operating, operating_path, "canonical_status_ref")
+        git_inside = git(target, "rev-parse", "--is-inside-work-tree") == "true"
+        git_branch = git_inside ? git(target, "rev-parse", "--abbrev-ref", "HEAD") : nil
+        git_head = git_inside ? git(target, "rev-parse", "--short", "HEAD") : nil
+        status_ref_sha = git_inside && status_ref ? git(target, "rev-parse", "--verify", "#{status_ref}^{commit}") : nil
+        runtime_ref = runtime_status_ref(File.join(project_dir, ".runtime", "status_ref"))
+        runtime_sha = runtime_ref["status_ref_sha"]
+        status_ref_state =
+          if !status_ref
+            "unresolved"
+          elsif !status_ref_sha
+            "ref_not_found_locally"
+          elsif runtime_sha.nil? || runtime_sha.empty?
+            "not_recorded"
+          elsif runtime_sha == status_ref_sha
+            "recorded_current"
+          else
+            "recorded_stale"
+          end
+
+        tasks = files_under(File.join(project_dir, "tasks")).map do |path|
+          data = front_matter(path)
+          {
+            "id" => data["id"] || File.basename(path, ".md"),
+            "path" => path.sub(%r{\A#{Regexp.escape(target)}/?}, ""),
+            "status" => data["status"] || legacy_field(path, "status"),
+            "workflow" => data["workflow"] || legacy_field(path, "workflow"),
+            "target_role" => data["target_role"] || legacy_field(path, "target_role"),
+            "target_agent" => data["target_agent"] || legacy_field(path, "target_agent"),
+            "status_ref_sha" => data["status_ref_sha"] || legacy_field(path, "status_ref_sha")
+          }
+        end
+
+        task_counts_by_status = Hash.new(0)
+        tasks.each { |task| task_counts_by_status[task["status"] || "unknown"] += 1 }
+        active_tasks = tasks.select { |task| !%w[done cancelled].include?(task["status"].to_s) }
+        missing_task_metadata = tasks.select { |task| task["status"].to_s.empty? || task["workflow"].to_s.empty? || task["target_role"].to_s.empty? }
+        tasks_missing_status_ref = active_tasks.select { |task| task["status_ref_sha"].to_s.empty? }
+
+        if tasks.empty?
+          add.call("ok", "task_board_empty", "no tasks registered yet")
+        elsif missing_task_metadata.empty?
+          add.call("ok", "task_metadata_present", "all tasks have status, workflow, and target_role")
+        else
+          add.call("warn", "task_metadata_incomplete", "#{missing_task_metadata.length} task(s) missing status, workflow, or target_role")
+        end
+
+        if status_ref
+          case status_ref_state
+          when "recorded_current"
+            add.call("ok", "canonical_status_current", "recorded canonical status SHA is current")
+          when "ref_not_found_locally"
+            add.call("blocker", "canonical_status_ref_unavailable", "canonical_status_ref cannot be resolved locally")
+          when "not_recorded"
+            add.call("warn", "canonical_status_not_recorded", "canonical status SHA is not recorded; run aiops sync-status")
+          when "recorded_stale"
+            add.call("warn", "canonical_status_stale", "recorded canonical status SHA is stale; run aiops sync-status")
+          end
+
+          if tasks_missing_status_ref.empty?
+            add.call("ok", "task_status_ref_present", "active tasks include status_ref_sha or no active tasks need it")
+          elsif active_tasks.any?
+            add.call("warn", "task_status_ref_missing", "#{tasks_missing_status_ref.length} active task(s) missing status_ref_sha")
+          end
+        elsif Dir.exist?(project_dir)
+          add.call("warn", "canonical_status_ref_unresolved", "canonical_status_ref unresolved; recommended for multi-worktree projects")
+        end
+
+        unresolved_count = 0
+        if Dir.exist?(project_dir)
+          files_under(project_dir).each do |path|
+            next if path.include?("/tasks/archive/")
+            text = File.read(path)
+            unresolved_count += text.scan(/pending_decision|unresolved|TBD|TODO/i).length
+          end
+        end
+        if unresolved_count.positive?
+          add.call("warn", "unresolved_decisions_present", "#{unresolved_count} unresolved decision marker(s) found")
+        else
+          add.call("ok", "unresolved_decisions_absent", "no unresolved decision markers found")
+        end
+
+        blocker_count = checks.count { |check| check["level"] == "blocker" }
+        warning_count = checks.count { |check| check["level"] == "warn" }
+        overall =
+          if blocker_count.positive?
+            "blocked"
+          elsif warning_count.positive?
+            "warning"
+          else
+            "ok"
+          end
+
+        bootstrap =
+          if checks.any? { |check| check["code"] == "project_config_missing" || check["code"] == "core_missing" }
+            "missing"
+          elsif checks.any? { |check| check["level"] == "blocker" }
+            "partial"
+          else
+            "complete"
+          end
+
+        task_work =
+          if blocker_count.positive?
+            "blocked"
+          elsif warning_count.positive?
+            "allowed_with_warnings"
+          else
+            "allowed"
+          end
+
+        multi_agent =
+          if !status_ref
+            "needs_canonical_status_ref"
+          elsif status_ref_state == "recorded_current"
+            "ready"
+          elsif status_ref_state == "ref_not_found_locally"
+            "blocked"
+          else
+            "sync_required"
+          end
+
+        migration =
+          if checks.any? { |check| check["code"] == "project_config_missing" }
+            "not_configured"
+          elsif checks.any? { |check| check["code"] == "migration_needed" }
+            "migration_needed"
+          elsif checks.any? { |check| check["code"].end_with?("_schema_missing") }
+            "review_needed"
+          else
+            "not_required"
+          end
+
+        next_steps = []
+        next_steps << "run aiops seed --adapter both" if checks.any? { |check| check["code"] == "core_missing" }
+        next_steps << "run AI Ops bootstrap before task work" if checks.any? { |check| check["code"] == "project_config_missing" }
+        next_steps << "run aiops migrate --plan" if migration == "migration_needed"
+        next_steps << "set canonical_status_ref for multi-worktree projects" if status_ref.nil? && Dir.exist?(project_dir)
+        next_steps << "run aiops sync-status --target #{target}" if %w[not_recorded recorded_stale].include?(status_ref_state)
+        next_steps << "run aiops validate project --target #{target} --strict" if checks.any? { |check| check["level"] != "ok" }
+        next_steps.uniq!
+
+        health = normalize({
+          "schema" => "aiops.project_health.v1",
+          "target" => target,
+          "overall" => overall,
+          "summary" => {
+            "ok" => checks.count { |check| check["level"] == "ok" },
+            "warnings" => warning_count,
+            "blockers" => blocker_count,
+            "tasks" => tasks.length,
+            "active_tasks" => active_tasks.length,
+            "unresolved_decisions" => unresolved_count
+          },
+          "project" => {
+            "name" => project_name,
+            "core_version" => core_version,
+            "recorded_core_version" => recorded_core_version,
+            "operating_mode" => value_from(operating, operating_path, "operating_mode") || "unknown",
+            "workflow_policy" => value_from(operating, operating_path, "workflow_policy") || "unknown",
+            "knowledge_mode" => value_from(operating, operating_path, "knowledge_mode") || "unknown"
+          },
+          "git" => {
+            "inside_worktree" => git_inside,
+            "branch" => git_branch,
+            "head" => git_head,
+            "canonical_status_ref" => status_ref,
+            "canonical_status_sha" => status_ref_sha,
+            "recorded_status_sha" => runtime_sha,
+            "status_ref_state" => status_ref_state
+          },
+          "tasks" => {
+            "total" => tasks.length,
+            "active" => active_tasks.length,
+            "by_status" => task_counts_by_status.sort.to_h,
+            "missing_metadata" => missing_task_metadata.length,
+            "missing_status_ref_sha" => tasks_missing_status_ref.length
+          },
+          "readiness" => {
+            "bootstrap" => bootstrap,
+            "task_work" => task_work,
+            "multi_agent" => multi_agent,
+            "migration" => migration
+          },
+          "checks" => checks,
+          "next" => next_steps
+        })
+
+        if as_json
+          puts JSON.pretty_generate(health)
+          exit 0
+        end
+
+        puts "AI Ops project health"
+        puts "target: #{health["target"]}"
+        puts "overall: #{health["overall"]}"
+        puts ""
+        puts "project:"
+        puts "  name: #{health["project"]["name"]}"
+        puts "  core_version: #{health["project"]["core_version"]}"
+        puts "  recorded_core_version: #{health["project"]["recorded_core_version"] || "unrecorded"}"
+        puts "  operating_mode: #{health["project"]["operating_mode"]}"
+        puts "  workflow_policy: #{health["project"]["workflow_policy"]}"
+        puts ""
+        puts "git:"
+        puts "  branch: #{health["git"]["branch"] || "unknown"}"
+        puts "  head: #{health["git"]["head"] || "unknown"}"
+        puts "  canonical_status_ref: #{health["git"]["canonical_status_ref"] || "unresolved"}"
+        puts "  status_ref_state: #{health["git"]["status_ref_state"]}"
+        puts ""
+        puts "readiness:"
+        health["readiness"].each { |key, value| puts "  #{key}: #{value}" }
+        puts ""
+        puts "tasks:"
+        puts "  total: #{health["tasks"]["total"]}"
+        puts "  active: #{health["tasks"]["active"]}"
+        puts "  by_status: #{health["tasks"]["by_status"].map { |key, value| "#{key}=#{value}" }.join(", ")}"
+        puts "  missing_metadata: #{health["tasks"]["missing_metadata"]}"
+        puts "  missing_status_ref_sha: #{health["tasks"]["missing_status_ref_sha"]}"
+        puts ""
+        puts "checks:"
+        health["checks"].each { |check| puts "  #{check["level"]}: #{check["message"]}" }
+        unless health["next"].empty?
+          puts ""
+          puts "next:"
+          health["next"].each { |step| puts "  - #{step}" }
+        end
+      ' "$target" "$json"
+      ;;
+    -h|--help)
+      usage
+      ;;
+    *)
+      die "unknown project action: $action"
+      ;;
+  esac
+}
+
 cmd_validate() {
   subject="${1:-}"
   if [ "$#" -eq 0 ] || [ "${subject#-}" != "$subject" ]; then
@@ -2231,6 +3825,162 @@ cmd_validate() {
       info "handoff: $file"
       validate_front_matter handoff "$file" "$strict"
       info "ok: handoff metadata"
+      ;;
+    workflow-catalog)
+      target="$(pwd)"
+      core=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --core)
+            shift
+            [ "$#" -gt 0 ] || die "--core requires a value"
+            core="$1"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown validate workflow-catalog option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      target="$(abs_path "$target")"
+      if [ -n "$core" ]; then
+        core="$(abs_path "$core")"
+      fi
+      catalog="$(workflow_catalog_path "$target" "$core")" || die "workflow catalog not found"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for workflow catalog validation"
+
+      info "AI Ops workflow catalog validate"
+      info "catalog: $catalog"
+      ruby -rjson -e '
+        path = ARGV[0]
+        catalog = JSON.parse(File.read(path))
+        abort("schema_error: catalog must be an object") unless catalog.is_a?(Hash)
+        id_pattern = /\A[a-z][a-z0-9_\/-]*\z/
+        allowed_top_level = %w[schema version default_workflow generated_from workflows]
+        extra_top_level = catalog.keys - allowed_top_level
+        abort("schema_error: unknown top-level keys #{extra_top_level.join(", ")}") unless extra_top_level.empty?
+        abort("schema_error: schema must be aiops.workflow_catalog.v1") unless catalog["schema"] == "aiops.workflow_catalog.v1"
+        abort("schema_error: version must be a non-empty string") unless catalog["version"].is_a?(String) && !catalog["version"].empty?
+        if catalog.key?("generated_from")
+          generated_from = catalog["generated_from"]
+          abort("schema_error: generated_from must be an array") unless generated_from.is_a?(Array)
+          abort("schema_error: generated_from must contain strings") unless generated_from.all? { |item| item.is_a?(String) && !item.empty? }
+          abort("schema_error: generated_from must be unique") unless generated_from.uniq.length == generated_from.length
+        end
+        workflows = catalog["workflows"]
+        abort("schema_error: workflows must be an object") unless workflows.is_a?(Hash) && !workflows.empty?
+        default_workflow = catalog["default_workflow"]
+        abort("schema_error: default_workflow must be a string") unless default_workflow.is_a?(String) && !default_workflow.empty?
+        abort("schema_error: default_workflow pattern invalid #{default_workflow}") unless default_workflow.match?(id_pattern)
+        abort("schema_error: default_workflow missing") unless workflows.key?(default_workflow)
+
+        allowed_publish = %w[not_required optional recommended required]
+        allowed_statuses = %w[
+          proposed scoped approved in_progress verification_ready
+          verification_in_progress verification_passed completion_review done
+          blocked rework_requested cancelled
+        ]
+        allowed_roles = [
+          nil, "Direction Role", "Lead Role", "Execution Role", "Verification Role",
+          "Completion Role", "Release Role", "Ops Governance Role", "Product Owner", "any"
+        ]
+
+        def resolve_workflow(workflows, workflow_id, seen = [])
+          abort("schema_error: circular workflow inheritance #{workflow_id}") if seen.include?(workflow_id)
+          entry = workflows[workflow_id]
+          abort("schema_error: missing inherited workflow #{workflow_id}") unless entry.is_a?(Hash)
+          if entry["inherits"]
+            parent = resolve_workflow(workflows, entry["inherits"], seen + [workflow_id])
+            parent.merge(entry) do |key, parent_value, child_value|
+              if key == "statuses"
+                parent_value.merge(child_value || {})
+              elsif key == "transitions"
+                child_value || parent_value
+              else
+                child_value.nil? ? parent_value : child_value
+              end
+            end
+          else
+            entry
+          end
+        end
+
+        workflows.each do |workflow_id, entry|
+          abort("schema_error: workflow id pattern invalid #{workflow_id}") unless workflow_id.match?(id_pattern)
+          abort("schema_error: workflow #{workflow_id} must be an object") unless entry.is_a?(Hash)
+          workflow_keys = %w[label description inherits statuses transitions]
+          extra_workflow_keys = entry.keys - workflow_keys
+          abort("schema_error: workflow #{workflow_id} unknown keys #{extra_workflow_keys.join(", ")}") unless extra_workflow_keys.empty?
+          abort("schema_error: workflow #{workflow_id} label missing") unless entry["label"].is_a?(String) && !entry["label"].empty?
+          abort("schema_error: workflow #{workflow_id} description missing") unless entry["description"].is_a?(String) && !entry["description"].empty?
+          if entry.key?("inherits")
+            abort("schema_error: workflow #{workflow_id} inherits must be string or null") unless entry["inherits"].nil? || entry["inherits"].is_a?(String)
+            abort("schema_error: workflow #{workflow_id} inherits pattern invalid #{entry["inherits"]}") if entry["inherits"].is_a?(String) && !entry["inherits"].match?(id_pattern)
+            abort("schema_error: workflow #{workflow_id} inherits missing workflow #{entry["inherits"]}") if entry["inherits"].is_a?(String) && !workflows.key?(entry["inherits"])
+          else
+            abort("schema_error: workflow #{workflow_id} statuses missing") unless entry["statuses"].is_a?(Hash) && !entry["statuses"].empty?
+            abort("schema_error: workflow #{workflow_id} transitions missing") unless entry["transitions"].is_a?(Array) && !entry["transitions"].empty?
+          end
+          if entry.key?("statuses")
+            abort("schema_error: workflow #{workflow_id} statuses must be an object") unless entry["statuses"].is_a?(Hash)
+          end
+          if entry.key?("transitions")
+            abort("schema_error: workflow #{workflow_id} transitions must be an array") unless entry["transitions"].is_a?(Array)
+          end
+          resolved = resolve_workflow(workflows, workflow_id)
+          statuses = resolved["statuses"]
+          transitions = resolved["transitions"]
+          abort("schema_error: workflow #{workflow_id} statuses missing") unless statuses.is_a?(Hash) && !statuses.empty?
+          abort("schema_error: workflow #{workflow_id} transitions missing") unless transitions.is_a?(Array) && !transitions.empty?
+
+          statuses.each do |status, meta|
+            abort("schema_error: invalid status #{workflow_id}.#{status}") unless allowed_statuses.include?(status)
+            abort("schema_error: #{workflow_id}.#{status} must be an object") unless meta.is_a?(Hash)
+            status_keys = %w[checkpoint canonical_publish meaning]
+            extra_status_keys = meta.keys - status_keys
+            abort("schema_error: #{workflow_id}.#{status} unknown keys #{extra_status_keys.join(", ")}") unless extra_status_keys.empty?
+            abort("schema_error: #{workflow_id}.#{status} checkpoint must be boolean") unless meta["checkpoint"] == true || meta["checkpoint"] == false
+            abort("schema_error: #{workflow_id}.#{status} canonical_publish invalid") unless meta["canonical_publish"].is_a?(String) && allowed_publish.include?(meta["canonical_publish"])
+            abort("schema_error: #{workflow_id}.#{status} meaning missing") unless meta["meaning"].is_a?(String) && !meta["meaning"].empty?
+          end
+
+          transitions.each do |transition|
+            abort("schema_error: transition must be an object #{workflow_id}") unless transition.is_a?(Hash)
+            transition_keys = %w[from to allowed_roles next_role]
+            extra_transition_keys = transition.keys - transition_keys
+            abort("schema_error: transition unknown keys #{workflow_id}: #{extra_transition_keys.join(", ")}") unless extra_transition_keys.empty?
+            from = transition["from"]
+            to = transition["to"]
+            roles = transition["allowed_roles"]
+            abort("schema_error: transition from missing #{workflow_id}") unless from.is_a?(String) && !from.empty?
+            abort("schema_error: transition to missing #{workflow_id}") unless to.is_a?(String) && !to.empty?
+            abort("schema_error: transition from invalid #{workflow_id}: #{from}") unless statuses.key?(from)
+            abort("schema_error: transition to invalid #{workflow_id}: #{to}") unless statuses.key?(to)
+            abort("schema_error: transition roles missing #{workflow_id}: #{from}->#{to}") unless roles.is_a?(Array) && !roles.empty?
+            abort("schema_error: transition roles must be unique #{workflow_id}: #{from}->#{to}") unless roles.uniq.length == roles.length
+            roles.each do |role|
+              abort("schema_error: transition role invalid #{workflow_id}: #{role}") unless allowed_roles.include?(role)
+            end
+            next_role = transition["next_role"]
+            abort("schema_error: next_role invalid #{workflow_id}: #{next_role}") unless allowed_roles.include?(next_role)
+          end
+        end
+
+        puts "ok: schema"
+        puts "ok: workflows #{workflows.keys.sort.join(", ")}"
+        puts "ok: checkpoint metadata"
+      ' "$catalog"
+      info "ok: workflow catalog"
       ;;
     project)
       target="$(pwd)"
@@ -2522,6 +4272,8 @@ EOF
       role=""
       actor=""
       reason="task transition"
+      blocker=""
+      next_decision=""
 
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -2550,6 +4302,16 @@ EOF
             [ "$#" -gt 0 ] || die "--reason requires a value"
             reason="$1"
             ;;
+          --blocker)
+            shift
+            [ "$#" -gt 0 ] || die "--blocker requires a value"
+            blocker="$1"
+            ;;
+          --next-decision)
+            shift
+            [ "$#" -gt 0 ] || die "--next-decision requires a value"
+            next_decision="$1"
+            ;;
           -*)
             die "unknown task transition option: $1"
             ;;
@@ -2568,7 +4330,51 @@ EOF
       target="$(abs_path "$target")"
       task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
       from_status="$(task_yaml_field "$task_file" status)"
+      workflow="$(task_yaml_field "$task_file" workflow)"
       locked_by="$(task_yaml_field "$task_file" locked_by)"
+      status_ref="$(canonical_status_ref_value "$target")"
+      status_ref_sha=""
+      canonical_status=""
+      canonical_task_path=""
+
+      if [ -n "$status_ref" ]; then
+        git_require_repo "$target"
+        status_ref_sha="$(git_ref_sha "$target" "$status_ref")" || die "canonical_status_ref not found locally: $status_ref; run aiops sync-status"
+        local_status_ref_sha="$(task_yaml_field "$task_file" status_ref_sha)"
+
+        if [ -n "$local_status_ref_sha" ] && [ "$local_status_ref_sha" != "$status_ref_sha" ]; then
+          info "AI Ops canonical transition guard"
+          info "task_id: $task_id"
+          info "local_status: $from_status"
+          info "canonical_status_ref: $status_ref"
+          info "local_status_ref_sha: $local_status_ref_sha"
+          info "canonical_status_sha: $status_ref_sha"
+          info "next: run aiops sync-status and reload task state"
+          die "local task status_ref_sha is stale against canonical_status_ref"
+        fi
+
+        canonical_task_path="$(task_find_file_in_ref "$target" "$status_ref" "$task_id" || true)"
+        if [ -n "$canonical_task_path" ]; then
+          tmp_task="${TMPDIR:-/tmp}/aiops-canonical-transition-task.$$"
+          git -C "$target" show "$status_ref:$canonical_task_path" > "$tmp_task" || {
+            rm -f "$tmp_task"
+            die "failed to read task from $status_ref: $canonical_task_path"
+          }
+          canonical_status="$(task_yaml_field "$tmp_task" status)"
+          rm -f "$tmp_task"
+
+          if [ -z "$local_status_ref_sha" ] && [ -n "$canonical_status" ] && [ "$canonical_status" != "$from_status" ]; then
+            info "AI Ops canonical transition guard"
+            info "task_id: $task_id"
+            info "local_status: $from_status"
+            info "canonical_status: $canonical_status"
+            info "canonical_status_ref: $status_ref"
+            info "canonical_status_sha: $status_ref_sha"
+            info "next: run aiops sync-status and reload task state"
+            die "local task state is stale against canonical_status_ref"
+          fi
+        fi
+      fi
 
       if [ -n "$locked_by" ]; then
         if [ -z "$actor" ] || [ "$actor" != "$locked_by" ]; then
@@ -2576,43 +4382,114 @@ EOF
         fi
       fi
 
-      if ! task_transition_allowed "$from_status" "$to_status" "$role"; then
+      if ! task_transition_allowed "$target" "$workflow" "$from_status" "$to_status" "$role"; then
         die "invalid transition: $from_status -> $to_status by $role"
       fi
 
+      if [ "$to_status" = "blocked" ]; then
+        [ -n "$blocker" ] || blocker="$(task_yaml_field "$task_file" blocker)"
+        [ -n "$next_decision" ] || next_decision="$(task_yaml_field "$task_file" next_decision)"
+        [ -n "$blocker" ] || die "blocked transition requires --blocker"
+        [ -n "$next_decision" ] || die "blocked transition requires --next-decision"
+      fi
+
       next_role="$(task_next_role_for_status "$to_status")"
+      checkpoint="$(workflow_status_field "$target" "$workflow" "$to_status" checkpoint)"
+      canonical_publish="$(workflow_status_field "$target" "$workflow" "$to_status" canonical_publish)"
+      status_meaning="$(workflow_status_field "$target" "$workflow" "$to_status" meaning)"
       date_value="$(date +%Y-%m-%d)"
       actor_label="${actor:-$role}"
 
+      transition_tmp="${TMPDIR:-/tmp}/aiops-task-transition-${task_id}-$$.md"
+      cp "$task_file" "$transition_tmp" || die "failed to stage task transition"
+
       case "$to_status" in
         in_progress)
-          task_update_front_matter "$task_file" \
-            "status=$to_status" \
-            "target_role=$next_role" \
-            "updated_at=$date_value" \
-            "locked_by=${actor_label}" \
-            "locked_at=$date_value"
+          if [ -n "$status_ref" ]; then
+            task_update_front_matter "$transition_tmp" \
+              "status=$to_status" \
+              "target_role=$next_role" \
+              "updated_at=$date_value" \
+              "locked_by=${actor_label}" \
+              "locked_at=$date_value" \
+              "status_ref=$status_ref" \
+              "status_ref_sha=$status_ref_sha" \
+              "base_ref=$status_ref" \
+              "base_sha=$status_ref_sha"
+          else
+            task_update_front_matter "$transition_tmp" \
+              "status=$to_status" \
+              "target_role=$next_role" \
+              "updated_at=$date_value" \
+              "locked_by=${actor_label}" \
+              "locked_at=$date_value"
+          fi
           ;;
         *)
-          task_update_front_matter "$task_file" \
-            "status=$to_status" \
-            "target_role=${next_role:-__AIOPS_NULL__}" \
-            "updated_at=$date_value" \
-            "locked_by=__AIOPS_NULL__" \
-            "locked_at=__AIOPS_NULL__" \
-            "lock_session=__AIOPS_NULL__"
+          if [ -n "$status_ref" ]; then
+            task_update_front_matter "$transition_tmp" \
+              "status=$to_status" \
+              "target_role=${next_role:-__AIOPS_NULL__}" \
+              "updated_at=$date_value" \
+              "locked_by=__AIOPS_NULL__" \
+              "locked_at=__AIOPS_NULL__" \
+              "lock_session=__AIOPS_NULL__" \
+              "blocker=${blocker:-__AIOPS_NULL__}" \
+              "next_decision=${next_decision:-__AIOPS_NULL__}" \
+              "status_ref=$status_ref" \
+              "status_ref_sha=$status_ref_sha" \
+              "base_ref=$status_ref" \
+              "base_sha=$status_ref_sha"
+          else
+            task_update_front_matter "$transition_tmp" \
+              "status=$to_status" \
+              "target_role=${next_role:-__AIOPS_NULL__}" \
+              "updated_at=$date_value" \
+              "locked_by=__AIOPS_NULL__" \
+              "locked_at=__AIOPS_NULL__" \
+              "lock_session=__AIOPS_NULL__" \
+              "blocker=${blocker:-__AIOPS_NULL__}" \
+              "next_decision=${next_decision:-__AIOPS_NULL__}"
+          fi
           ;;
       esac
 
-      task_append_event "$task_file" "transition: $from_status -> $to_status" "$actor_label" "$reason"
-      validate_front_matter task "$task_file" yes >/dev/null || die "transition produced invalid task metadata"
+      task_append_event "$transition_tmp" "transition: $from_status -> $to_status" "$actor_label" "$reason"
+      if ! validate_front_matter task "$transition_tmp" yes >/dev/null; then
+        rm -f "$transition_tmp"
+        die "transition produced invalid task metadata"
+      fi
+      mv "$transition_tmp" "$task_file" || die "failed to apply task transition"
 
       info "AI Ops task transition"
       info "task_id: $task_id"
       info "from: $from_status"
       info "to: $to_status"
+      info "workflow: $workflow"
       info "role: $role"
       info "next_role: $next_role"
+      [ -z "$checkpoint" ] || info "checkpoint: $checkpoint"
+      [ -z "$canonical_publish" ] || info "canonical_publish: $canonical_publish"
+      [ -z "$status_meaning" ] || info "status_meaning: $status_meaning"
+      case "$canonical_publish" in
+        not_required)
+          info "checkpoint_note: local/task branch state is enough for this status"
+          ;;
+        optional)
+          info "checkpoint_note: canonical publish is optional for this status"
+          ;;
+        recommended)
+          info "checkpoint_note: publish this checkpoint to the project canonical status ref when the next Agent should continue from it"
+          ;;
+        required)
+          info "checkpoint_note: publish this checkpoint to the project canonical status ref before other Agents rely on it"
+          ;;
+      esac
+      if [ -n "$status_ref" ]; then
+        info "canonical_status_ref: $status_ref"
+        info "canonical_status_sha: $status_ref_sha"
+        info "canonical_task_status: ${canonical_status:-unresolved}"
+      fi
       ;;
 
     lock)
@@ -3112,6 +4989,10 @@ cmd_session_guide() {
   info "  aiops role prompt completion --target \"$target\" --task TASK_ID"
   info "  aiops role prompt ops --target \"$target\""
   info ""
+  info "Role Session 실행 계약 확인:"
+  info "  aiops project context --role execution --target \"$target\" --task TASK_ID"
+  info "  aiops project context --role lead --target \"$target\""
+  info ""
   info "Codex / Claude 지정 예시:"
   info "  aiops role prompt execution --adapter codex --task TASK_ID"
   info "  aiops role prompt verification --adapter claude --task TASK_ID"
@@ -3191,6 +5072,7 @@ cmd_role() {
       info ""
       info "먼저 다음 문서를 확인해줘."
       info "- .ai/runtime/workflow.md"
+      info "- .ai/runtime/workflows.json"
       info "- .ai/runtime/task_queue.md"
       info "- .ai/runtime/role_handoff.md"
       info "- .ai/policies/shared_status_policy.md"
@@ -3233,6 +5115,7 @@ cmd_role() {
         info "- locked_by: $locked_by"
         info ""
         info "작업 시작 전 확인:"
+        info "- aiops project context --role \"$role\" --target \"$target\" --task $task_id"
         info "- aiops status-ref --target \"$target\""
         info "- aiops sync-status --target \"$target\""
         info "- aiops task status $task_id --target \"$target\""
@@ -3269,6 +5152,12 @@ cmd_role() {
             info "- 승인된 실행 Task는 Execution Role로 인계한다."
             ;;
         esac
+        info ""
+      else
+        info "작업 시작 전 확인:"
+        info "- aiops project context --role \"$role\" --target \"$target\""
+        info "- aiops project inspect --target \"$target\""
+        info "- aiops validate project --target \"$target\" --strict"
         info ""
       fi
 
@@ -3776,7 +5665,7 @@ cmd_export() {
             "adapter_contract" => {
               "task_graph" => "tasks[].depends_on / tasks[].blocks",
               "role_assignment" => "tasks[].target_role and agents[].roles",
-              "state_transitions" => "tasks[].status plus runtime/workflow.md",
+              "state_transitions" => "tasks[].status plus runtime/workflows.json",
               "handoff_events" => "handoffs[]",
               "approval_checkpoints" => "approval_checkpoints[]"
             }
@@ -3983,12 +5872,15 @@ cmd_release_check() {
     "$core/.github/workflows/ci.yml" \
     "$core/docs/installation.md" \
     "$core/docs/distribution.md" \
+    "$core/docs/agent_intent.md" \
+    "$core/docs/project_state.md" \
     "$core/docs/shared_status.md" \
     "$core/scripts/test.sh" \
     "$core/bin/aiops" \
     "$core/schemas/README.md" \
     "$core/schemas/task.schema.json" \
     "$core/schemas/workflow.schema.json" \
+    "$core/schemas/workflow_catalog.schema.json" \
     "$core/schemas/handoff.schema.json" \
     "$core/schemas/agent_registry.schema.json" \
     "$core/schemas/operating_model.schema.json" \
@@ -4008,6 +5900,7 @@ cmd_release_check() {
     "$core/policies/session_orchestration_policy.md" \
     "$core/policies/versioning_policy.md" \
     "$core/runtime/workflow.md" \
+    "$core/runtime/workflows.json" \
     "$core/runtime/task_queue.md" \
     "$core/runtime/bootstrap_options.json" \
     "$core/templates/ci/github-actions/aiops.yml" \
@@ -4044,6 +5937,13 @@ cmd_release_check() {
     info "note: ruby not available; schema JSON syntax not checked"
   fi
 
+  if "$core/bin/aiops" validate workflow-catalog --core "$core" >/dev/null 2>&1; then
+    info "ok: workflow catalog validation"
+  else
+    info "warn: workflow catalog validation failed"
+    warnings=$((warnings + 1))
+  fi
+
   release_tmp="${TMPDIR:-/tmp}/aiops-release-check-project.$$"
   rm -rf "$release_tmp"
   if (
@@ -4077,6 +5977,21 @@ cmd_release_check() {
       info "warn: CHANGELOG missing section for $version"
       warnings=$((warnings + 1))
     fi
+    if awk '
+      /^## Unreleased/ { in_unreleased = 1; next }
+      /^## / && in_unreleased { exit }
+      in_unreleased && /^- / { found = 1 }
+      END { exit(found ? 0 : 1) }
+    ' "$core/CHANGELOG.md"; then
+      if [ "$allow_pending_release" = "yes" ]; then
+        info "note: CHANGELOG has pending Unreleased entries"
+      else
+        info "warn: CHANGELOG has pending Unreleased entries; finalize release notes or use --allow-pending-release"
+        warnings=$((warnings + 1))
+      fi
+    else
+      info "ok: CHANGELOG Unreleased is empty"
+    fi
   fi
 
   formula="$core/Formula/ai-agent-ops.rb"
@@ -4095,7 +6010,7 @@ cmd_release_check() {
       warnings=$((warnings + 1))
     fi
 
-    for formula_dir in bootstrap core models policies runtime schemas templates workflows; do
+    for formula_dir in bootstrap core docs models policies runtime schemas templates workflows; do
       if grep -q "libexec.install.*\"$formula_dir\"" "$formula"; then
         info "ok: Formula installs $formula_dir"
       else
@@ -4290,6 +6205,7 @@ main() {
     seed) cmd_seed "$@" ;;
     doctor) cmd_doctor "$@" ;;
     migrate) cmd_migrate "$@" ;;
+    project) cmd_project "$@" ;;
     bootstrap-guide) cmd_bootstrap_guide "$@" ;;
     session-guide) cmd_session_guide "$@" ;;
     role) cmd_role "$@" ;;

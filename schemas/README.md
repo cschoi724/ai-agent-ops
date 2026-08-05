@@ -48,6 +48,7 @@ CLI는 front matter를 읽어 schema로 검증하고, 본문은 사람이 읽는
 |---|---|---|
 | `task.schema.json` | `.ai_project/tasks/**/*.md` front matter | Task metadata, 상태, Role 라우팅, lock, report/QA 경로 |
 | `workflow.schema.json` | workflow definition | 상태 전이, 수행 Role, 다음 Role, 승인/인계 요구 |
+| `workflow_catalog.schema.json` | `runtime/workflows.json` | workflow catalog, checkpoint, canonical publish 정책 |
 | `handoff.schema.json` | handoff metadata/message | Role 간 인계 필수 정보 |
 | `agent_registry.schema.json` | `.ai_project/agent_registry.md` front matter | Agent, Role, capability 매핑 |
 | `operating_model.schema.json` | `.ai_project/operating_model.md` front matter | 프로젝트 운영 모드, workflow, board, ownership 선택값 |
@@ -65,6 +66,8 @@ CLI는 front matter를 읽어 schema로 검증하고, 본문은 사람이 읽는
 9단계 이후 `aiops export runtime`이 Task graph, Role assignment, 상태, Handoff, approval checkpoint를 runtime adapter용 JSON으로 내보낸다.
 
 10단계 이후 다중 worktree 운영을 위해 `canonical_status_ref`, `status_ref`, `status_ref_sha`, `worktree_path`, `base_ref` 계열 필드를 optional로 기록한다. 기존 프로젝트 migration 충돌을 줄이기 위해 첫 단계에서는 required로 강제하지 않는다.
+
+Workflow catalog 단계 이후 `runtime/workflows.json`은 상태별 checkpoint와 canonical publish 정책을 제공한다. Markdown workflow 문서는 설명 계층이고, CLI는 catalog를 읽어 상태 전이 출력과 검증을 보강한다.
 
 ## 호환성 원칙
 

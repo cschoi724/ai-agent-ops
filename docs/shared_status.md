@@ -54,7 +54,32 @@ aiops task status T-YYYYMMDD-001 --source canonical
 
 두 결과가 다르면 local worktree가 아직 공용 상태에 통합되지 않았거나, 오래된 snapshot일 수 있다.
 
-## 4. Worktree 점검
+## 4. 상태 전이 보호
+
+`canonical_status_ref`가 설정된 프로젝트에서 `aiops task transition`은 상태를 바꾸기 전에 canonical 기준을 확인한다.
+
+보호 기준:
+
+- Task에 기록된 `status_ref_sha`가 현재 canonical SHA와 다르면 전이를 차단한다.
+- Task에 `status_ref_sha`가 아직 없고, 로컬 Task 상태가 canonical Task 상태와 다르면 전이를 차단한다.
+- 전이가 허용되면 현재 `canonical_status_ref`, `status_ref_sha`, `base_ref`, `base_sha`를 Task front matter에 기록한다.
+
+예시:
+
+```text
+error: local task state is stale against canonical_status_ref
+```
+
+이 경우 먼저 아래 순서로 최신 공용 상태를 확인한다.
+
+```bash
+aiops sync-status
+aiops task status T-YYYYMMDD-001 --source canonical
+```
+
+그 다음 최신 Task 상태를 기준으로 다시 작업한다.
+
+## 5. Worktree 점검
 
 ```bash
 aiops worktree doctor

@@ -10,7 +10,28 @@
 
 ## Unreleased
 
-- 예정된 변경사항 없음
+### Added
+
+- `aiops project inspect`, `aiops project inspect --json` 명령 추가
+- 프로젝트 상태 조회와 정규화 기준 문서 `docs/project_state.md` 추가
+- `aiops validate project --strict`에 Task, Agent, Role, Workflow, Source of Truth, canonical ref 관계 검증 추가
+- `aiops validate project --strict`에 Task 상태별 운영 증거 report-only 검증 추가
+- `aiops task transition`에 canonical status ref 기반 stale 상태 전이 보호 추가
+- `runtime/workflows.json` workflow catalog와 checkpoint/canonical publish 정책 추가
+- `aiops validate workflow-catalog` 명령과 `task transition` checkpoint 출력 추가
+- `aiops project context --role ROLE [--task TASK_ID] [--json]` Agent Context Contract 출력 추가
+- `aiops project health [--json]` 운영 준비도 요약 추가
+- 자연어 요청을 Agent가 읽기 전용 CLI로 해석하는 기준 문서 `docs/agent_intent.md` 추가
+
+### Changed
+
+- `aiops task transition`의 허용 전이 기준을 `runtime/workflows.json` workflow catalog와 일치하도록 조정
+- `blocked` 상태 전이는 파일 변경 전에 `--blocker`, `--next-decision`을 요구하도록 보강
+- `aiops task transition`이 임시 파일 검증 후 원본을 교체하도록 변경해 실패 시 Task 원본을 보존
+- `release-check --strict`가 workflow catalog 검증과 CHANGELOG Unreleased 잔여 항목을 확인하도록 강화
+- workflow catalog validator가 자료형과 추가 필드 금지 계약을 더 엄격히 확인하도록 강화
+- workflow catalog validator가 workflow id, default_workflow, inherits pattern을 schema와 일치하게 검사하도록 보강
+- workflow catalog schema가 workflow id key pattern을 명시하도록 보강
 
 ## 0.9.0 - 2026-07-31
 

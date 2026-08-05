@@ -1,0 +1,138 @@
+#!/usr/bin/env sh
+set -eu
+
+repo_root="$(CDPATH= cd "$(dirname "$0")/.." && pwd)"
+tmpdir="$(mktemp -d /tmp/aiops-e2e-workflow-catalog.XXXXXX)"
+trap 'rm -rf "$tmpdir"' EXIT INT TERM
+
+"$repo_root/bin/aiops" validate workflow-catalog --core "$repo_root" >/tmp/aiops-e2e-workflow-catalog-validate.out
+grep -q 'ok: workflow catalog' /tmp/aiops-e2e-workflow-catalog-validate.out || {
+  printf '%s\n' "workflow catalog validate did not pass" >&2
+  exit 1
+}
+
+invalid_core="$tmpdir/invalid-core"
+mkdir -p "$invalid_core/runtime"
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  data.delete("version")
+  File.write(ARGV[1], JSON.pretty_generate(data))
+' "$repo_root/runtime/workflows.json" "$invalid_core/runtime/workflows.json"
+
+if "$repo_root/bin/aiops" validate workflow-catalog --core "$invalid_core" >/tmp/aiops-e2e-workflow-catalog-missing-version.out 2>&1; then
+  printf '%s\n' "workflow catalog missing version should fail" >&2
+  exit 1
+fi
+
+grep -q 'schema_error: version must be a non-empty string' /tmp/aiops-e2e-workflow-catalog-missing-version.out || {
+  printf '%s\n' "workflow catalog missing version error not reported" >&2
+  exit 1
+}
+
+for invalid_case in numeric_version invalid_workflow_id unknown_workflow_key unknown_status_key; do
+  case "$invalid_case" in
+    numeric_version)
+      ruby -rjson -e '
+        data = JSON.parse(File.read(ARGV[0]))
+        data["version"] = 1
+        File.write(ARGV[1], JSON.pretty_generate(data))
+      ' "$repo_root/runtime/workflows.json" "$invalid_core/runtime/workflows.json"
+      expected='schema_error: version must be a non-empty string'
+      ;;
+    invalid_workflow_id)
+      ruby -rjson -e '
+        data = JSON.parse(File.read(ARGV[0]))
+        feature = data["workflows"].delete("feature")
+        data["workflows"]["Feature!"] = feature
+        data["default_workflow"] = "Feature!"
+        File.write(ARGV[1], JSON.pretty_generate(data))
+      ' "$repo_root/runtime/workflows.json" "$invalid_core/runtime/workflows.json"
+      expected='schema_error: default_workflow pattern invalid Feature!'
+      ;;
+    unknown_workflow_key)
+      ruby -rjson -e '
+        data = JSON.parse(File.read(ARGV[0]))
+        data["workflows"]["feature"]["unknown_key"] = true
+        File.write(ARGV[1], JSON.pretty_generate(data))
+      ' "$repo_root/runtime/workflows.json" "$invalid_core/runtime/workflows.json"
+      expected='schema_error: workflow feature unknown keys unknown_key'
+      ;;
+    unknown_status_key)
+      ruby -rjson -e '
+        data = JSON.parse(File.read(ARGV[0]))
+        data["workflows"]["feature"]["statuses"]["approved"]["unknown_key"] = true
+        File.write(ARGV[1], JSON.pretty_generate(data))
+      ' "$repo_root/runtime/workflows.json" "$invalid_core/runtime/workflows.json"
+      expected='schema_error: feature.approved unknown keys unknown_key'
+      ;;
+  esac
+
+  if "$repo_root/bin/aiops" validate workflow-catalog --core "$invalid_core" >/tmp/aiops-e2e-workflow-catalog-invalid.out 2>&1; then
+    printf '%s\n' "workflow catalog $invalid_case should fail" >&2
+    exit 1
+  fi
+  grep -q "$expected" /tmp/aiops-e2e-workflow-catalog-invalid.out || {
+    printf '%s\n' "workflow catalog $invalid_case error not reported" >&2
+    exit 1
+  }
+done
+
+ruby -rjson -e '
+  catalog = JSON.parse(File.read(ARGV[0]))
+  abort("wrong schema") unless catalog["schema"] == "aiops.workflow_catalog.v1"
+  feature = catalog.fetch("workflows").fetch("feature")
+  statuses = feature.fetch("statuses")
+  abort("approved should be checkpoint") unless statuses.fetch("approved").fetch("checkpoint") == true
+  abort("approved should be required") unless statuses.fetch("approved").fetch("canonical_publish") == "required"
+  abort("in_progress should not be checkpoint") unless statuses.fetch("in_progress").fetch("checkpoint") == false
+  abort("in_progress should not require publish") unless statuses.fetch("in_progress").fetch("canonical_publish") == "not_required"
+  abort("verification_ready should be recommended") unless statuses.fetch("verification_ready").fetch("canonical_publish") == "recommended"
+  abort("bugfix should inherit feature") unless catalog.fetch("workflows").fetch("bugfix").fetch("inherits") == "feature"
+  schema = JSON.parse(File.read(ARGV[1]))
+  abort("workflow propertyNames pattern missing") unless schema.fetch("properties").fetch("workflows").fetch("propertyNames").fetch("pattern") == "^[a-z][a-z0-9_/-]*$"
+  transitions = feature.fetch("transitions")
+  abort("approved blocked transition missing") unless transitions.any? { |item| item["from"] == "approved" && item["to"] == "blocked" && item["allowed_roles"].include?("any") }
+' "$repo_root/runtime/workflows.json" "$repo_root/schemas/workflow_catalog.schema.json"
+
+ln -s "$repo_root" "$tmpdir/.ai"
+mkdir -p "$tmpdir/.ai_project/tasks/active" "$tmpdir/.ai_project/tasks/backlog" "$tmpdir/.ai_project/tasks/archive"
+printf '# Source of Truth\n' > "$tmpdir/.ai_project/source_of_truth.md"
+
+"$repo_root/bin/aiops" task create \
+  --target "$tmpdir" \
+  --id T-20260805-005 \
+  --title "Workflow catalog checkpoint" \
+  --workflow feature \
+  --role "Lead Role" \
+  --capability planning \
+  --allowed-path src/ \
+  --source-of-truth .ai_project/source_of_truth.md \
+  --created-by "Lead Agent" \
+  >/tmp/aiops-e2e-workflow-catalog-create.out
+
+"$repo_root/bin/aiops" task transition T-20260805-005 \
+  --target "$tmpdir" \
+  --to approved \
+  --role "Direction Role" \
+  --by "Direction Agent" \
+  --reason "checkpoint metadata" \
+  >/tmp/aiops-e2e-workflow-catalog-transition.out
+
+grep -q 'workflow: feature' /tmp/aiops-e2e-workflow-catalog-transition.out || {
+  printf '%s\n' "transition did not report workflow" >&2
+  exit 1
+}
+grep -q 'checkpoint: true' /tmp/aiops-e2e-workflow-catalog-transition.out || {
+  printf '%s\n' "transition did not report checkpoint" >&2
+  exit 1
+}
+grep -q 'canonical_publish: required' /tmp/aiops-e2e-workflow-catalog-transition.out || {
+  printf '%s\n' "transition did not report canonical publish policy" >&2
+  exit 1
+}
+grep -q 'checkpoint_note: publish this checkpoint to the project canonical status ref' /tmp/aiops-e2e-workflow-catalog-transition.out || {
+  printf '%s\n' "transition did not explain checkpoint publish guidance" >&2
+  exit 1
+}
+
+printf '%s\n' "ok: workflow catalog"

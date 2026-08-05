@@ -48,6 +48,16 @@ AI Ops bootstrap 시작해줘.
 
 처음 사용한다면 전체 절차는 [QUICKSTART.md](QUICKSTART.md)를 따라가면 된다.
 
+운영 중에는 사용자가 모든 CLI 명령을 외울 필요가 없다. 보통은 Agent에게 자연어로 요청한다.
+
+```text
+AI Ops 상태 점검해줘.
+다음에 뭘 해야 해?
+이 Task를 개발 에이전트에게 넘길 준비됐어?
+```
+
+Agent는 필요한 읽기 전용 CLI를 선택해 실행하고, 결과를 사람이 이해하기 쉬운 판단과 다음 조치로 요약한다. 자세한 기준은 [docs/agent_intent.md](docs/agent_intent.md)를 확인한다.
+
 ## What Gets Added
 
 ```text
@@ -67,12 +77,16 @@ YourProject/
 |---|---|
 | `aiops seed --adapter both` | 프로젝트에 AI Ops core와 Agent adapter 연결 |
 | `aiops doctor --strict` | 설치와 운영 구성을 엄격 점검 |
+| `aiops project inspect` | 현재 프로젝트 운영 상태를 읽기 전용으로 요약 |
+| `aiops project context --role ROLE` | Role Session이 따라야 할 현재 실행 계약 출력 |
+| `aiops project health` | 운영 가능 여부와 다음 조치를 짧게 요약 |
 | `aiops bootstrap-guide` | 현재 상태에 맞는 다음 Agent 입력 안내 |
 | `aiops session-guide` | 운영 구성 이후 열 Role Session 선택 |
 | `aiops role prompt ROLE` | Codex/Claude 공통 Role Session 첫 문구 생성 |
 | `aiops migrate --plan` | 기존 운영 프로젝트 업데이트 영향 확인 |
 | `aiops migrate --apply` | 승인된 안전 범위만 마이그레이션 |
 | `aiops validate --strict` | `.ai_project/` schema 검증 |
+| `aiops validate workflow-catalog` | workflow catalog와 checkpoint 정책 검증 |
 | `aiops task create --title TITLE` | Task 생성 |
 | `aiops status-ref` | 공용 상태 기준 ref 확인 |
 | `aiops sync-status` | canonical ref fetch/SHA 기록 |
@@ -101,6 +115,8 @@ YourProject/
 - [QUICKSTART.md](QUICKSTART.md): 처음 실행 절차
 - [docs/installation.md](docs/installation.md): 설치 방식
 - [docs/distribution.md](docs/distribution.md): 배포와 Homebrew 기준
+- [docs/agent_intent.md](docs/agent_intent.md): 자연어 요청을 Agent가 처리하는 기준
+- [docs/project_state.md](docs/project_state.md): 프로젝트 상태 조회와 정규화 기준
 - [docs/shared_status.md](docs/shared_status.md): 다중 Agent/worktree 상태 동기화
 - [bootstrap/bootstrap_runbook.md](bootstrap/bootstrap_runbook.md): bootstrap 실행 흐름
 - [bootstrap/migration_runbook.md](bootstrap/migration_runbook.md): 기존 프로젝트 마이그레이션
