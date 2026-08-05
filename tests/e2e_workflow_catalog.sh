@@ -88,9 +88,11 @@ ruby -rjson -e '
   abort("in_progress should not require publish") unless statuses.fetch("in_progress").fetch("canonical_publish") == "not_required"
   abort("verification_ready should be recommended") unless statuses.fetch("verification_ready").fetch("canonical_publish") == "recommended"
   abort("bugfix should inherit feature") unless catalog.fetch("workflows").fetch("bugfix").fetch("inherits") == "feature"
+  schema = JSON.parse(File.read(ARGV[1]))
+  abort("workflow propertyNames pattern missing") unless schema.fetch("properties").fetch("workflows").fetch("propertyNames").fetch("pattern") == "^[a-z][a-z0-9_/-]*$"
   transitions = feature.fetch("transitions")
   abort("approved blocked transition missing") unless transitions.any? { |item| item["from"] == "approved" && item["to"] == "blocked" && item["allowed_roles"].include?("any") }
-' "$repo_root/runtime/workflows.json"
+' "$repo_root/runtime/workflows.json" "$repo_root/schemas/workflow_catalog.schema.json"
 
 ln -s "$repo_root" "$tmpdir/.ai"
 mkdir -p "$tmpdir/.ai_project/tasks/active" "$tmpdir/.ai_project/tasks/backlog" "$tmpdir/.ai_project/tasks/archive"

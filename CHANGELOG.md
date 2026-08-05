@@ -31,6 +31,7 @@
 - `release-check --strict`가 workflow catalog 검증과 CHANGELOG Unreleased 잔여 항목을 확인하도록 강화
 - workflow catalog validator가 자료형과 추가 필드 금지 계약을 더 엄격히 확인하도록 강화
 - workflow catalog validator가 workflow id, default_workflow, inherits pattern을 schema와 일치하게 검사하도록 보강
+- workflow catalog schema가 workflow id key pattern을 명시하도록 보강
 
 ## 0.9.0 - 2026-07-31
 
