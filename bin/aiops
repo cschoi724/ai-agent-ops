@@ -6308,6 +6308,9 @@ cmd_role() {
       info "- Role이 바뀌면 최종 응답에 '다음 Agent에게 전달할 말'을 남긴다."
       info "- 다중 worktree 환경에서는 현재 worktree 문서를 최신 공용 상태로 가정하지 않는다."
       info "- 작업 상태 판단 전 canonical status ref와 SHA를 확인한다."
+      info "- 실제 파일 수정, 상태 전이, handoff, commit, push, merge, deploy 전에는 aiops action plan으로 의도와 차단 항목을 확인한다."
+      info "- Action Plan의 blocked_actions가 있으면 진행하지 않고 이유와 evidence를 사용자에게 요약한다."
+      info "- Action Plan의 requires_user_approval 항목은 사용자 승인 전 실행하지 않는다."
       info "- 사용자 승인 없이 commit, push, merge, deploy를 진행하지 않는다."
       info ""
       info "이 Role의 책임:"
@@ -6336,8 +6339,10 @@ cmd_role() {
         info "- aiops sync-status --target \"$target\""
         info "- aiops task status $task_id --target \"$target\""
         info "- 필요하면 aiops task status $task_id --target \"$target\" --source canonical"
+        info "- 실제 행동 전 aiops action plan --role \"$role\" --target \"$target\" --task $task_id --intends ACTIONS --paths PATHS --json"
         info "- 현재 Role이 Task의 status/target_role과 맞는지 확인한다."
         info "- allowed_paths 밖 파일은 수정하지 않는다."
+        info "- action plan에 blocked_actions가 있으면 작업하지 말고 사용자에게 차단 사유를 보고한다."
         info ""
 
         case "$role" in
