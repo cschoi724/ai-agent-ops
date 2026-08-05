@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/project_snapshot.schema.json",
+  "title": "AI Ops Project Snapshot",
+  "description": "Machine-readable project state contract for Agent control and later user-facing monitors.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "core_version",
+    "generated_at",
+    "target",
+    "source_refs",
+    "core",
+    "project",
+    "agents",
+    "tasks",
+    "workflow",
+    "health",
+    "control",
+    "checks",
+    "next"
+  ],
+  "properties": {
+    "schema": {
+      "const": "aiops.project_snapshot.v1"
+    },
+    "core_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_refs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inside_worktree",
+        "local_branch",
+        "local_head",
+        "canonical_status_ref",
+        "canonical_status_sha",
+        "recorded_status_ref",
+        "recorded_status_sha",
+        "recorded_checked_at",
+        "status_ref_state"
+      ],
+      "properties": {
+        "inside_worktree": { "type": "boolean" },
+        "local_branch": { "type": ["string", "null"] },
+        "local_head": { "type": ["string", "null"] },
+        "canonical_status_ref": { "type": ["string", "null"] },
+        "canonical_status_sha": { "type": ["string", "null"] },
+        "recorded_status_ref": { "type": ["string", "null"] },
+        "recorded_status_sha": { "type": ["string", "null"] },
+        "recorded_checked_at": { "type": ["string", "null"] },
+        "status_ref_state": {
+          "type": "string",
+          "enum": [
+            "unresolved",
+            "ref_not_found_locally",
+            "not_recorded",
+            "recorded_current",
+            "recorded_stale"
+          ]
+        }
+      }
+    },
+    "core": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["present", "source", "version", "adapters"],
+      "properties": {
+        "present": { "type": "boolean" },
+        "source": { "type": "string" },
+        "version": { "type": "string" },
+        "adapters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["codex", "claude"],
+          "properties": {
+            "codex": { "type": "boolean" },
+            "claude": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["present", "name", "operating_mode", "workflow_policy"],
+      "properties": {
+        "present": { "type": "boolean" },
+        "name": { "type": "string" },
+        "operating_mode": { "type": "string" },
+        "workflow_policy": { "type": "string" }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["count", "active_roles", "active"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "active_roles": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "active": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      }
+    },
+    "tasks": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["total", "active", "by_status", "items"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "active": { "type": "integer", "minimum": 0 },
+        "by_status": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "items": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["catalog_present", "default_workflow"],
+      "properties": {
+        "catalog_present": { "type": "boolean" },
+        "default_workflow": { "type": ["string", "null"] }
+      }
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["overall", "warnings", "blockers"],
+      "properties": {
+        "overall": {
+          "type": "string",
+          "enum": ["ok", "warning", "blocked"]
+        },
+        "warnings": { "type": "integer", "minimum": 0 },
+        "blockers": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "can_start_task",
+        "can_transition",
+        "can_commit",
+        "can_push",
+        "can_merge",
+        "requires_user_approval",
+        "blocked_actions"
+      ],
+      "properties": {
+        "can_start_task": { "type": "boolean" },
+        "can_transition": { "type": "boolean" },
+        "can_commit": { "type": "boolean" },
+        "can_push": { "type": "boolean" },
+        "can_merge": { "type": "boolean" },
+        "requires_user_approval": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["commit", "push", "merge", "deploy", "external_configuration_changes"]
+          },
+          "uniqueItems": true
+        },
+        "blocked_actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["action", "reason"],
+            "properties": {
+              "action": { "type": "string", "minLength": 1 },
+              "reason": { "type": "string", "minLength": 1 },
+              "evidence": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "severity", "confidence", "message", "evidence"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "severity": {
+            "type": "string",
+            "enum": ["info", "warn", "blocker"]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["low", "medium", "high"]
+          },
+          "message": { "type": "string", "minLength": 1 },
+          "evidence": { "type": "object" }
+        }
+      }
+    },
+    "next": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["audience", "action"],
+        "properties": {
+          "audience": {
+            "type": "string",
+            "enum": ["agent", "user"]
+          },
+          "action": { "type": "string", "minLength": 1 },
+          "command": { "type": "string" },
+          "message": { "type": "string" }
+        },
+        "anyOf": [
+          { "required": ["command"] },
+          { "required": ["message"] }
+        ]
+      }
+    }
+  }
+}

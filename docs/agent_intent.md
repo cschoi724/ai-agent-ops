@@ -27,7 +27,8 @@ Agent는 이 요청을 CLI 명령에 기계적으로 1:1 매핑하지 않는다.
 
 | 사용자 의도 | 우선 고려할 읽기 전용 명령 | 사용 시점 |
 |---|---|---|
-| 운영 상태 점검 | `aiops project health` | 전체 운영 가능 여부를 빠르게 봐야 할 때 |
+| 운영 상태 계약 확인 | `aiops project snapshot --json` | Agent가 현재 상태와 통제 신호를 먼저 읽어야 할 때 |
+| 운영 상태 점검 | `aiops project health` | 사람이 읽을 빠른 운영 가능 여부가 필요할 때 |
 | 상세 상태 확인 | `aiops project inspect` | 현재 운영 모델, Task 분포, Git 상태를 자세히 봐야 할 때 |
 | Role Session 시작 | `aiops project context --role ROLE` | 특정 Role이 지금 무엇을 할 수 있는지 확인할 때 |
 | Task 시작 가능 여부 | `aiops project context --role ROLE --task TASK_ID` | Task의 상태, 허용 경로, 다음 전이를 확인할 때 |
@@ -37,6 +38,8 @@ Agent는 이 요청을 CLI 명령에 기계적으로 1:1 매핑하지 않는다.
 | 최신 공용 Task 상태 확인 | `aiops task status TASK_ID --source canonical` | 로컬 Task 문서가 오래됐을 수 있을 때 |
 
 이 표는 강제 매핑이 아니다. Agent는 요청 맥락, 최근 실행 결과, 현재 Role, Task 상태를 기준으로 필요한 명령만 선택한다.
+
+Agent가 작업 착수 가능 여부, 상태 전이 가능 여부, 승인 필요 행동을 판단해야 한다면 `project snapshot --json`의 `control`, `checks`, `source_refs`를 먼저 확인한다.
 
 ## 응답 방식
 

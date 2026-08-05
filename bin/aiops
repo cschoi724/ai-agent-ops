@@ -10,6 +10,7 @@ Usage:
   aiops doctor [--target DIR] [--strict]
   aiops migrate [--target DIR] [--plan|--apply]
   aiops project inspect [--target DIR] [--json]
+  aiops project snapshot [--target DIR] --json
   aiops project context --role ROLE [--target DIR] [--task TASK_ID] [--json]
   aiops project health [--target DIR] [--json]
   aiops bootstrap-guide [--target DIR]
@@ -19,6 +20,7 @@ Usage:
   aiops validate task FILE [--strict]
   aiops validate handoff FILE [--strict]
   aiops validate workflow-catalog [--target DIR|--core DIR]
+  aiops validate project-snapshot FILE
   aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
   aiops task status TASK_ID [--target DIR] [--source local|canonical]
   aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT] [--blocker TEXT] [--next-decision TEXT]
@@ -54,6 +56,7 @@ Examples:
   aiops migrate --plan
   aiops project inspect
   aiops project inspect --json
+  aiops project snapshot --json
   aiops project context --role execution --task T-YYYYMMDD-001
   aiops project health
   aiops validate --strict
@@ -61,6 +64,7 @@ Examples:
   aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
   aiops validate handoff .ai_project/handoffs/T-YYYYMMDD-001_execution_to_verification.md --strict
   aiops validate workflow-catalog
+  aiops validate project-snapshot /tmp/project_snapshot.json
   aiops task create --title "로그인 화면 구현" --workflow feature --role "Lead Role"
   aiops task status T-YYYYMMDD-001 --source canonical
   aiops task transition T-YYYYMMDD-001 --to approved --role "Direction Role"
@@ -2636,10 +2640,495 @@ cmd_doctor() {
 
 cmd_project() {
   action="${1:-}"
-  [ "$#" -gt 0 ] || die "project requires an action: inspect, context, health"
+  [ "$#" -gt 0 ] || die "project requires an action: inspect, snapshot, context, health"
   shift
 
   case "$action" in
+    snapshot)
+      target="$(pwd)"
+      json="no"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --json)
+            json="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown project snapshot option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      [ "$json" = "yes" ] || die "project snapshot currently requires --json"
+      target="$(abs_path "$target")"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for project snapshot"
+
+      ruby -ryaml -rjson -rdate -rtime -rfind -ropen3 -rshellwords -e '
+        target = ARGV[0]
+
+        def scalar_string(value)
+          case value
+          when String
+            value
+          when Integer, Float, TrueClass, FalseClass
+            value.to_s
+          else
+            nil
+          end
+        end
+
+        def invalid_scalar?(value)
+          !(value.nil? || value.is_a?(String) || value.is_a?(Integer) || value.is_a?(Float) || value == true || value == false)
+        end
+
+        def front_matter(path)
+          return {} unless File.file?(path)
+          text = File.read(path)
+          return {} unless text.start_with?("---\n")
+          lines = text.lines
+          closing = nil
+          lines[1..].each_with_index do |line, idx|
+            if line.strip == "---"
+              closing = idx + 1
+              break
+            end
+          end
+          return {} unless closing
+          YAML.safe_load(lines[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+        rescue Psych::SyntaxError
+          {}
+        end
+
+        def legacy_field(path, key)
+          return nil unless File.file?(path)
+          File.foreach(path) do |line|
+            if line =~ /^[[:space:]]*#{Regexp.escape(key)}:[[:space:]]*(.*)$/
+              value = Regexp.last_match(1).strip
+              return nil if value.empty?
+              return value.gsub(/\A`|`\z/, "")
+            end
+          end
+          nil
+        end
+
+        def table_value(path, key)
+          return nil unless File.file?(path)
+          File.foreach(path) do |line|
+            next unless line.include?("|")
+            cells = line.split("|").map { |cell| cell.strip.gsub(/\A`|`\z/, "") }
+            next unless cells.length >= 4
+            return cells[2] if cells[1] == key && !cells[2].empty?
+          end
+          nil
+        end
+
+        def value_from(data, path, key)
+          value = data[key]
+          value = legacy_field(path, key) || table_value(path, key) if value.nil? || value == ""
+          return nil if value.nil?
+          value = scalar_string(value)
+          return nil if value.nil?
+          return nil if value.empty?
+          return nil if %w[null unresolved pending_decision {{CANONICAL_STATUS_REF}}].include?(value)
+          value
+        end
+
+        def list(value)
+          case value
+          when Array then value.compact.map(&:to_s).reject(&:empty?)
+          when nil then []
+          else value.to_s.split(",").map(&:strip).reject(&:empty?)
+          end
+        end
+
+        def git(target, *args)
+          stdout, _stderr, status = Open3.capture3("git", "-C", target, *args)
+          return nil unless status.success?
+          stdout.strip
+        end
+
+        def files_under(path)
+          return [] unless Dir.exist?(path)
+          files = []
+          Find.find(path) do |entry|
+            files << entry if File.file?(entry) && File.basename(entry).end_with?(".md")
+          end
+          files.sort
+        end
+
+        def core_source(ai_path)
+          if File.symlink?(ai_path)
+            link = File.readlink(ai_path)
+            if link.include?("homebrew") || link.include?("/Cellar/") || link.include?("/opt/ai-agent-ops")
+              "homebrew"
+            else
+              "symlink"
+            end
+          elsif Dir.exist?(ai_path)
+            "project_local_copy"
+          else
+            "missing"
+          end
+        end
+
+        def runtime_status_ref(path)
+          data = {}
+          return data unless File.file?(path)
+          File.foreach(path) do |line|
+            key, value = line.split(":", 2)
+            next unless key && value
+            data[key.strip] = value.strip
+          end
+          data
+        end
+
+        def normalize(value)
+          case value
+          when Hash
+            value.each_with_object({}) { |(key, item), out| out[key.to_s] = normalize(item) }
+          when Array
+            value.map { |item| normalize(item) }
+          when Date, Time
+            value.to_s
+          else
+            value
+          end
+        end
+
+        project_dir = File.join(target, ".ai_project")
+        ai_path = File.join(target, ".ai")
+        operating_path = File.join(project_dir, "operating_model.md")
+        registry_path = File.join(project_dir, "agent_registry.md")
+        workflow_catalog_path = File.join(ai_path, "runtime", "workflows.json")
+        operating = front_matter(operating_path)
+        registry = front_matter(registry_path)
+
+        core_version = File.file?(File.join(ai_path, "VERSION")) ? File.read(File.join(ai_path, "VERSION")).strip : "unknown"
+        core = {
+          "present" => File.exist?(ai_path),
+          "source" => core_source(ai_path),
+          "version" => core_version,
+          "adapters" => {
+            "codex" => File.file?(File.join(target, "AGENTS.md")),
+            "claude" => File.file?(File.join(target, "CLAUDE.md"))
+          }
+        }
+
+        status_ref = value_from(operating, operating_path, "canonical_status_ref")
+        git_inside = git(target, "rev-parse", "--is-inside-work-tree") == "true"
+        local_branch = git_inside ? git(target, "rev-parse", "--abbrev-ref", "HEAD") : nil
+        local_head = git_inside ? git(target, "rev-parse", "--short", "HEAD") : nil
+        status_ref_sha = git_inside && status_ref ? git(target, "rev-parse", "--verify", "#{status_ref}^{commit}") : nil
+        runtime_ref = runtime_status_ref(File.join(project_dir, ".runtime", "status_ref"))
+        runtime_sha = runtime_ref["status_ref_sha"]
+        status_ref_state =
+          if !status_ref
+            "unresolved"
+          elsif !status_ref_sha
+            "ref_not_found_locally"
+          elsif runtime_sha.nil? || runtime_sha.empty?
+            "not_recorded"
+          elsif runtime_sha == status_ref_sha
+            "recorded_current"
+          else
+            "recorded_stale"
+          end
+
+        tasks = files_under(File.join(project_dir, "tasks")).map do |path|
+          data = front_matter(path)
+          relative = path.sub(%r{\A#{Regexp.escape(target)}/?}, "")
+          status = data["status"] || legacy_field(path, "status")
+          {
+            "id" => data["id"] || File.basename(path, ".md"),
+            "title" => data["title"],
+            "status" => status,
+            "workflow" => data["workflow"] || legacy_field(path, "workflow"),
+            "target_role" => data["target_role"] || legacy_field(path, "target_role"),
+            "target_agent" => data["target_agent"] || legacy_field(path, "target_agent"),
+            "allowed_paths" => list(data["allowed_paths"]),
+            "source_of_truth" => list(data["source_of_truth"]),
+            "locked_by" => data["locked_by"] || legacy_field(path, "locked_by"),
+            "lock_session" => data["lock_session"] || legacy_field(path, "lock_session"),
+            "status_ref" => data["status_ref"] || legacy_field(path, "status_ref"),
+            "status_ref_sha" => data["status_ref_sha"] || legacy_field(path, "status_ref_sha"),
+            "branch" => data["branch"],
+            "worktree" => data["worktree_path"] || data["worktree"],
+            "path" => relative
+          }
+        end
+
+        task_counts_by_status = Hash.new(0)
+        tasks.each { |task| task_counts_by_status[task["status"] || "unknown"] += 1 }
+        active_tasks = tasks.select { |task| !%w[done cancelled].include?(task["status"].to_s) }
+        missing_task_metadata = tasks.select { |task| task["status"].to_s.empty? || task["workflow"].to_s.empty? || task["target_role"].to_s.empty? }
+
+        agents_raw = registry["agents"].is_a?(Array) ? registry["agents"] : []
+        agents = agents_raw.map do |agent|
+          next nil unless agent.is_a?(Hash)
+          {
+            "id" => agent["id"] || agent["agent"],
+            "name" => agent["agent"] || agent["id"],
+            "status" => agent["status"],
+            "team" => agent["team"],
+            "declared_roles" => list(agent["roles"]),
+            "capabilities" => list(agent["capabilities"]),
+            "current_task" => nil,
+            "branch" => nil,
+            "worktree" => nil,
+            "drift" => []
+          }
+        end.compact
+        active_roles = operating["active_roles"]
+        unless active_roles.is_a?(Array)
+          active_roles = agents_raw.flat_map { |agent| agent.is_a?(Hash) && agent["status"] == "enabled" ? Array(agent["roles"]) : [] }.uniq
+        end
+
+        workflow_catalog = nil
+        if File.file?(workflow_catalog_path)
+          begin
+            workflow_catalog = JSON.parse(File.read(workflow_catalog_path))
+          rescue JSON::ParserError
+            workflow_catalog = nil
+          end
+        end
+
+        project = {
+          "present" => Dir.exist?(project_dir),
+          "name" => value_from(operating, operating_path, "project") || File.basename(target),
+          "bootstrap_mode" => value_from(operating, operating_path, "bootstrap_mode") || "unknown",
+          "recorded_core_version" => value_from(operating, operating_path, "core_version"),
+          "start_context" => value_from(operating, operating_path, "start_context") || "unknown",
+          "readiness_level" => value_from(operating, operating_path, "readiness_level") || "unknown",
+          "operating_mode" => value_from(operating, operating_path, "operating_mode") || "unknown",
+          "team_pattern" => value_from(operating, operating_path, "team_pattern") || "unknown",
+          "workflow_policy" => value_from(operating, operating_path, "workflow_policy") || "unknown",
+          "ownership_model" => value_from(operating, operating_path, "ownership_model") || "unknown",
+          "coordination" => value_from(operating, operating_path, "coordination") || "unknown",
+          "board_model" => value_from(operating, operating_path, "board_model") || "unknown",
+          "knowledge_mode" => value_from(operating, operating_path, "knowledge_mode") || "unknown"
+        }
+
+        checks = []
+        add_check = lambda do |id, severity, confidence, message, evidence = {}|
+          checks << {
+            "id" => id,
+            "severity" => severity,
+            "confidence" => confidence,
+            "message" => message,
+            "evidence" => evidence
+          }
+        end
+
+        if core["present"]
+          add_check.call("core_connected", "info", "high", ".ai core is connected", { "source" => core["source"], "version" => core["version"] })
+        else
+          add_check.call("core_missing", "blocker", "high", ".ai core missing; run aiops seed first", { "path" => ".ai" })
+        end
+
+        if core["adapters"]["codex"] || core["adapters"]["claude"]
+          add_check.call("adapter_present", "info", "high", "at least one Agent adapter exists", core["adapters"])
+        else
+          add_check.call("adapter_missing", "warn", "high", "AGENTS.md or CLAUDE.md adapter is missing", { "expected" => ["AGENTS.md", "CLAUDE.md"] })
+        end
+
+        if project["present"]
+          add_check.call("project_config_present", "info", "high", ".ai_project exists", { "path" => ".ai_project" })
+        else
+          add_check.call("project_config_missing", "blocker", "high", ".ai_project missing; run bootstrap first", { "path" => ".ai_project" })
+        end
+
+        if File.file?(workflow_catalog_path) && workflow_catalog.is_a?(Hash) && workflow_catalog["schema"] == "aiops.workflow_catalog.v1"
+          add_check.call("workflow_catalog_present", "info", "high", "workflow catalog is readable", { "path" => ".ai/runtime/workflows.json" })
+        elsif core["present"]
+          add_check.call("workflow_catalog_missing", "blocker", "high", "workflow catalog missing or unreadable", { "path" => ".ai/runtime/workflows.json" })
+        end
+
+        if project["present"] && project["recorded_core_version"] && core_version != "unknown" && project["recorded_core_version"] != core_version
+          add_check.call("core_version_drift", "warn", "high", ".ai_project core_version differs from current core", {
+            "recorded_core_version" => project["recorded_core_version"],
+            "core_version" => core_version
+          })
+        end
+
+        if project["present"]
+          %w[project operating_mode workflow_policy].each do |key|
+            raw_value = operating[key]
+            if invalid_scalar?(raw_value)
+              add_check.call("project_field_type_invalid", "warn", "high", "operating_model #{key} is not a scalar; snapshot normalized it", {
+                "path" => ".ai_project/operating_model.md",
+                "field" => key,
+                "raw_type" => raw_value.class.name,
+                "normalized_value" => key == "project" ? project["name"] : project[key]
+              })
+            end
+          end
+
+          case status_ref_state
+          when "unresolved"
+            add_check.call("canonical_status_ref_unresolved", "warn", "medium", "canonical_status_ref is unresolved", { "source" => ".ai_project/operating_model.md" })
+          when "ref_not_found_locally"
+            add_check.call("canonical_status_ref_unavailable", "blocker", "high", "canonical_status_ref cannot be resolved locally", { "canonical_status_ref" => status_ref })
+          when "not_recorded"
+            add_check.call("canonical_status_not_recorded", "warn", "high", "canonical status SHA is not recorded; run aiops sync-status", { "canonical_status_ref" => status_ref, "canonical_status_sha" => status_ref_sha })
+          when "recorded_stale"
+            add_check.call("canonical_status_stale", "warn", "high", "canonical status SHA is stale", {
+              "recorded_status_sha" => runtime_sha,
+              "canonical_status_sha" => status_ref_sha,
+              "source" => ".ai_project/.runtime/status_ref"
+            })
+          when "recorded_current"
+            add_check.call("canonical_status_current", "info", "high", "recorded canonical status SHA is current", { "canonical_status_sha" => status_ref_sha })
+          end
+        end
+
+        if missing_task_metadata.empty?
+          add_check.call("task_metadata_present", "info", "medium", "task metadata is present or no tasks are registered", { "tasks" => tasks.length })
+        else
+          add_check.call("task_metadata_incomplete", "warn", "high", "#{missing_task_metadata.length} task(s) missing status, workflow, or target_role", {
+            "tasks" => missing_task_metadata.map { |task| task["id"] }
+          })
+        end
+
+        blockers = checks.count { |check| check["severity"] == "blocker" }
+        warnings = checks.count { |check| check["severity"] == "warn" }
+        overall = blockers.positive? ? "blocked" : (warnings.positive? ? "warning" : "ok")
+        stale_canonical = %w[ref_not_found_locally not_recorded recorded_stale].include?(status_ref_state)
+        can_start_task = blockers.zero? && project["present"]
+        can_transition = can_start_task && !stale_canonical
+
+        blocked_actions = []
+        unless can_start_task
+          blocked_actions << {
+            "action" => "task_start",
+            "reason" => "project setup has blockers",
+            "evidence" => { "blockers" => checks.select { |check| check["severity"] == "blocker" }.map { |check| check["id"] } }
+          }
+        end
+        unless can_transition
+          reason = stale_canonical ? "canonical status ref is not current" : "project setup has blockers"
+          blocked_actions << {
+            "action" => "task_transition",
+            "reason" => reason,
+            "evidence" => {
+              "status_ref_state" => status_ref_state,
+              "canonical_status_ref" => status_ref,
+              "canonical_status_sha" => status_ref_sha,
+              "recorded_status_sha" => runtime_sha
+            }
+          }
+        end
+
+        next_steps = []
+        escaped_target = Shellwords.escape(target)
+        unless core["present"]
+          next_steps << {
+            "audience" => "agent",
+            "action" => "seed_project",
+            "command" => "aiops seed --target #{escaped_target} --adapter both"
+          }
+          next_steps << {
+            "audience" => "user",
+            "action" => "approve_seed",
+            "message" => "AI Ops core가 연결되지 않았습니다. seed 설치가 필요합니다."
+          }
+        end
+        unless project["present"]
+          next_steps << {
+            "audience" => "agent",
+            "action" => "bootstrap_project",
+            "command" => "aiops bootstrap-guide --target #{escaped_target}"
+          }
+          next_steps << {
+            "audience" => "user",
+            "action" => "start_bootstrap",
+            "message" => ".ai_project 구성이 없습니다. bootstrap을 진행해야 합니다."
+          }
+        end
+        if project["present"] && %w[not_recorded recorded_stale].include?(status_ref_state)
+          next_steps << {
+            "audience" => "agent",
+            "action" => "sync_status",
+            "command" => "aiops sync-status --target #{escaped_target}"
+          }
+          next_steps << {
+            "audience" => "user",
+            "action" => "approve_sync",
+            "message" => "공용 상태 기준 SHA 기록이 최신이 아닙니다. 상태 동기화를 권장합니다."
+          }
+        end
+        if checks.any? { |check| check["severity"] != "info" }
+          next_steps << {
+            "audience" => "agent",
+            "action" => "validate_project",
+            "command" => "aiops validate project --target #{escaped_target} --strict"
+          }
+        end
+
+        snapshot = normalize({
+          "schema" => "aiops.project_snapshot.v1",
+          "core_version" => core_version,
+          "generated_at" => Time.now.utc.iso8601,
+          "target" => target,
+          "source_refs" => {
+            "inside_worktree" => git_inside,
+            "local_branch" => local_branch,
+            "local_head" => local_head,
+            "canonical_status_ref" => status_ref,
+            "canonical_status_sha" => status_ref_sha,
+            "recorded_status_ref" => runtime_ref["status_ref"],
+            "recorded_status_sha" => runtime_sha,
+            "recorded_checked_at" => runtime_ref["checked_at"],
+            "status_ref_state" => status_ref_state
+          },
+          "core" => core,
+          "project" => project,
+          "agents" => {
+            "count" => agents.length,
+            "active_roles" => active_roles || [],
+            "active" => agents
+          },
+          "tasks" => {
+            "total" => tasks.length,
+            "active" => active_tasks.length,
+            "by_status" => task_counts_by_status.sort.to_h,
+            "items" => tasks
+          },
+          "workflow" => {
+            "catalog_present" => workflow_catalog.is_a?(Hash),
+            "default_workflow" => workflow_catalog.is_a?(Hash) ? workflow_catalog["default_workflow"] : nil,
+            "catalog_schema" => workflow_catalog.is_a?(Hash) ? workflow_catalog["schema"] : nil
+          },
+          "health" => {
+            "overall" => overall,
+            "warnings" => warnings,
+            "blockers" => blockers
+          },
+          "control" => {
+            "can_start_task" => can_start_task,
+            "can_transition" => can_transition,
+            "can_commit" => false,
+            "can_push" => false,
+            "can_merge" => false,
+            "requires_user_approval" => ["commit", "push", "merge", "deploy", "external_configuration_changes"],
+            "blocked_actions" => blocked_actions
+          },
+          "checks" => checks,
+          "next" => next_steps
+        })
+
+        puts JSON.pretty_generate(snapshot)
+      ' "$target"
+      ;;
     inspect)
       target="$(pwd)"
       json="no"
@@ -3981,6 +4470,127 @@ cmd_validate() {
         puts "ok: checkpoint metadata"
       ' "$catalog"
       info "ok: workflow catalog"
+      ;;
+    project-snapshot)
+      file=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          -*)
+            die "unknown validate project-snapshot option: $1"
+            ;;
+          *)
+            [ -z "$file" ] || die "validate project-snapshot requires exactly one FILE"
+            file="$1"
+            ;;
+        esac
+        shift
+      done
+      [ -n "$file" ] || die "validate project-snapshot requires exactly one FILE"
+      [ -f "$file" ] || die "project snapshot file not found: $file"
+
+      core="$(default_core_dir)"
+      schema="$core/schemas/project_snapshot.schema.json"
+      [ -f "$schema" ] || die "project snapshot schema not found: $schema"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for project snapshot validation"
+
+      info "AI Ops project snapshot validate"
+      info "snapshot: $file"
+      ruby -rjson -e '
+        data = JSON.parse(File.read(ARGV[0]))
+        schema = JSON.parse(File.read(ARGV[1]))
+        errors = []
+
+        def valid_type?(value, type)
+          case type
+          when "object" then value.is_a?(Hash)
+          when "array" then value.is_a?(Array)
+          when "string" then value.is_a?(String)
+          when "integer" then value.is_a?(Integer)
+          when "number" then value.is_a?(Numeric)
+          when "boolean" then value == true || value == false
+          when "null" then value.nil?
+          else true
+          end
+        end
+
+        def validate_schema(value, schema, path, errors)
+          return unless schema.is_a?(Hash)
+
+          if schema.key?("const") && value != schema["const"]
+            errors << "#{path}: expected const #{schema["const"].inspect}, got #{value.inspect}"
+          end
+
+          if schema.key?("enum") && !schema["enum"].include?(value)
+            errors << "#{path}: expected one of #{schema["enum"].inspect}, got #{value.inspect}"
+          end
+
+          if schema.key?("type")
+            types = Array(schema["type"])
+            unless types.any? { |type| valid_type?(value, type) }
+              errors << "#{path}: expected type #{types.join("|")}, got #{value.class}"
+              return
+            end
+          end
+
+          if value.is_a?(String) && schema.key?("minLength") && value.length < schema["minLength"].to_i
+            errors << "#{path}: shorter than minLength #{schema["minLength"]}"
+          end
+
+          if value.is_a?(Numeric) && schema.key?("minimum") && value < schema["minimum"]
+            errors << "#{path}: smaller than minimum #{schema["minimum"]}"
+          end
+
+          if value.is_a?(Array)
+            if schema["uniqueItems"] && value.uniq.length != value.length
+              errors << "#{path}: array items must be unique"
+            end
+            if schema["items"].is_a?(Hash)
+              value.each_with_index do |item, index|
+                validate_schema(item, schema["items"], "#{path}[#{index}]", errors)
+              end
+            end
+          end
+
+          if value.is_a?(Hash)
+            Array(schema["required"]).each do |key|
+              errors << "#{path}.#{key}: required property missing" unless value.key?(key)
+            end
+
+            properties = schema["properties"].is_a?(Hash) ? schema["properties"] : {}
+            properties.each do |key, child_schema|
+              validate_schema(value[key], child_schema, "#{path}.#{key}", errors) if value.key?(key)
+            end
+
+            additional = schema.fetch("additionalProperties", true)
+            extra_keys = value.keys - properties.keys
+            if additional == false && !extra_keys.empty?
+              errors << "#{path}: unknown properties #{extra_keys.join(", ")}"
+            elsif additional.is_a?(Hash)
+              extra_keys.each do |key|
+                validate_schema(value[key], additional, "#{path}.#{key}", errors)
+              end
+            end
+
+            if schema["anyOf"].is_a?(Array)
+              matched = schema["anyOf"].any? do |candidate|
+                candidate_errors = []
+                validate_schema(value, candidate, path, candidate_errors)
+                candidate_errors.empty?
+              end
+              errors << "#{path}: did not match anyOf" unless matched
+            end
+          end
+        end
+
+        validate_schema(data, schema, "$", errors)
+        abort("schema_error:\n" + errors.join("\n")) unless errors.empty?
+        puts "ok: schema"
+      ' "$file" "$schema"
+      info "ok: project snapshot"
       ;;
     project)
       target="$(pwd)"
@@ -5886,6 +6496,7 @@ cmd_release_check() {
     "$core/schemas/operating_model.schema.json" \
     "$core/schemas/bootstrap_options.schema.json" \
     "$core/schemas/runtime_export.schema.json" \
+    "$core/schemas/project_snapshot.schema.json" \
     "$core/adapters/README.md" \
     "$core/adapters/langgraph/README.md" \
     "$core/adapters/openai_agents/README.md" \
@@ -5962,6 +6573,8 @@ cmd_release_check() {
     "$core/bin/aiops" migrate --target "$release_tmp" --plan >/dev/null
     "$core/bin/aiops" knowledge lint --target "$release_tmp" >/dev/null
     "$core/bin/aiops" export runtime --target "$release_tmp" >/dev/null
+    "$core/bin/aiops" project snapshot --target "$release_tmp" --json > "$release_tmp/project_snapshot.json"
+    "$core/bin/aiops" validate project-snapshot "$release_tmp/project_snapshot.json" >/dev/null
   ); then
     info "ok: seeded project release gate"
   else
