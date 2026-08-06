@@ -17,6 +17,17 @@ for file in current_context.md source_of_truth.md task_board.md ops_decisions.md
   printf '# %s\n' "$file" > "$tmpdir/.ai_project/$file"
 done
 
+cat > "$tmpdir/.ai_project/branch_pr_strategy.md" <<'EOF'
+---
+schema: aiops.branch_pr_strategy.v1
+project: StatusRequirementsProject
+canonical_status_ref: origin/main
+branch_pr: branch_per_task
+---
+
+# Branch / PR Strategy
+EOF
+
 cat > "$tmpdir/.ai_project/operating_model.md" <<'EOF'
 ---
 schema: aiops.operating_model.v1

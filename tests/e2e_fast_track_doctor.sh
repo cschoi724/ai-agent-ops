@@ -21,8 +21,8 @@ grep -q 'mode: .ai_project fast_track' /tmp/aiops-e2e-fast-doctor.out || {
   exit 1
 }
 
-grep -q 'optional for fast_track missing .ai_project/branch_pr_strategy.md' /tmp/aiops-e2e-fast-doctor.out || {
-  printf '%s\n' "doctor did not treat branch_pr_strategy as fast_track optional" >&2
+grep -q 'not_required: .ai_project/branch_pr_strategy.md' /tmp/aiops-e2e-fast-doctor.out || {
+  printf '%s\n' "doctor did not treat branch_pr_strategy as conditionally optional" >&2
   exit 1
 }
 

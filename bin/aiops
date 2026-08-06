@@ -170,6 +170,111 @@ markdown_table_value() {
   ' "$file"
 }
 
+normalize_project_value() {
+  printf '%s\n' "${1:-}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/^`//; s/`$//; s/^"//; s/"$//; s/^'\''//; s/'\''$//'
+}
+
+project_field_value() {
+  operating_model="$1"
+  key="$2"
+
+  [ -f "$operating_model" ] || return 0
+  value="$(task_field_value "$operating_model" "$key")"
+  if [ -z "$value" ]; then
+    value="$(markdown_table_value "$operating_model" "$key")"
+  fi
+  normalize_project_value "$value"
+}
+
+project_field_unresolved() {
+  value="$(normalize_project_value "${1:-}")"
+  case "$value" in
+    ""|"null"|"none"|"unresolved"|"pending"|"pending_decision"|"{{"*"}}")
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+conditional_project_file_required() {
+  file_name="$1"
+  operating_model="$2"
+
+  case "$file_name" in
+    branch_pr_strategy.md)
+      branch_pr="$(project_field_value "$operating_model" "branch_pr")"
+      ! project_field_unresolved "$branch_pr"
+      ;;
+    workflow_overrides.md)
+      workflow_policy="$(project_field_value "$operating_model" "workflow_policy")"
+      workflow_override="$(project_field_value "$operating_model" "workflow_override")"
+      workflow_overrides="$(project_field_value "$operating_model" "workflow_overrides")"
+      [ "$workflow_policy" = "custom" ] || [ "$workflow_override" = "true" ] || [ "$workflow_overrides" = "true" ]
+      ;;
+    ops_migration_plan.md)
+      bootstrap_mode="$(project_field_value "$operating_model" "bootstrap_mode")"
+      case "$bootstrap_mode" in
+        migrated|*migration*) return 0 ;;
+        *) return 1 ;;
+      esac
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+conditional_project_file_reason() {
+  file_name="$1"
+  operating_model="$2"
+
+  case "$file_name" in
+    branch_pr_strategy.md)
+      branch_pr="$(project_field_value "$operating_model" "branch_pr")"
+      if project_field_unresolved "$branch_pr"; then
+        printf '%s\n' "branch_pr pending_decision or unresolved"
+      else
+        printf '%s\n' "branch_pr strategy active"
+      fi
+      ;;
+    workflow_overrides.md)
+      workflow_policy="$(project_field_value "$operating_model" "workflow_policy")"
+      printf '%s\n' "workflow_policy ${workflow_policy:-unknown} uses standard catalog"
+      ;;
+    ops_migration_plan.md)
+      bootstrap_mode="$(project_field_value "$operating_model" "bootstrap_mode")"
+      printf '%s\n' "bootstrap_mode ${bootstrap_mode:-unknown}, migration not requested"
+      ;;
+    *)
+      printf '%s\n' "conditional project file not required"
+      ;;
+  esac
+}
+
+check_conditional_project_files() {
+  target="$1"
+  project_dir="$2"
+  operating_model="$3"
+  failed=0
+
+  for file_name in branch_pr_strategy.md workflow_overrides.md ops_migration_plan.md; do
+    path="$project_dir/$file_name"
+    label="${path#$target/}"
+    if conditional_project_file_required "$file_name" "$operating_model"; then
+      check_required_file "$path" "$label" || failed=1
+    elif [ -e "$path" ]; then
+      info "ok: optional $label"
+    else
+      info "not_required: $label"
+      info "reason: $(conditional_project_file_reason "$file_name" "$operating_model")"
+    fi
+  done
+
+  [ "$failed" -eq 0 ]
+}
+
 task_has_field() {
   file="$1"
   field="$2"
@@ -895,27 +1000,7 @@ validate_project() {
     fi
   done
 
-  if [ "$mode" = "guided_full" ]; then
-    for required in \
-      "$project_dir/branch_pr_strategy.md" \
-      "$project_dir/workflow_overrides.md" \
-      "$project_dir/ops_migration_plan.md"
-    do
-      check_required_file "$required" "${required#$target/}" || failed=1
-    done
-  else
-    for optional in \
-      "$project_dir/branch_pr_strategy.md" \
-      "$project_dir/workflow_overrides.md" \
-      "$project_dir/ops_migration_plan.md"
-    do
-      if [ -e "$optional" ]; then
-        info "ok: optional ${optional#$target/}"
-      else
-        info "note: optional for fast_track missing ${optional#$target/}"
-      fi
-    done
-  fi
+  check_conditional_project_files "$target" "$project_dir" "$operating_model" || failed=1
 
   for task_dir in "$project_dir/tasks/active" "$project_dir/tasks/backlog" "$project_dir/tasks/archive"; do
     check_required_dir "$task_dir" "${task_dir#$target/}" || failed=1
@@ -1407,7 +1492,7 @@ project_recorded_core_version() {
   if [ -z "$recorded" ]; then
     printf '%s\n' "missing"
   else
-    printf '%s\n' "$recorded"
+    normalize_project_value "$recorded"
   fi
 }
 
@@ -2543,27 +2628,7 @@ cmd_doctor() {
       fi
     done
 
-    if [ "$ai_project_mode" = "fast_track" ]; then
-      for optional in \
-        "$target/.ai_project/branch_pr_strategy.md" \
-        "$target/.ai_project/workflow_overrides.md" \
-        "$target/.ai_project/ops_migration_plan.md"
-      do
-        if [ -e "$optional" ]; then
-          info "ok: optional ${optional#$target/}"
-        else
-          info "note: optional for fast_track missing ${optional#$target/}"
-        fi
-      done
-    else
-      for required in \
-        "$target/.ai_project/branch_pr_strategy.md" \
-        "$target/.ai_project/workflow_overrides.md" \
-        "$target/.ai_project/ops_migration_plan.md"
-      do
-        check_required_file "$required" "${required#$target/}" || failed=1
-      done
-    fi
+    check_conditional_project_files "$target" "$target/.ai_project" "$operating_model" || failed=1
 
     for task_dir in "$target/.ai_project/tasks/active" "$target/.ai_project/tasks/backlog" "$target/.ai_project/tasks/archive"; do
       if [ -d "$task_dir" ]; then
@@ -2606,11 +2671,12 @@ cmd_doctor() {
     fi
 
     if [ -f "$ai/VERSION" ] && [ -f "$operating_model" ]; then
-      current_core_version="$(cat "$ai/VERSION")"
+      current_core_version="$(normalize_project_value "$(cat "$ai/VERSION")")"
       recorded_core_version="$(task_field_value "$operating_model" "core_version")"
       if [ -z "$recorded_core_version" ]; then
         recorded_core_version="$(markdown_table_value "$operating_model" "core_version")"
       fi
+      recorded_core_version="$(normalize_project_value "$recorded_core_version")"
 
       case "$recorded_core_version" in
         ""|"{{CORE_VERSION}}")
