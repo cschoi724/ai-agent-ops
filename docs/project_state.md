@@ -227,11 +227,26 @@ Task 상태 전이 후 `aiops task transition`은 catalog를 읽어 아래 정�
 
 ```sh
 aiops validate policy-rules
+aiops policy evaluate --target . --json
+aiops policy evaluate --snapshot /tmp/project_snapshot.json --json
 ```
 
-현재 단계에서는 catalog 구조와 schema 검증을 먼저 고정한다. 즉, `core_missing`, `project_config_missing`, `required_project_file_missing`, `canonical_status_stale` 같은 규칙을 기계가 읽을 수 있는 형태로 선언하지만, 기존 snapshot/health 계산을 한 번에 모두 교체하지는 않는다.
+`aiops policy evaluate`는 project snapshot에 policy rule을 적용해 어떤 규칙이 match되었는지 출력한다. 출력 schema는 아래와 같다.
 
-이후 단계에서는 같은 project snapshot을 입력으로 받아 policy rule 결과를 `checks`와 `control` 판단에 점진적으로 연결한다.
+```text
+aiops.policy_evaluation.v1
+```
+
+현재 evaluator가 처리하는 조건은 intentionally small이다.
+
+- `key: value` exact match
+- `key: null`
+- `key: [a, b]` 중 하나와 일치
+- `checks.some_check_id: "present"`
+
+`project snapshot --json`은 `policy` 필드에 같은 평가 결과 요약을 포함한다. 이 값은 source of truth가 아니라 snapshot과 policy catalog를 읽어 만든 projection이다.
+
+초기 단계에서는 기존 snapshot/health 계산을 한 번에 모두 교체하지 않는다. 대신 policy result와 기존 `checks`, `health`, `control`이 충돌하지 않도록 연결한다.
 
 ## Action Plan
 

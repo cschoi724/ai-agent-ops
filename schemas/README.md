@@ -56,6 +56,7 @@ CLI는 front matter를 읽어 schema로 검증하고, 본문은 사람이 읽는
 | `bootstrap_options.schema.json` | `runtime/bootstrap_options.json` | Bootstrap 선택 후보 catalog |
 | `project_snapshot.schema.json` | `aiops project snapshot --json` JSON | Agent가 먼저 읽는 프로젝트 상태 계약과 통제 신호 |
 | `policy_rules.schema.json` | `runtime/policy_rules.json` | 운영 판단 규칙 catalog |
+| `policy_evaluation.schema.json` | `aiops policy evaluate --json` JSON | snapshot에 policy rule을 적용한 평가 결과 |
 | `action_plan.schema.json` | `aiops action plan --json` JSON | Agent 작업 착수 전 의도/승인/차단 검토 계약 |
 
 ## 단계별 적용
@@ -72,7 +73,7 @@ CLI는 front matter를 읽어 schema로 검증하고, 본문은 사람이 읽는
 
 Workflow catalog 단계 이후 `runtime/workflows.json`은 상태별 checkpoint와 canonical publish 정책을 제공한다. Markdown workflow 문서는 설명 계층이고, CLI는 catalog를 읽어 상태 전이 출력과 검증을 보강한다.
 
-Policy rules 단계 이후 `runtime/policy_rules.json`은 health, snapshot, validate에서 사용하는 운영 판단 규칙을 데이터화하기 위한 catalog 역할을 한다. 첫 단계에서는 schema와 validator로 구조를 고정하고, 실제 판정 로직 연결은 이후 단계에서 점진적으로 진행한다.
+Policy rules 단계 이후 `runtime/policy_rules.json`은 health, snapshot, validate에서 사용하는 운영 판단 규칙을 데이터화하기 위한 catalog 역할을 한다. `aiops policy evaluate --json`은 project snapshot을 입력으로 받아 적용된 rule을 `aiops.policy_evaluation.v1` 계약으로 출력한다. `project snapshot --json`도 같은 policy 평가 요약을 포함한다.
 
 Action plan 단계 이후 Agent는 작업 착수 전 `aiops action plan --json`으로 의도한 행동과 승인 필요 항목, 차단 항목을 구조화할 수 있다. 이 계약은 자동 실행 엔진이 아니라 작업 전 검토 결과다.
 

@@ -11,7 +11,7 @@ assert_snapshot_contract() {
     data = JSON.parse(File.read(ARGV[0]))
 
     abort("wrong schema") unless data["schema"] == "aiops.project_snapshot.v1"
-    %w[schema core_version generated_at target source_refs core project agents tasks workflow health control checks next].each do |key|
+    %w[schema core_version generated_at target source_refs core project agents tasks workflow policy health control checks next].each do |key|
       abort("missing required snapshot key #{key}") unless data.key?(key)
     end
 
@@ -21,6 +21,8 @@ assert_snapshot_contract() {
     abort("tasks total not numeric") unless data.dig("tasks", "total").is_a?(Integer)
     abort("tasks active not numeric") unless data.dig("tasks", "active").is_a?(Integer)
     abort("status_ref_state invalid") unless %w[unresolved ref_not_found_locally not_recorded recorded_current recorded_stale].include?(data.dig("source_refs", "status_ref_state"))
+    abort("policy strict level missing") unless data.dig("policy", "strict_level").is_a?(String)
+    abort("policy matched_rules not array") unless data.dig("policy", "matched_rules").is_a?(Array)
 
     control = data.fetch("control")
     %w[can_start_task can_transition can_commit can_push can_merge].each do |key|
