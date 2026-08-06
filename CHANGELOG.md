@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+## 0.11.0 - 2026-08-06
+
 ### Added
 
 - `aiops project snapshot --json` 명령과 `schemas/project_snapshot.schema.json` 추가
