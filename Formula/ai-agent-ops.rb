@@ -11,6 +11,7 @@ class AiAgentOps < Formula
     (libexec/"CHANGELOG.md").write (buildpath/"CHANGELOG.md").read
     (libexec/"LICENSE").write (buildpath/"LICENSE").read
     libexec.install ".github", "Formula", "scripts"
+    (libexec/"Formula/ai-agent-ops.rb").write File.read(__FILE__)
     libexec.install "adapters", "agents", "bin", "bootstrap", "core", "docs", "models"
     libexec.install "policies", "runtime", "schemas", "templates", "workflows"
 
