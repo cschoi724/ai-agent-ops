@@ -228,6 +228,15 @@ EOF
 "$repo_root/bin/aiops" project snapshot --target "$custom_project" --json > "$tmpdir/custom-snapshot.json"
 "$repo_root/bin/aiops" policy evaluate --target "$custom_project" --json > "$tmpdir/custom-policy-target.json"
 "$repo_root/bin/aiops" policy evaluate --snapshot "$tmpdir/custom-snapshot.json" --json > "$tmpdir/custom-policy-snapshot.json"
+if "$repo_root/bin/aiops" policy evaluate --target "$empty_project" --snapshot "$tmpdir/custom-snapshot.json" --json >/tmp/aiops-e2e-policy-eval-conflicting-inputs.out 2>&1; then
+  printf '%s\n' "conflicting --target and --snapshot should fail" >&2
+  exit 1
+fi
+grep -q 'either --target or --snapshot, not both' /tmp/aiops-e2e-policy-eval-conflicting-inputs.out || {
+  printf '%s\n' "conflicting input error absent" >&2
+  cat /tmp/aiops-e2e-policy-eval-conflicting-inputs.out >&2
+  exit 1
+}
 ruby -rjson -e '
   snapshot = JSON.parse(File.read(ARGV[0]))
   target_policy = JSON.parse(File.read(ARGV[1]))

@@ -6371,6 +6371,7 @@ cmd_policy() {
   case "$action" in
     evaluate)
       target="$(pwd)"
+      target_explicit="no"
       snapshot_file=""
       strict_level=""
       json="no"
@@ -6381,6 +6382,7 @@ cmd_policy() {
             shift
             [ "$#" -gt 0 ] || die "--target requires a value"
             target="$1"
+            target_explicit="yes"
             ;;
           --snapshot)
             shift
@@ -6407,6 +6409,7 @@ cmd_policy() {
       done
 
       [ "$json" = "yes" ] || die "policy evaluate currently requires --json"
+      [ "$target_explicit" = "no" ] || [ -z "$snapshot_file" ] || die "policy evaluate accepts either --target or --snapshot, not both"
       [ -z "$snapshot_file" ] || [ -f "$snapshot_file" ] || die "snapshot file not found: $snapshot_file"
       target="$(abs_path "$target")"
       aiops_path="$(script_dir)/$(basename "$0")"
