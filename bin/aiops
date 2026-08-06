@@ -13,6 +13,7 @@ Usage:
   aiops project snapshot [--target DIR] --json
   aiops project context --role ROLE [--target DIR] [--task TASK_ID] [--json]
   aiops project health [--target DIR] [--json]
+  aiops policy evaluate [--target DIR|--snapshot FILE] [--strict-level LEVEL] --json
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
   aiops role prompt ROLE [--target DIR] [--task TASK_ID] [--adapter codex|claude|generic] [--agent NAME]
@@ -24,6 +25,7 @@ Usage:
   aiops validate policy-rules [--core DIR]
   aiops validate workflow-catalog [--target DIR|--core DIR]
   aiops validate project-snapshot FILE
+  aiops validate policy-evaluation FILE
   aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
   aiops task status TASK_ID [--target DIR] [--source local|canonical]
   aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT] [--blocker TEXT] [--next-decision TEXT]
@@ -64,6 +66,7 @@ Examples:
   aiops action plan --role execution --task T-YYYYMMDD-001 --json
   aiops action validate /tmp/action_plan.json
   aiops project health
+  aiops policy evaluate --json
   aiops validate --strict
   aiops validate project --target /path/to/project --strict
   aiops validate task .ai_project/tasks/active/T-YYYYMMDD-001.md
@@ -71,6 +74,7 @@ Examples:
   aiops validate policy-rules
   aiops validate workflow-catalog
   aiops validate project-snapshot /tmp/project_snapshot.json
+  aiops validate policy-evaluation /tmp/policy_evaluation.json
   aiops task create --title "로그인 화면 구현" --workflow feature --role "Lead Role"
   aiops task status T-YYYYMMDD-001 --source canonical
   aiops task transition T-YYYYMMDD-001 --to approved --role "Direction Role"
@@ -2677,10 +2681,12 @@ cmd_project() {
 
       [ "$json" = "yes" ] || die "project snapshot currently requires --json"
       target="$(abs_path "$target")"
+      core="$(default_core_dir)"
       command -v ruby >/dev/null 2>&1 || die "ruby is required for project snapshot"
 
       ruby -ryaml -rjson -rdate -rtime -rfind -ropen3 -rshellwords -e '
         target = ARGV[0]
+        core = ARGV[1]
 
         def scalar_string(value)
           case value
@@ -2816,6 +2822,8 @@ cmd_project() {
         operating_path = File.join(project_dir, "operating_model.md")
         registry_path = File.join(project_dir, "agent_registry.md")
         workflow_catalog_path = File.join(ai_path, "runtime", "workflows.json")
+        policy_rules_path = File.join(ai_path, "runtime", "policy_rules.json")
+        policy_rules_path = File.join(core, "runtime", "policy_rules.json") unless File.file?(policy_rules_path)
         operating = front_matter(operating_path)
         registry = front_matter(registry_path)
 
@@ -2908,9 +2916,94 @@ cmd_project() {
           end
         end
 
+        def value_at_path(data, path)
+          current = data
+          path.to_s.split(".").each do |part|
+            return nil unless current.is_a?(Hash)
+            return nil unless current.key?(part)
+            current = current[part]
+          end
+          current
+        end
+
+        def condition_matches?(snapshot, key, expected)
+          if key.start_with?("checks.")
+            check_id = key.split(".", 2)[1]
+            present = snapshot.fetch("checks", []).any? { |check| check.is_a?(Hash) && check["id"] == check_id }
+            return present if expected == "present"
+            return !present if expected == "absent"
+            return present == expected if expected == true || expected == false
+            return false
+          end
+
+          actual = value_at_path(snapshot, key)
+          case expected
+          when Array
+            expected.include?(actual)
+          when "present"
+            !actual.nil?
+          when "absent"
+            actual.nil?
+          else
+            actual == expected
+          end
+        end
+
+        def evaluate_policy(policy_rules_path, snapshot, strict_level)
+          summary = { "info" => 0, "warn" => 0, "blocker" => 0 }
+          unless File.file?(policy_rules_path)
+            return {
+              "catalog_present" => false,
+              "strict_level" => strict_level,
+              "matched_rules" => [],
+              "summary" => summary
+            }
+          end
+
+          catalog = JSON.parse(File.read(policy_rules_path))
+          levels = Array(catalog["strict_levels"]).map { |level| level.is_a?(Hash) ? level["id"] : nil }.compact
+          level = levels.include?(strict_level) ? strict_level : "basic"
+          matched = []
+
+          Array(catalog["rules"]).each do |rule|
+            next unless rule.is_a?(Hash)
+            next unless Array(rule["applies_to"]).include?(level)
+            conditions = rule["when"]
+            next unless conditions.is_a?(Hash) && conditions.all? { |key, expected| condition_matches?(snapshot, key, expected) }
+            severity = rule["severity"].to_s
+            summary[severity] += 1 if summary.key?(severity)
+            evidence = {}
+            conditions.each_key do |key|
+              evidence[key] = key.start_with?("checks.") ? "present" : value_at_path(snapshot, key)
+            end
+            matched << {
+              "id" => rule["id"],
+              "severity" => severity,
+              "message" => rule["message"],
+              "source" => rule["source"],
+              "evidence" => evidence
+            }
+          end
+
+          {
+            "catalog_present" => true,
+            "strict_level" => level,
+            "matched_rules" => matched,
+            "summary" => summary
+          }
+        rescue JSON::ParserError
+          {
+            "catalog_present" => false,
+            "strict_level" => strict_level,
+            "matched_rules" => [],
+            "summary" => summary
+          }
+        end
+
         project = {
           "present" => Dir.exist?(project_dir),
           "name" => value_from(operating, operating_path, "project") || File.basename(target),
+          "policy_level" => value_from(operating, operating_path, "policy_level") || "basic",
           "bootstrap_mode" => value_from(operating, operating_path, "bootstrap_mode") || "unknown",
           "recorded_core_version" => value_from(operating, operating_path, "core_version"),
           "start_context" => value_from(operating, operating_path, "start_context") || "unknown",
@@ -3143,6 +3236,12 @@ cmd_project() {
             "default_workflow" => workflow_catalog.is_a?(Hash) ? workflow_catalog["default_workflow"] : nil,
             "catalog_schema" => workflow_catalog.is_a?(Hash) ? workflow_catalog["schema"] : nil
           },
+          "policy" => {
+            "catalog_present" => false,
+            "strict_level" => project["policy_level"],
+            "matched_rules" => [],
+            "summary" => { "info" => 0, "warn" => 0, "blocker" => 0 }
+          },
           "health" => {
             "overall" => overall,
             "warnings" => warnings,
@@ -3160,9 +3259,10 @@ cmd_project() {
           "checks" => checks,
           "next" => next_steps
         })
+        snapshot["policy"] = evaluate_policy(policy_rules_path, snapshot, project["policy_level"])
 
         puts JSON.pretty_generate(snapshot)
-      ' "$target"
+      ' "$target" "$core"
       ;;
     inspect)
       target="$(pwd)"
@@ -4669,7 +4769,7 @@ cmd_validate() {
       ' "$catalog"
       info "ok: workflow catalog"
       ;;
-    project-snapshot)
+    project-snapshot|policy-evaluation)
       file=""
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -4678,25 +4778,34 @@ cmd_validate() {
             exit 0
             ;;
           -*)
-            die "unknown validate project-snapshot option: $1"
+            die "unknown validate $subject option: $1"
             ;;
           *)
-            [ -z "$file" ] || die "validate project-snapshot requires exactly one FILE"
+            [ -z "$file" ] || die "validate $subject requires exactly one FILE"
             file="$1"
             ;;
         esac
         shift
       done
-      [ -n "$file" ] || die "validate project-snapshot requires exactly one FILE"
-      [ -f "$file" ] || die "project snapshot file not found: $file"
+      [ -n "$file" ] || die "validate $subject requires exactly one FILE"
+      [ -f "$file" ] || die "$subject file not found: $file"
 
       core="$(default_core_dir)"
-      schema="$core/schemas/project_snapshot.schema.json"
-      [ -f "$schema" ] || die "project snapshot schema not found: $schema"
-      command -v ruby >/dev/null 2>&1 || die "ruby is required for project snapshot validation"
+      case "$subject" in
+        project-snapshot)
+          schema="$core/schemas/project_snapshot.schema.json"
+          label="project snapshot"
+          ;;
+        policy-evaluation)
+          schema="$core/schemas/policy_evaluation.schema.json"
+          label="policy evaluation"
+          ;;
+      esac
+      [ -f "$schema" ] || die "$label schema not found: $schema"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for $label validation"
 
-      info "AI Ops project snapshot validate"
-      info "snapshot: $file"
+      info "AI Ops $label validate"
+      info "file: $file"
       ruby -rjson -e '
         data = JSON.parse(File.read(ARGV[0]))
         schema = JSON.parse(File.read(ARGV[1]))
@@ -4788,7 +4897,7 @@ cmd_validate() {
         abort("schema_error:\n" + errors.join("\n")) unless errors.empty?
         puts "ok: schema"
       ' "$file" "$schema"
-      info "ok: project snapshot"
+      info "ok: $label"
       ;;
     project)
       target="$(pwd)"
@@ -6254,6 +6363,198 @@ cmd_session_guide() {
   info "  aiops role prompt verification --adapter claude --task TASK_ID"
 }
 
+cmd_policy() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "policy requires an action: evaluate"
+  shift
+
+  case "$action" in
+    evaluate)
+      target="$(pwd)"
+      target_explicit="no"
+      snapshot_file=""
+      strict_level=""
+      json="no"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            target_explicit="yes"
+            ;;
+          --snapshot)
+            shift
+            [ "$#" -gt 0 ] || die "--snapshot requires a value"
+            snapshot_file="$1"
+            ;;
+          --strict-level)
+            shift
+            [ "$#" -gt 0 ] || die "--strict-level requires a value"
+            strict_level="$1"
+            ;;
+          --json)
+            json="yes"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown policy evaluate option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      [ "$json" = "yes" ] || die "policy evaluate currently requires --json"
+      [ "$target_explicit" = "no" ] || [ -z "$snapshot_file" ] || die "policy evaluate accepts either --target or --snapshot, not both"
+      [ -z "$snapshot_file" ] || [ -f "$snapshot_file" ] || die "snapshot file not found: $snapshot_file"
+      target="$(abs_path "$target")"
+      aiops_path="$(script_dir)/$(basename "$0")"
+      core="$(default_core_dir)"
+      if [ -n "$snapshot_file" ]; then
+        "$aiops_path" validate project-snapshot "$snapshot_file" >/dev/null || die "snapshot failed project-snapshot schema validation: $snapshot_file"
+      fi
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for policy evaluation"
+
+      ruby -rjson -rtime -ropen3 -e '
+        aiops_path = ARGV[0]
+        target = ARGV[1]
+        snapshot_file = ARGV[2]
+        strict_level_arg = ARGV[3]
+        core = ARGV[4]
+
+        def project_snapshot(aiops_path, target)
+          stdout, stderr, status = Open3.capture3(aiops_path, "project", "snapshot", "--target", target, "--json")
+          unless status.success?
+            abort("error: project snapshot failed before policy evaluation\n#{stderr}#{stdout}")
+          end
+          JSON.parse(stdout)
+        rescue JSON::ParserError => error
+          abort("error: project snapshot returned invalid JSON: #{error.message}")
+        end
+
+        def value_at_path(data, path)
+          current = data
+          path.to_s.split(".").each do |part|
+            return nil unless current.is_a?(Hash)
+            return nil unless current.key?(part)
+            current = current[part]
+          end
+          current
+        end
+
+        def condition_matches?(snapshot, key, expected)
+          if key.start_with?("checks.")
+            check_id = key.split(".", 2)[1]
+            present = snapshot.fetch("checks", []).any? { |check| check.is_a?(Hash) && check["id"] == check_id }
+            return present if expected == "present"
+            return !present if expected == "absent"
+            return present == expected if expected == true || expected == false
+            return false
+          end
+
+          actual = value_at_path(snapshot, key)
+          case expected
+          when Array
+            expected.include?(actual)
+          when "present"
+            !actual.nil?
+          when "absent"
+            actual.nil?
+          else
+            actual == expected
+          end
+        end
+
+        def evaluate_policy(policy_rules_path, snapshot, strict_level_arg)
+          summary = { "info" => 0, "warn" => 0, "blocker" => 0 }
+          unless File.file?(policy_rules_path)
+            level = strict_level_arg.to_s.empty? ? "basic" : strict_level_arg
+            abort("error: unknown strict level: #{level}") unless %w[basic team regulated].include?(level)
+            return {
+              "catalog_present" => false,
+              "strict_level" => level,
+              "matched_rules" => [],
+              "summary" => summary
+            }
+          end
+
+          catalog = JSON.parse(File.read(policy_rules_path))
+          levels = Array(catalog["strict_levels"]).map { |level| level.is_a?(Hash) ? level["id"] : nil }.compact
+          level =
+            if strict_level_arg.to_s.empty?
+              value_at_path(snapshot, "project.policy_level") || "basic"
+            else
+              strict_level_arg
+            end
+          abort("error: unknown strict level: #{level}") unless levels.include?(level)
+
+          matched = []
+          Array(catalog["rules"]).each do |rule|
+            next unless rule.is_a?(Hash)
+            next unless Array(rule["applies_to"]).include?(level)
+            conditions = rule["when"]
+            next unless conditions.is_a?(Hash) && conditions.all? { |key, expected| condition_matches?(snapshot, key, expected) }
+            severity = rule["severity"].to_s
+            summary[severity] += 1 if summary.key?(severity)
+            evidence = {}
+            conditions.each_key do |key|
+              evidence[key] = key.start_with?("checks.") ? "present" : value_at_path(snapshot, key)
+            end
+            matched << {
+              "id" => rule["id"],
+              "severity" => severity,
+              "message" => rule["message"],
+              "source" => rule["source"],
+              "evidence" => evidence
+            }
+          end
+
+          {
+            "catalog_present" => true,
+            "strict_level" => level,
+            "matched_rules" => matched,
+            "summary" => summary
+          }
+        rescue JSON::ParserError => error
+          abort("error: policy rules JSON invalid: #{error.message}")
+        end
+
+        snapshot =
+          if snapshot_file.to_s.empty?
+            project_snapshot(aiops_path, target)
+          else
+            JSON.parse(File.read(snapshot_file))
+          end
+        evaluation_target =
+          if snapshot_file.to_s.empty?
+            target
+          else
+            snapshot["target"].to_s.empty? ? target : snapshot["target"]
+          end
+        policy_rules_path = File.join(evaluation_target, ".ai", "runtime", "policy_rules.json")
+        policy_rules_path = File.join(core, "runtime", "policy_rules.json") unless File.file?(policy_rules_path)
+        policy = evaluate_policy(policy_rules_path, snapshot, strict_level_arg)
+        result = {
+          "schema" => "aiops.policy_evaluation.v1",
+          "generated_at" => Time.now.utc.iso8601,
+          "strict_level" => policy["strict_level"],
+          "catalog_present" => policy["catalog_present"],
+          "matched_rules" => policy["matched_rules"],
+          "summary" => policy["summary"]
+        }
+        puts JSON.pretty_generate(result)
+      ' "$aiops_path" "$target" "$snapshot_file" "$strict_level" "$core"
+      ;;
+    *)
+      die "unknown policy action: $action"
+      ;;
+  esac
+}
+
 cmd_role() {
   action="${1:-}"
   [ "$#" -gt 0 ] || die "role requires an action: prompt"
@@ -7149,6 +7450,7 @@ cmd_release_check() {
     "$core/schemas/runtime_export.schema.json" \
     "$core/schemas/project_snapshot.schema.json" \
     "$core/schemas/policy_rules.schema.json" \
+    "$core/schemas/policy_evaluation.schema.json" \
     "$core/schemas/action_plan.schema.json" \
     "$core/adapters/README.md" \
     "$core/adapters/langgraph/README.md" \
@@ -7236,6 +7538,12 @@ cmd_release_check() {
     "$core/bin/aiops" export runtime --target "$release_tmp" >/dev/null
     "$core/bin/aiops" project snapshot --target "$release_tmp" --json > "$release_tmp/project_snapshot.json"
     "$core/bin/aiops" validate project-snapshot "$release_tmp/project_snapshot.json" >/dev/null
+    "$core/bin/aiops" policy evaluate --target "$release_tmp" --json > "$release_tmp/policy_evaluation.json"
+    "$core/bin/aiops" validate policy-evaluation "$release_tmp/policy_evaluation.json" >/dev/null
+    printf '{}\n' > "$release_tmp/invalid_project_snapshot.json"
+    if "$core/bin/aiops" policy evaluate --snapshot "$release_tmp/invalid_project_snapshot.json" --json >/dev/null 2>&1; then
+      exit 1
+    fi
   ); then
     info "ok: seeded project release gate"
   else
@@ -7483,6 +7791,7 @@ main() {
     bootstrap-guide) cmd_bootstrap_guide "$@" ;;
     session-guide) cmd_session_guide "$@" ;;
     role) cmd_role "$@" ;;
+    policy) cmd_policy "$@" ;;
     action) cmd_action "$@" ;;
     validate) cmd_validate "$@" ;;
     task) cmd_task "$@" ;;

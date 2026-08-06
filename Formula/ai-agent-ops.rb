@@ -1,8 +1,8 @@
 class AiAgentOps < Formula
   desc "AI agent operating harness for role-based project workflows"
   homepage "https://github.com/cschoi724/ai-agent-ops"
-  url "https://github.com/cschoi724/ai-agent-ops/archive/refs/tags/v0.10.0.tar.gz"
-  sha256 "68e231d9528aec57f995c29ee2c60c02695508b0aea4526b7f27c7d694e80920"
+  url "https://github.com/cschoi724/ai-agent-ops/archive/refs/tags/v0.11.0.tar.gz"
+  sha256 "REPLACE_WITH_RELEASE_SHA256"
 
   def install
     libexec.install "VERSION"

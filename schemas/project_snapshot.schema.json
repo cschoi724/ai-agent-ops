@@ -16,6 +16,7 @@
     "agents",
     "tasks",
     "workflow",
+    "policy",
     "health",
     "control",
     "checks",
@@ -142,6 +143,57 @@
       "properties": {
         "catalog_present": { "type": "boolean" },
         "default_workflow": { "type": ["string", "null"] }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "catalog_present",
+        "strict_level",
+        "matched_rules",
+        "summary"
+      ],
+      "properties": {
+        "catalog_present": { "type": "boolean" },
+        "strict_level": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_/-]*$"
+        },
+        "matched_rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "severity", "message", "source", "evidence"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_/-]*$"
+              },
+              "severity": {
+                "type": "string",
+                "enum": ["info", "warn", "blocker"]
+              },
+              "message": { "type": "string", "minLength": 1 },
+              "source": {
+                "type": "string",
+                "enum": ["project_snapshot", "project_health", "project_validate"]
+              },
+              "evidence": { "type": "object" }
+            }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["info", "warn", "blocker"],
+          "properties": {
+            "info": { "type": "integer", "minimum": 0 },
+            "warn": { "type": "integer", "minimum": 0 },
+            "blocker": { "type": "integer", "minimum": 0 }
+          }
+        }
       }
     },
     "health": {
