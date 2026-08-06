@@ -170,10 +170,91 @@ ruby -rjson -e '
   abort("snapshot can_transition should be false") unless snapshot.dig("control", "can_transition") == false
 ' "$tmpdir/stale-snapshot.json" "$tmpdir/stale-policy.json"
 
+custom_project="$tmpdir/custom"
+mkdir -p \
+  "$custom_project/.ai/runtime" \
+  "$custom_project/.ai_project/tasks/active" \
+  "$custom_project/.ai_project/tasks/backlog" \
+  "$custom_project/.ai_project/tasks/archive"
+printf '%s\n' "0.0.0-test" > "$custom_project/.ai/VERSION"
+cp "$repo_root/runtime/workflows.json" "$custom_project/.ai/runtime/workflows.json"
+cat > "$custom_project/.ai/runtime/policy_rules.json" <<'EOF'
+{
+  "schema": "aiops.policy_rules.v1",
+  "version": "0.0.0-test",
+  "strict_levels": [
+    {
+      "id": "basic",
+      "description": "Basic"
+    }
+  ],
+  "rules": [
+    {
+      "id": "custom_core_present",
+      "severity": "info",
+      "source": "project_snapshot",
+      "message": "Custom local policy catalog was used.",
+      "applies_to": ["basic"],
+      "when": {
+        "core.present": true
+      }
+    }
+  ]
+}
+EOF
+for file in current_context.md source_of_truth.md task_board.md ops_decisions.md ops_issues.md; do
+  printf '# %s\n' "$file" > "$custom_project/.ai_project/$file"
+done
+cat > "$custom_project/.ai_project/operating_model.md" <<'EOF'
+---
+schema: aiops.operating_model.v1
+project: CustomPolicyProject
+operating_mode: solo_light
+workflow_policy: standard_vnext
+knowledge_mode: minimal
+---
+
+# Custom Policy Project
+EOF
+cat > "$custom_project/.ai_project/agent_registry.md" <<'EOF'
+---
+schema: aiops.agent_registry.v1
+project: CustomPolicyProject
+agents: []
+---
+
+# Agent Registry
+EOF
+"$repo_root/bin/aiops" project snapshot --target "$custom_project" --json > "$tmpdir/custom-snapshot.json"
+"$repo_root/bin/aiops" policy evaluate --target "$custom_project" --json > "$tmpdir/custom-policy-target.json"
+"$repo_root/bin/aiops" policy evaluate --snapshot "$tmpdir/custom-snapshot.json" --json > "$tmpdir/custom-policy-snapshot.json"
+ruby -rjson -e '
+  snapshot = JSON.parse(File.read(ARGV[0]))
+  target_policy = JSON.parse(File.read(ARGV[1]))
+  snapshot_policy = JSON.parse(File.read(ARGV[2]))
+  snapshot_ids = snapshot.dig("policy", "matched_rules").map { |rule| rule["id"] }
+  target_ids = target_policy.fetch("matched_rules").map { |rule| rule["id"] }
+  from_snapshot_ids = snapshot_policy.fetch("matched_rules").map { |rule| rule["id"] }
+  abort("snapshot did not use custom policy catalog") unless snapshot_ids.include?("custom_core_present")
+  abort("--target did not use custom policy catalog") unless target_ids.include?("custom_core_present")
+  abort("--snapshot did not use snapshot target policy catalog") unless from_snapshot_ids.include?("custom_core_present")
+' "$tmpdir/custom-snapshot.json" "$tmpdir/custom-policy-target.json" "$tmpdir/custom-policy-snapshot.json"
+
 printf '%s\n' "not-json" > "$tmpdir/bad-snapshot.json"
 if "$repo_root/bin/aiops" policy evaluate --snapshot "$tmpdir/bad-snapshot.json" --json >/tmp/aiops-e2e-policy-eval-bad-snapshot.out 2>&1; then
   printf '%s\n' "bad snapshot should fail" >&2
   exit 1
 fi
+
+printf '{}\n' > "$tmpdir/schema-invalid-snapshot.json"
+if "$repo_root/bin/aiops" policy evaluate --snapshot "$tmpdir/schema-invalid-snapshot.json" --json >/tmp/aiops-e2e-policy-eval-invalid-snapshot.out 2>&1; then
+  printf '%s\n' "schema-invalid snapshot should fail" >&2
+  exit 1
+fi
+grep -q 'snapshot failed project-snapshot schema validation' /tmp/aiops-e2e-policy-eval-invalid-snapshot.out || {
+  printf '%s\n' "schema-invalid snapshot error absent" >&2
+  cat /tmp/aiops-e2e-policy-eval-invalid-snapshot.out >&2
+  exit 1
+}
 
 printf '%s\n' "ok: policy evaluation"

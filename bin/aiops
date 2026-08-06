@@ -6411,6 +6411,9 @@ cmd_policy() {
       target="$(abs_path "$target")"
       aiops_path="$(script_dir)/$(basename "$0")"
       core="$(default_core_dir)"
+      if [ -n "$snapshot_file" ]; then
+        "$aiops_path" validate project-snapshot "$snapshot_file" >/dev/null || die "snapshot failed project-snapshot schema validation: $snapshot_file"
+      fi
       command -v ruby >/dev/null 2>&1 || die "ruby is required for policy evaluation"
 
       ruby -rjson -rtime -ropen3 -e '
@@ -6523,7 +6526,13 @@ cmd_policy() {
           else
             JSON.parse(File.read(snapshot_file))
           end
-        policy_rules_path = File.join(target, ".ai", "runtime", "policy_rules.json")
+        evaluation_target =
+          if snapshot_file.to_s.empty?
+            target
+          else
+            snapshot["target"].to_s.empty? ? target : snapshot["target"]
+          end
+        policy_rules_path = File.join(evaluation_target, ".ai", "runtime", "policy_rules.json")
         policy_rules_path = File.join(core, "runtime", "policy_rules.json") unless File.file?(policy_rules_path)
         policy = evaluate_policy(policy_rules_path, snapshot, strict_level_arg)
         result = {
@@ -7528,6 +7537,10 @@ cmd_release_check() {
     "$core/bin/aiops" validate project-snapshot "$release_tmp/project_snapshot.json" >/dev/null
     "$core/bin/aiops" policy evaluate --target "$release_tmp" --json > "$release_tmp/policy_evaluation.json"
     "$core/bin/aiops" validate policy-evaluation "$release_tmp/policy_evaluation.json" >/dev/null
+    printf '{}\n' > "$release_tmp/invalid_project_snapshot.json"
+    if "$core/bin/aiops" policy evaluate --snapshot "$release_tmp/invalid_project_snapshot.json" --json >/dev/null 2>&1; then
+      exit 1
+    fi
   ); then
     info "ok: seeded project release gate"
   else
