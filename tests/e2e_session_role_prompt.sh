@@ -127,6 +127,16 @@ grep -q 'aiops task status T-20260727-020' /tmp/aiops-e2e-role-prompt.out || {
   exit 1
 }
 
+grep -q 'aiops action plan --role "Execution Role"' /tmp/aiops-e2e-role-prompt.out || {
+  printf '%s\n' "role prompt did not include action plan command" >&2
+  exit 1
+}
+
+grep -q 'blocked_actions가 있으면 작업하지 말고' /tmp/aiops-e2e-role-prompt.out || {
+  printf '%s\n' "role prompt did not include action plan blocker rule" >&2
+  exit 1
+}
+
 grep -q "다음 Agent에게 전달할 말" /tmp/aiops-e2e-role-prompt.out || {
   printf '%s\n' "role prompt did not include handoff reminder" >&2
   exit 1

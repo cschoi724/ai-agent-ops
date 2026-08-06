@@ -121,6 +121,58 @@ ruby -rjson -e '
   --target "$project" \
   --role execution \
   --task T-20260805-301 \
+  --intends task_lock,task_unlock,create_handoff,create_pr,external_configuration_changes \
+  --json \
+  > "$tmpdir/extended-actions-plan.json"
+
+"$repo_root/bin/aiops" action validate "$tmpdir/extended-actions-plan.json" >/dev/null
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  expected = %w[task_lock task_unlock create_handoff create_pr external_configuration_changes]
+  missing = expected - data["intended_actions"]
+  abort("extended intended actions missing #{missing.join(",")}") unless missing.empty?
+  abort("create_pr approval missing") unless data["requires_user_approval"].include?("create_pr")
+  abort("external configuration approval missing") unless data["requires_user_approval"].include?("external_configuration_changes")
+' "$tmpdir/extended-actions-plan.json"
+
+"$repo_root/bin/aiops" action plan \
+  --target "$project" \
+  --role execution \
+  --task T-20260805-301 \
+  --intends pr,lock,unlock,handoff,external_config \
+  --json \
+  > "$tmpdir/alias-actions-plan.json"
+
+"$repo_root/bin/aiops" action validate "$tmpdir/alias-actions-plan.json" >/dev/null
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  expected = %w[create_pr task_lock task_unlock create_handoff external_configuration_changes]
+  missing = expected - data["intended_actions"]
+  abort("alias intended actions missing #{missing.join(",")}") unless missing.empty?
+  abort("raw pr alias leaked") if data["intended_actions"].include?("pr")
+  abort("create_pr approval missing for alias") unless data["requires_user_approval"].include?("create_pr")
+' "$tmpdir/alias-actions-plan.json"
+
+if "$repo_root/bin/aiops" action plan \
+  --target "$project" \
+  --role execution \
+  --task T-20260805-301 \
+  --intends unknown_action \
+  --json \
+  >/tmp/aiops-e2e-action-plan-invalid-intent.out 2>&1; then
+  printf '%s\n' "action plan should fail unknown intended action" >&2
+  exit 1
+fi
+grep -q 'unknown intended action' /tmp/aiops-e2e-action-plan-invalid-intent.out || {
+  printf '%s\n' "unknown intended action error absent" >&2
+  cat /tmp/aiops-e2e-action-plan-invalid-intent.out >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" action plan \
+  --target "$project" \
+  --role execution \
+  --task T-20260805-301 \
   --intends edit_paths \
   --paths docs/plan.md \
   --json \

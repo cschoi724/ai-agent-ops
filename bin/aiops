@@ -3154,7 +3154,7 @@ cmd_project() {
             "can_commit" => false,
             "can_push" => false,
             "can_merge" => false,
-            "requires_user_approval" => ["commit", "push", "merge", "deploy", "external_configuration_changes"],
+            "requires_user_approval" => ["commit", "push", "create_pr", "merge", "deploy", "external_configuration_changes"],
             "blocked_actions" => blocked_actions
           },
           "checks" => checks,
@@ -3768,7 +3768,7 @@ cmd_project() {
           "source_of_truth" => source_of_truth,
           "valid_next_transitions" => valid_next,
           "handoff_target" => valid_next.map { |transition| transition["next_role"] }.compact.uniq,
-          "approval_required_for" => ["commit", "push", "merge", "deploy", "external configuration changes"],
+          "approval_required_for" => ["commit", "push", "create_pr", "merge", "deploy", "external configuration changes"],
           "forbidden_actions" => forbidden_actions,
           "recommended_checks" => begin
             escaped_target = command_target(target)
@@ -5548,6 +5548,27 @@ cmd_action() {
           value.to_s.split(",").map(&:strip).reject(&:empty?)
         end
 
+        def normalize_intended_action(action)
+          normalized = action.to_s.strip.downcase.tr("-", "_")
+          aliases = {
+            "pr" => "create_pr",
+            "pull_request" => "create_pr",
+            "create_pull_request" => "create_pr",
+            "open_pr" => "create_pr",
+            "lock" => "task_lock",
+            "task_lock" => "task_lock",
+            "unlock" => "task_unlock",
+            "task_unlock" => "task_unlock",
+            "handoff" => "create_handoff",
+            "create_handoff" => "create_handoff",
+            "external_config" => "external_configuration_changes",
+            "external_configuration" => "external_configuration_changes",
+            "external_configuration_change" => "external_configuration_changes",
+            "external_configuration_changes" => "external_configuration_changes"
+          }
+          aliases.fetch(normalized, normalized)
+        end
+
         def normalize(value)
           case value
           when Hash
@@ -5600,7 +5621,25 @@ cmd_action() {
 
         project_dir = File.join(target, ".ai_project")
         task = front_matter(task_file)
-        intended_actions = csv(intends_raw)
+        allowed_intended_actions = %w[
+          read_source
+          edit_allowed_paths
+          edit_paths
+          run_tests
+          task_transition
+          task_lock
+          task_unlock
+          create_handoff
+          commit
+          push
+          create_pr
+          merge
+          deploy
+          external_configuration_changes
+        ]
+        intended_actions = csv(intends_raw).map { |action| normalize_intended_action(action) }
+        unknown_actions = intended_actions - allowed_intended_actions
+        abort("error: unknown intended action(s): #{unknown_actions.uniq.join(", ")}") unless unknown_actions.empty?
         requested_paths = csv(paths_raw)
         allowed_paths = list(task["allowed_paths"])
         snapshot = project_snapshot(aiops_path, target)
@@ -5620,9 +5659,10 @@ cmd_action() {
 
         blocked_actions = []
         warnings = []
-        approval_actions = %w[commit push merge deploy]
+        approval_actions = %w[commit push create_pr merge deploy external_configuration_changes]
         requires_user_approval = (intended_actions & approval_actions)
         requires_user_approval << "external_configuration_changes" if intended_actions.include?("deploy")
+        requires_user_approval << "external_configuration_changes" if intended_actions.include?("external_configuration_changes")
 
         target_role = task["target_role"] || legacy_field(task_file, "target_role")
         if target_role && target_role != role
@@ -5782,7 +5822,7 @@ cmd_action() {
         $defs = schema["$defs"] || {}
         validate(data, schema, "$", errors)
 
-        approval_actions = %w[commit push merge deploy]
+        approval_actions = %w[commit push create_pr merge deploy external_configuration_changes]
         missing_approval = data.fetch("intended_actions", []) & approval_actions
         missing_approval -= data.fetch("requires_user_approval", [])
         errors << "$.requires_user_approval: missing approval actions #{missing_approval.join(", ")}" unless missing_approval.empty?
@@ -6308,7 +6348,10 @@ cmd_role() {
       info "- Role이 바뀌면 최종 응답에 '다음 Agent에게 전달할 말'을 남긴다."
       info "- 다중 worktree 환경에서는 현재 worktree 문서를 최신 공용 상태로 가정하지 않는다."
       info "- 작업 상태 판단 전 canonical status ref와 SHA를 확인한다."
-      info "- 사용자 승인 없이 commit, push, merge, deploy를 진행하지 않는다."
+      info "- 실제 파일 수정, 상태 전이, lock, handoff, commit, push, PR, merge, deploy, 외부 설정 변경 전에는 aiops action plan으로 의도와 차단 항목을 확인한다."
+      info "- Action Plan의 blocked_actions가 있으면 진행하지 않고 이유와 evidence를 사용자에게 요약한다."
+      info "- Action Plan의 requires_user_approval 항목은 사용자 승인 전 실행하지 않는다."
+      info "- 사용자 승인 없이 commit, push, PR, merge, deploy, 외부 설정 변경을 진행하지 않는다."
       info ""
       info "이 Role의 책임:"
       role_responsibility_text "$role"
@@ -6336,8 +6379,10 @@ cmd_role() {
         info "- aiops sync-status --target \"$target\""
         info "- aiops task status $task_id --target \"$target\""
         info "- 필요하면 aiops task status $task_id --target \"$target\" --source canonical"
+        info "- 실제 행동 전 aiops action plan --role \"$role\" --target \"$target\" --task $task_id --intends ACTIONS --paths PATHS --json"
         info "- 현재 Role이 Task의 status/target_role과 맞는지 확인한다."
         info "- allowed_paths 밖 파일은 수정하지 않는다."
+        info "- action plan에 blocked_actions가 있으면 작업하지 말고 사용자에게 차단 사유를 보고한다."
         info ""
 
         case "$role" in

@@ -161,6 +161,13 @@ Agent Role은 사용자가 세션에 부여한다. PM/Development/QA/AI Ops는 �
 
 `project snapshot --json`의 `control`, `checks`, `source_refs`를 먼저 확인한다. `control.can_transition`이 false이면 상태 전이를 진행하지 않고, `blocked_actions`와 `checks[].evidence`를 사용자에게 요약한다. `commit`, `push`, `merge`, `deploy`는 snapshot에 허용처럼 보이는 경우가 있더라도 사용자 승인 없이 진행하지 않는다.
 
+작업 전 Action Plan:
+
+- 파일 수정, 상태 전이, lock 변경, handoff 생성, commit, push, PR, merge, deploy, 외부 설정 변경 전에 `aiops action plan --role ROLE --task TASK_ID --intends ACTIONS --paths PATHS --json`을 실행해 의도한 행동을 확인한다.
+- `blocked_actions`가 있으면 해당 행동을 진행하지 않고 blocker 이유와 evidence를 사용자에게 요약한다.
+- `requires_user_approval`에 포함된 행동은 사용자 승인 전 실행하지 않는다.
+- Action Plan은 Codex 전용 절차가 아니라 Claude도 같은 방식으로 따르는 Role 기반 계약이다.
+
 세부 문서 확인이 필요하면 아래를 읽는다.
 
 1. `.ai_project/README.md`
