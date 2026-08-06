@@ -6,7 +6,11 @@ class AiAgentOps < Formula
 
   def install
     libexec.install "VERSION"
-    libexec.install "README.md", "QUICKSTART.md", "CHANGELOG.md", "LICENSE"
+    libexec.install "QUICKSTART.md"
+    (libexec/"README.md").write (buildpath/"README.md").read
+    (libexec/"CHANGELOG.md").write (buildpath/"CHANGELOG.md").read
+    (libexec/"LICENSE").write (buildpath/"LICENSE").read
+    libexec.install ".github", "Formula", "scripts"
     libexec.install "adapters", "agents", "bin", "bootstrap", "core", "docs", "models"
     libexec.install "policies", "runtime", "schemas", "templates", "workflows"
 
