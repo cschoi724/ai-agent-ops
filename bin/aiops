@@ -2998,9 +2998,16 @@ cmd_project() {
       target="$(abs_path "$target")"
       command -v ruby >/dev/null 2>&1 || die "ruby is required for project dashboard"
       snapshot_json="$("$0" project snapshot --target "$target" --json)"
+      health_json="$("$0" project health --target "$target" --json)"
 
-      printf '%s\n' "$snapshot_json" | ruby -rjson -e '
-        snapshot = JSON.parse(STDIN.read)
+      {
+        printf '%s\n' "$snapshot_json"
+        printf '%s\n' "__AIOPS_DASHBOARD_HEALTH_JSON__"
+        printf '%s\n' "$health_json"
+      } | ruby -rjson -e '
+        snapshot_text, health_text = STDIN.read.split("__AIOPS_DASHBOARD_HEALTH_JSON__", 2)
+        snapshot = JSON.parse(snapshot_text)
+        health_summary = JSON.parse(health_text)
         level = ARGV[0]
         color_mode = ARGV[1]
         color_enabled = color_mode == "always" || (color_mode == "auto" && STDOUT.tty? && ENV["NO_COLOR"].to_s.empty?)
@@ -3076,53 +3083,17 @@ cmd_project() {
         end
 
         project = snapshot.fetch("project", {})
-        health = snapshot.fetch("health", {})
+        health = health_summary.fetch("summary", {})
+        health_status = health_summary.fetch("overall", snapshot.fetch("health", {})["overall"])
         source_refs = snapshot.fetch("source_refs", {})
         tasks = snapshot.fetch("tasks", {})
         task_status = tasks.fetch("by_status", {})
+        readiness_source = health_summary.fetch("readiness", {})
         readiness = {
-          "Bootstrap" => begin
-            if health["blockers"].to_i.positive? && project["present"] == false
-              "missing"
-            elsif health["blockers"].to_i.positive?
-              "partial"
-            else
-              "complete"
-            end
-          end,
-          "Task Work" => begin
-            if health["blockers"].to_i.positive?
-              "blocked"
-            elsif health["warnings"].to_i.positive?
-              "allowed_with_warnings"
-            else
-              "allowed"
-            end
-          end,
-          "Multi-agent" => begin
-            state = source_refs["status_ref_state"].to_s
-            if state == "recorded_current"
-              "ready"
-            elsif state == "ref_not_found_locally"
-              "blocked"
-            elsif state == "unresolved"
-              "needs_canonical_status_ref"
-            else
-              "sync_required"
-            end
-          end,
-          "Migration" => begin
-            checks = Array(snapshot["checks"])
-            if project["present"] == false
-              "not_configured"
-            elsif checks.any? { |check| check["id"] == "core_version_drift" }
-              "migration_needed"
-            elsif checks.any? { |check| check["id"].to_s.end_with?("_schema_missing") }
-              "review_needed"
-            else
-              "not_required"
-            end
-          end
+          "Bootstrap" => readiness_source["bootstrap"],
+          "Task Work" => readiness_source["task_work"],
+          "Multi-agent" => readiness_source["multi_agent"],
+          "Migration" => readiness_source["migration"]
         }
 
         total_tasks = tasks["total"].to_i
@@ -3131,8 +3102,8 @@ cmd_project() {
         proposed_tasks = task_status["proposed"].to_i
         scoped_tasks = task_status["scoped"].to_i
         approved_tasks = task_status["approved"].to_i
-        warning_checks = Array(snapshot["checks"]).select { |check| check["severity"] == "warn" }
-        blocker_checks = Array(snapshot["checks"]).select { |check| check["severity"] == "blocker" }
+        warning_checks = Array(health_summary["checks"]).select { |check| check["level"] == "warn" }
+        blocker_checks = Array(health_summary["checks"]).select { |check| check["level"] == "blocker" }
         agents = Array(value(snapshot, "agents", "active"))
         enabled_agents = agents.count { |agent| agent["status"] == "enabled" }
         deferred_agents = agents.count { |agent| agent["status"] == "deferred" }
@@ -3141,7 +3112,7 @@ cmd_project() {
 
         puts colorize(color_enabled, "AI Ops Dashboard", "1;36")
         puts "Project: #{project["name"] || File.basename(snapshot["target"].to_s)}"
-        puts "Status: #{status_value(color_enabled, status_label(health["overall"]))}    Blockers: #{status_value(color_enabled, health["blockers"].to_i)}    Warnings: #{status_value(color_enabled, health["warnings"].to_i)}"
+        puts "Status: #{status_value(color_enabled, status_label(health_status))}    Blockers: #{status_value(color_enabled, health["blockers"].to_i)}    Warnings: #{status_value(color_enabled, health["warnings"].to_i)}"
         puts "Target: #{snapshot["target"]}" if level == "detail"
         puts ""
 
@@ -3199,12 +3170,12 @@ cmd_project() {
         end
 
         puts blocker_checks.empty? ? "#{section(color_enabled, "Blockers")}\n  none" : section(color_enabled, "Blockers")
-        blocker_checks.each { |check| puts "  - #{colorize(color_enabled, check["id"], "31")}: #{check["message"]}" }
+        blocker_checks.each { |check| puts "  - #{colorize(color_enabled, check["code"], "31")}: #{check["message"]}" }
         puts ""
 
         unless level == "compact"
           puts warning_checks.empty? ? "#{section(color_enabled, "Warnings")}\n  none" : section(color_enabled, "Warnings")
-          warning_checks.each { |check| puts "  - #{colorize(color_enabled, check["id"], "33")}: #{check["message"]}" }
+          warning_checks.each { |check| puts "  - #{colorize(color_enabled, check["code"], "33")}: #{check["message"]}" }
           puts ""
         end
 

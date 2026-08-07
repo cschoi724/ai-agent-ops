@@ -138,6 +138,7 @@ git -C "$project" push -u origin develop >/dev/null 2>&1
 
 before_hash="$(find "$project" -type f -not -path '*/.git/*' -print | sort | xargs shasum -a 256 | shasum -a 256 | awk "{print \$1}")"
 "$repo_root/bin/aiops" project dashboard --target "$project" >/tmp/aiops-e2e-project-dashboard.out
+"$repo_root/bin/aiops" project health --target "$project" --json >/tmp/aiops-e2e-project-dashboard-health.json
 after_hash="$(find "$project" -type f -not -path '*/.git/*' -print | sort | xargs shasum -a 256 | shasum -a 256 | awk "{print \$1}")"
 [ "$before_hash" = "$after_hash" ] || {
   printf '%s\n' "project dashboard modified project files" >&2
@@ -164,6 +165,18 @@ grep -q 'Enabled: 2    Deferred: 1    Total: 3' /tmp/aiops-e2e-project-dashboard
   printf '%s\n' "dashboard agent summary missing" >&2
   exit 1
 }
+ruby -rjson -e '
+  health = JSON.parse(File.read(ARGV[0]))
+  dashboard = File.read(ARGV[1])
+  expected = "Status: #{health["overall"].upcase}    Blockers: #{health.dig("summary", "blockers")}    Warnings: #{health.dig("summary", "warnings")}"
+  abort("dashboard summary diverges from project health") unless dashboard.include?(expected)
+  health.fetch("readiness").each do |key, value|
+    label = key.split("_").map(&:capitalize).join(" ")
+    label = "Multi-agent" if key == "multi_agent"
+    label = "Task Work" if key == "task_work"
+    abort("dashboard readiness #{key} diverges from project health") unless dashboard.include?("#{label}: #{value}")
+  end
+' /tmp/aiops-e2e-project-dashboard-health.json /tmp/aiops-e2e-project-dashboard.out
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --level compact >/tmp/aiops-e2e-project-dashboard-compact.out
 grep -q 'Project: DashboardProject' /tmp/aiops-e2e-project-dashboard-compact.out || {
