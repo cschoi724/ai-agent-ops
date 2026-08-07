@@ -80,7 +80,7 @@ Release Dashboard 표시 항목은 release 전 readiness, canonical status, bloc
 
 `--format mermaid`는 현재 `--view work`에서만 지원하며, 터미널에는 렌더링된 그림이 아니라 Mermaid source text를 출력한다. dependency map은 `depends_on`/`blocks`, workflow map은 표준 상태 흐름, agents map은 target_agent/target_role, blockers map은 health warning/blocker를 Mermaid `flowchart`로 출력한다.
 
-`--format html --output dashboard.html`은 같은 dashboard projection과 Mermaid source를 정적 HTML로 감싸 브라우저에서 시각적으로 볼 수 있게 만든다. HTML은 Mermaid CDN module을 사용해 diagram을 렌더링하며, 각 diagram 아래에는 원본 Mermaid source도 함께 접어 둔다.
+`--format html --output dashboard.html`은 같은 dashboard projection과 Mermaid source를 정적 HTML로 감싸 브라우저에서 시각적으로 볼 수 있게 만든다. HTML은 Mermaid CDN module을 사용해 diagram을 렌더링하며, 각 diagram 아래에는 원본 Mermaid source도 함께 접어 둔다. HTML dashboard에는 한국어 안내, 상태 색상 범례, Agent 상태 색상, map별 접기/펼치기, diagram 확대/축소 버튼이 포함된다.
 
 `--json`은 `aiops.project_dashboard.v1` 계약을 출력한다. 이 계약은 project/health/snapshot 값을 dashboard 용도에 맞게 projection한 결과이며, terminal/tree/Mermaid와 같은 의미를 공유한다. 주요 필드는 status, progress, readiness, git, agents, tasks, risks, control, next, maps, views다.
 

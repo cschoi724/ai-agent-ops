@@ -559,8 +559,32 @@ grep -q 'DashboardProject' /tmp/aiops-e2e-project-dashboard.html || {
   printf '%s\n' "html dashboard project missing" >&2
   exit 1
 }
+grep -q '보는 법' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard Korean guide missing" >&2
+  exit 1
+}
+grep -q '초록: ready / done / enabled' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard legend missing" >&2
+  exit 1
+}
 grep -q 'class="mermaid"' /tmp/aiops-e2e-project-dashboard.html || {
   printf '%s\n' "html dashboard mermaid container missing" >&2
+  exit 1
+}
+grep -q 'data-zoom="in"' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard zoom controls missing" >&2
+  exit 1
+}
+grep -q 'class="panel map-panel" data-map="dependencies" open' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard open dependency panel missing" >&2
+  exit 1
+}
+grep -q 'class="agent-card ok"' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard enabled agent color class missing" >&2
+  exit 1
+}
+grep -q 'class="agent-card neutral"' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard deferred agent color class missing" >&2
   exit 1
 }
 grep -q 'T_T_20260807_001 --&gt; T_T_20260807_002' /tmp/aiops-e2e-project-dashboard.html || {
