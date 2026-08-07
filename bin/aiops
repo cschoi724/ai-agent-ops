@@ -3048,6 +3048,91 @@ cmd_project() {
           colorize(enabled, text, severity_color(text))
         end
 
+        def task_status_color(status)
+          case status.to_s.downcase
+          when "approved"
+            "32"
+          when "in_progress"
+            "34"
+          when "rework_requested"
+            "1;31"
+          when "verification_ready", "verification_passed", "completion_review"
+            "35"
+          when "scoped"
+            "33"
+          when "proposed"
+            "90"
+          when "blocked"
+            "31"
+          else
+            severity_color(status)
+          end
+        end
+
+        def task_status_value(enabled, value)
+          text = value.nil? || value.to_s.empty? ? "unknown" : value.to_s
+          colorize(enabled, text, task_status_color(text))
+        end
+
+        def workflow_value(enabled, value)
+          text = value.nil? || value.to_s.empty? ? "unknown" : value.to_s
+          colorize(enabled, text, "36")
+        end
+
+        def role_value(enabled, value)
+          text = value.nil? || value.to_s.empty? ? "unassigned" : value.to_s
+          colorize(enabled, text, "34")
+        end
+
+        def agent_value(enabled, value)
+          text = value.nil? || value.to_s.empty? ? "unassigned" : value.to_s
+          colorize(enabled, text, "36")
+        end
+
+        def lock_color(value)
+          text = value.nil? || value.to_s.empty? ? "none" : value.to_s
+          text == "none" ? "90" : "1;31"
+        end
+
+        def lock_value(enabled, value)
+          text = value.nil? || value.to_s.empty? ? "none" : value.to_s
+          colorize(enabled, text, lock_color(text))
+        end
+
+        def next_action_color(label)
+          case label.to_s
+          when "start execution"
+            "32"
+          when "continue work"
+            "34"
+          when "address rework"
+            "1;31"
+          when "start verification", "start completion"
+            "35"
+          when "approve or split", "scope or approve"
+            "33"
+          else
+            "36"
+          end
+        end
+
+        def next_action_value(enabled, label)
+          text = label.nil? || label.to_s.empty? ? "inspect task" : label.to_s
+          colorize(enabled, text, next_action_color(text))
+        end
+
+        def meta_value(enabled, value, fallback = "unresolved")
+          text = value.nil? || value.to_s.empty? ? fallback : value.to_s
+          code = %w[none unresolved unknown unassigned].include?(text) ? "90" : "36"
+          colorize(enabled, text, code)
+        end
+
+        def padded(text, width)
+          value = text.to_s
+          return value if value.length >= width
+          value + (" " * (width - value.length))
+        end
+
         def value(data, *keys)
           keys.reduce(data) do |current, key|
             return nil unless current.is_a?(Hash)
@@ -3169,7 +3254,7 @@ cmd_project() {
           if level == "compact"
             puts section(color_enabled, "Active Work")
             items.first(8).each do |task|
-              puts "  - #{task["id"]}  #{status_value(color_enabled, task["status"])}  #{shorten(task["title"], 36)}"
+              puts "  - #{task["id"]}  #{task_status_value(color_enabled, task["status"])}  #{shorten(task["title"], 36)}"
             end
             remaining = items.length - 8
             puts "  ... #{remaining} more" if remaining.positive?
@@ -3180,13 +3265,21 @@ cmd_project() {
           puts "Task              Status              Workflow    Role                Agent               Lock        Next"
           items.each do |task|
             id = clean(task["id"], "unknown")
-            status = status_value(color_enabled, clean(task["status"], "unknown"))
+            status = clean(task["status"], "unknown")
             workflow = shorten(clean(task["workflow"], "unknown"), 10)
             role = shorten(clean(task["target_role"]), 18)
             agent = shorten(clean(task["target_agent"]), 18)
             lock = shorten(clean(task["locked_by"], "none"), 10)
             next_action = next_action_label(task)
-            printf "%-17s %-19s %-11s %-19s %-19s %-11s %s\n", id, status, workflow, role, agent, lock, next_action
+            puts [
+              padded(id, 17),
+              colorize(color_enabled, padded(status, 19), task_status_color(status)),
+              colorize(color_enabled, padded(workflow, 11), "36"),
+              colorize(color_enabled, padded(role, 19), "34"),
+              colorize(color_enabled, padded(agent, 19), "36"),
+              colorize(color_enabled, padded(lock, 11), lock_color(lock)),
+              next_action_value(color_enabled, next_action)
+            ].join(" ")
           end
 
           return unless level == "detail"
@@ -3195,13 +3288,13 @@ cmd_project() {
           puts section(color_enabled, "Details")
           items.each do |task|
             puts "#{task["id"]} #{shorten(task["title"], 72)}"
-            print_key_value("Status", task["status"], color_enabled)
-            print_key_value("Workflow", task["workflow"], color_enabled)
-            print_key_value("Role", clean(task["target_role"]), color_enabled)
-            print_key_value("Agent", clean(task["target_agent"]), color_enabled)
-            print_key_value("Lock", clean(task["locked_by"], "none"), color_enabled)
-            print_key_value("Branch", clean(task["branch"], "unresolved"), color_enabled)
-            print_key_value("Worktree", clean(task["worktree"], "unresolved"), color_enabled)
+            puts "  Status: #{task_status_value(color_enabled, task["status"])}"
+            puts "  Workflow: #{workflow_value(color_enabled, task["workflow"])}"
+            puts "  Role: #{role_value(color_enabled, clean(task["target_role"]))}"
+            puts "  Agent: #{agent_value(color_enabled, clean(task["target_agent"]))}"
+            puts "  Lock: #{lock_value(color_enabled, clean(task["locked_by"], "none"))}"
+            puts "  Branch: #{meta_value(color_enabled, clean(task["branch"], "unresolved"))}"
+            puts "  Worktree: #{meta_value(color_enabled, clean(task["worktree"], "unresolved"))}"
             puts "  Allowed Paths:"
             paths = Array(task["allowed_paths"])
             if paths.empty?
@@ -3242,18 +3335,18 @@ cmd_project() {
             status_last = status_index == ordered_statuses.length - 1
             status_prefix = status_last ? "`--" : "|--"
             child_prefix = status_last ? "   " : "|  "
-            puts "#{status_prefix} #{status_value(color_enabled, status)}"
+            puts "#{status_prefix} #{task_status_value(color_enabled, status)}"
             grouped[status].each_with_index do |task, task_index|
               task_last = task_index == grouped[status].length - 1
               task_prefix = task_last ? "`--" : "|--"
               detail_prefix = task_last ? "   " : "|  "
               puts "#{child_prefix}#{task_prefix} #{task["id"]} #{shorten(task["title"], 56)}"
               next if level == "compact"
-              puts "#{child_prefix}#{detail_prefix}|-- Role: #{clean(task["target_role"])}"
-              puts "#{child_prefix}#{detail_prefix}|-- Agent: #{clean(task["target_agent"])}"
-              puts "#{child_prefix}#{detail_prefix}|-- Workflow: #{clean(task["workflow"], "unknown")}"
-              puts "#{child_prefix}#{detail_prefix}|-- Lock: #{clean(task["locked_by"], "none")}"
-              puts "#{child_prefix}#{detail_prefix}`-- Next: #{next_action_label(task)}"
+              puts "#{child_prefix}#{detail_prefix}|-- Role: #{role_value(color_enabled, clean(task["target_role"]))}"
+              puts "#{child_prefix}#{detail_prefix}|-- Agent: #{agent_value(color_enabled, clean(task["target_agent"]))}"
+              puts "#{child_prefix}#{detail_prefix}|-- Workflow: #{workflow_value(color_enabled, clean(task["workflow"], "unknown"))}"
+              puts "#{child_prefix}#{detail_prefix}|-- Lock: #{lock_value(color_enabled, clean(task["locked_by"], "none"))}"
+              puts "#{child_prefix}#{detail_prefix}`-- Next: #{next_action_value(color_enabled, next_action_label(task))}"
               next unless level == "detail"
               puts "#{child_prefix}#{detail_prefix}    Command: #{next_role_command(task, snapshot["target"])}"
             end

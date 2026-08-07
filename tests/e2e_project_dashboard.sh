@@ -179,6 +179,7 @@ status: completion_review
 workflow: feature
 target_role: Completion Role
 target_agent: Lead Agent
+locked_by: Lead Agent
 required_capabilities:
   - completion_review
 allowed_paths:
@@ -300,6 +301,26 @@ grep -q 'start completion' /tmp/aiops-e2e-project-dashboard-work.out || {
   exit 1
 }
 
+"$repo_root/bin/aiops" project dashboard --target "$project" --view work --color always >/tmp/aiops-e2e-project-dashboard-work-color.out
+ruby -e '
+  text = File.read(ARGV[0])
+  esc = 27.chr
+  checks = {
+    "approved status" => "#{esc}[32mapproved",
+    "scoped status" => "#{esc}[33mscoped",
+    "completion status" => "#{esc}[35mcompletion_review",
+    "workflow" => "#{esc}[36mfeature",
+    "role" => "#{esc}[34mExecution Role",
+    "agent" => "#{esc}[36mDevelopment Agent",
+    "empty lock" => "#{esc}[90mnone",
+    "held lock" => "#{esc}[1;31mLead Agent",
+    "next action" => "#{esc}[32mstart execution"
+  }
+  checks.each do |label, needle|
+    abort("work dashboard color missing #{label}") unless text.include?(needle)
+  end
+' /tmp/aiops-e2e-project-dashboard-work-color.out
+
 "$repo_root/bin/aiops" project dashboard --target "$project" --view work --format tree >/tmp/aiops-e2e-project-dashboard-work-tree.out
 grep -q 'AI Ops Work Tree' /tmp/aiops-e2e-project-dashboard-work-tree.out || {
   printf '%s\n' "work tree header missing" >&2
@@ -317,6 +338,22 @@ grep -q 'verification_ready' /tmp/aiops-e2e-project-dashboard-work-tree.out || {
   printf '%s\n' "work tree verification group missing" >&2
   exit 1
 }
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --view work --format tree --color always >/tmp/aiops-e2e-project-dashboard-work-tree-color.out
+ruby -e '
+  text = File.read(ARGV[0])
+  esc = 27.chr
+  checks = {
+    "tree status" => "#{esc}[35mverification_ready",
+    "tree role" => "Role: #{esc}[34mVerification Role",
+    "tree agent" => "Agent: #{esc}[36mLead Agent",
+    "tree workflow" => "Workflow: #{esc}[36mfeature",
+    "tree next" => "Next: #{esc}[35mstart verification"
+  }
+  checks.each do |label, needle|
+    abort("work tree color missing #{label}") unless text.include?(needle)
+  end
+' /tmp/aiops-e2e-project-dashboard-work-tree-color.out
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --view work --level detail >/tmp/aiops-e2e-project-dashboard-work-detail.out
 grep -q 'Allowed Paths:' /tmp/aiops-e2e-project-dashboard-work-detail.out || {
