@@ -119,6 +119,10 @@ status: approved
 workflow: feature
 target_role: Execution Role
 target_agent: Development Agent
+depends_on:
+  - T-20260807-001
+blocks:
+  - T-20260807-003
 required_capabilities:
   - implementation
 allowed_paths:
@@ -139,6 +143,8 @@ status: scoped
 workflow: feature
 target_role: Lead Role
 target_agent: Lead Agent
+depends_on:
+  - T-20260807-002
 required_capabilities:
   - scope_definition
 allowed_paths:
@@ -159,6 +165,8 @@ status: verification_ready
 workflow: feature
 target_role: Verification Role
 target_agent: Lead Agent
+depends_on:
+  - T-20260807-003
 required_capabilities:
   - verification
 allowed_paths:
@@ -180,6 +188,8 @@ workflow: feature
 target_role: Completion Role
 target_agent: Lead Agent
 locked_by: Lead Agent
+depends_on:
+  - T-20260807-004
 required_capabilities:
   - completion_review
 allowed_paths:
@@ -396,12 +406,72 @@ grep -q 'core_missing' /tmp/aiops-e2e-project-dashboard-empty.out || {
   exit 1
 }
 
-if "$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid >/tmp/aiops-e2e-project-dashboard-mermaid.out 2>&1; then
-  printf '%s\n' "mermaid dashboard unexpectedly succeeded in phase 3" >&2
+"$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map dependencies >/tmp/aiops-e2e-project-dashboard-mermaid-dependencies.out
+grep -q '^flowchart LR$' /tmp/aiops-e2e-project-dashboard-mermaid-dependencies.out || {
+  printf '%s\n' "dependency mermaid flowchart header missing" >&2
+  exit 1
+}
+grep -q 'T_T_20260807_001 --> T_T_20260807_002' /tmp/aiops-e2e-project-dashboard-mermaid-dependencies.out || {
+  printf '%s\n' "dependency mermaid edge missing" >&2
+  exit 1
+}
+grep -q 'class T_T_20260807_002 active' /tmp/aiops-e2e-project-dashboard-mermaid-dependencies.out || {
+  printf '%s\n' "dependency mermaid class missing" >&2
+  exit 1
+}
+grep -q 'classDef proposed' /tmp/aiops-e2e-project-dashboard-mermaid-dependencies.out || {
+  printf '%s\n' "dependency mermaid classDef missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map workflow >/tmp/aiops-e2e-project-dashboard-mermaid-workflow.out
+grep -q 'S_proposed --> S_scoped' /tmp/aiops-e2e-project-dashboard-mermaid-workflow.out || {
+  printf '%s\n' "workflow mermaid status edge missing" >&2
+  exit 1
+}
+grep -q 'S_rework_requested\["rework_requested"\]' /tmp/aiops-e2e-project-dashboard-mermaid-workflow.out || {
+  printf '%s\n' "workflow mermaid rework node missing" >&2
+  exit 1
+}
+grep -q 'T_T_20260807_004\["T-20260807-004' /tmp/aiops-e2e-project-dashboard-mermaid-workflow.out || {
+  printf '%s\n' "workflow mermaid task node missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map agents >/tmp/aiops-e2e-project-dashboard-mermaid-agents.out
+grep -q 'A_Development_Agent\["Development Agent"\]' /tmp/aiops-e2e-project-dashboard-mermaid-agents.out || {
+  printf '%s\n' "agents mermaid agent node missing" >&2
+  exit 1
+}
+grep -q 'R_Execution_Role\["Execution Role"\]' /tmp/aiops-e2e-project-dashboard-mermaid-agents.out || {
+  printf '%s\n' "agents mermaid role node missing" >&2
+  exit 1
+}
+grep -q 'A_Development_Agent --> R_Execution_Role' /tmp/aiops-e2e-project-dashboard-mermaid-agents.out || {
+  printf '%s\n' "agents mermaid agent-role edge missing" >&2
+  exit 1
+}
+grep -q 'R_Execution_Role --> T_T_20260807_002' /tmp/aiops-e2e-project-dashboard-mermaid-agents.out || {
+  printf '%s\n' "agents mermaid role-task edge missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$empty_project" --view work --format mermaid --map blockers >/tmp/aiops-e2e-project-dashboard-mermaid-blockers.out
+grep -q '^flowchart TD$' /tmp/aiops-e2e-project-dashboard-mermaid-blockers.out || {
+  printf '%s\n' "blockers mermaid flowchart header missing" >&2
+  exit 1
+}
+grep -q 'core_missing' /tmp/aiops-e2e-project-dashboard-mermaid-blockers.out || {
+  printf '%s\n' "blockers mermaid core blocker missing" >&2
+  exit 1
+}
+
+if "$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map unknown >/tmp/aiops-e2e-project-dashboard-mermaid-invalid.out 2>&1; then
+  printf '%s\n' "invalid mermaid map unexpectedly succeeded" >&2
   exit 1
 fi
-grep -q 'planned for a later dashboard phase' /tmp/aiops-e2e-project-dashboard-mermaid.out || {
-  printf '%s\n' "mermaid dashboard did not report later phase" >&2
+grep -q 'unknown project dashboard map: unknown' /tmp/aiops-e2e-project-dashboard-mermaid-invalid.out || {
+  printf '%s\n' "invalid mermaid map error missing" >&2
   exit 1
 }
 

@@ -13,7 +13,7 @@ Usage:
   aiops project snapshot [--target DIR] --json
   aiops project context --role ROLE [--target DIR] [--task TASK_ID] [--json]
   aiops project health [--target DIR] [--json]
-  aiops project dashboard [--target DIR] [--view main|work] [--level compact|standard|detail] [--format terminal|tree] [--color auto|always|never] [--no-color]
+  aiops project dashboard [--target DIR] [--view main|work] [--level compact|standard|detail] [--format terminal|tree|mermaid] [--map dependencies|workflow|agents|blockers] [--color auto|always|never] [--no-color]
   aiops policy evaluate [--target DIR|--snapshot FILE] [--strict-level LEVEL] --json
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
@@ -69,6 +69,7 @@ Examples:
   aiops project health
   aiops project dashboard
   aiops project dashboard --level compact
+  aiops project dashboard --view work --format mermaid --map dependencies
   aiops policy evaluate --json
   aiops validate --strict
   aiops validate project --target /path/to/project --strict
@@ -2918,6 +2919,7 @@ cmd_project() {
       view="main"
       level="standard"
       format="terminal"
+      map="dependencies"
       color="auto"
 
       while [ "$#" -gt 0 ]; do
@@ -2941,6 +2943,11 @@ cmd_project() {
             shift
             [ "$#" -gt 0 ] || die "--format requires a value"
             format="$1"
+            ;;
+          --map)
+            shift
+            [ "$#" -gt 0 ] || die "--map requires a value"
+            map="$1"
             ;;
           --no-color)
             color="never"
@@ -2980,14 +2987,26 @@ cmd_project() {
           ;;
       esac
       case "$format" in
-        terminal|tree) ;;
-        mermaid|html)
+        terminal|tree|mermaid) ;;
+        html)
           die "project dashboard --format $format is planned for a later dashboard phase"
-          ;;
+        ;;
         *)
           die "unknown project dashboard format: $format"
           ;;
       esac
+      case "$map" in
+        dependencies|workflow|agents|blockers) ;;
+        *)
+          die "unknown project dashboard map: $map"
+          ;;
+      esac
+      if [ "$format" != "mermaid" ] && [ "$map" != "dependencies" ]; then
+        die "project dashboard --map requires --format mermaid"
+      fi
+      if [ "$format" = "mermaid" ] && [ "$view" != "work" ]; then
+        die "project dashboard --format mermaid currently requires --view work"
+      fi
       case "$color" in
         auto|always|never) ;;
         *)
@@ -3012,6 +3031,7 @@ cmd_project() {
         format = ARGV[1]
         level = ARGV[2]
         color_mode = ARGV[3]
+        map = ARGV[4]
         color_enabled = color_mode == "always" || (color_mode == "auto" && STDOUT.tty? && ENV["NO_COLOR"].to_s.empty?)
 
         def colorize(enabled, text, code)
@@ -3353,6 +3373,214 @@ cmd_project() {
           end
         end
 
+        def mermaid_id(prefix, value)
+          raw = value.nil? || value.to_s.empty? ? "unknown" : value.to_s
+          safe = raw.gsub(/[^A-Za-z0-9_]/, "_").gsub(/_+/, "_").gsub(/\A_+|_+\z/, "")
+          safe = "unknown" if safe.empty?
+          "#{prefix}_#{safe}"
+        end
+
+        def mermaid_label(*parts)
+          parts.flatten.compact.map(&:to_s).reject(&:empty?).join("\\n").gsub("\\", "\\\\").gsub("\"", "\\\"")
+        end
+
+        def mermaid_task_class(task)
+          case task["status"].to_s
+          when "done"
+            "done"
+          when "cancelled"
+            "cancelled"
+          when "proposed"
+            "proposed"
+          when "scoped"
+            "scoped"
+          when "approved", "in_progress", "verification_ready", "verification_passed", "completion_review"
+            "active"
+          when "rework_requested", "blocked"
+            "blocked"
+          else
+            "unknown"
+          end
+        end
+
+        def mermaid_class_defs
+          [
+            "  classDef done fill:#dcfce7,stroke:#16a34a,color:#14532d",
+            "  classDef active fill:#dbeafe,stroke:#2563eb,color:#1e3a8a",
+            "  classDef scoped fill:#fef3c7,stroke:#d97706,color:#78350f",
+            "  classDef proposed fill:#f3f4f6,stroke:#6b7280,color:#374151",
+            "  classDef blocked fill:#fee2e2,stroke:#dc2626,color:#7f1d1d",
+            "  classDef cancelled fill:#f3f4f6,stroke:#9ca3af,color:#6b7280",
+            "  classDef warning fill:#fef3c7,stroke:#d97706,color:#78350f",
+            "  classDef agent fill:#cffafe,stroke:#0891b2,color:#164e63",
+            "  classDef role fill:#dbeafe,stroke:#2563eb,color:#1e3a8a",
+            "  classDef workflow fill:#ede9fe,stroke:#7c3aed,color:#4c1d95",
+            "  classDef unknown fill:#f3f4f6,stroke:#6b7280,color:#374151"
+          ]
+        end
+
+        def render_mermaid_dependencies(snapshot)
+          tasks = snapshot.fetch("tasks", {})
+          all_items = Array(tasks["items"])
+          active_items = active_work_items(tasks)
+          by_id = all_items.each_with_object({}) { |task, out| out[task["id"].to_s] = task }
+          selected = {}
+          edges = []
+
+          active_items.each do |task|
+            selected[task["id"].to_s] = task
+            Array(task["depends_on"]).each do |dependency|
+              dep_id = dependency.to_s
+              selected[dep_id] = by_id[dep_id] || { "id" => dep_id, "title" => "external dependency", "status" => "unknown" }
+              edges << [dep_id, task["id"].to_s]
+            end
+            Array(task["blocks"]).each do |blocked|
+              blocked_id = blocked.to_s
+              selected[blocked_id] = by_id[blocked_id] || { "id" => blocked_id, "title" => "external blocked task", "status" => "unknown" }
+              edges << [task["id"].to_s, blocked_id]
+            end
+          end
+
+          puts "flowchart LR"
+          selected.values.sort_by { |task| task["id"].to_s }.each do |task|
+            node = mermaid_id("T", task["id"])
+            puts "  #{node}[\"#{mermaid_label(task["id"], shorten(task["title"], 36), task["status"])}\"]"
+          end
+          edges.uniq.each do |from, to|
+            puts "  #{mermaid_id("T", from)} --> #{mermaid_id("T", to)}"
+          end
+          selected.values.each do |task|
+            puts "  class #{mermaid_id("T", task["id"])} #{mermaid_task_class(task)}"
+          end
+          puts ""
+          puts mermaid_class_defs
+        end
+
+        def render_mermaid_workflow(snapshot)
+          tasks = snapshot.fetch("tasks", {})
+          workflow = snapshot.fetch("workflow", {})
+          edges = Array(workflow["transitions"]).map { |edge| [edge["from"].to_s, edge["to"].to_s] }.reject { |from, to| from.empty? || to.empty? }
+          if edges.empty?
+            edges = [
+              %w[proposed scoped],
+              %w[scoped approved],
+              %w[approved in_progress],
+              %w[in_progress verification_ready],
+              %w[verification_ready verification_in_progress],
+              %w[verification_in_progress verification_passed],
+              %w[verification_passed completion_review],
+              %w[completion_review done],
+              %w[in_progress blocked],
+              %w[verification_ready blocked],
+              %w[verification_in_progress rework_requested],
+              %w[completion_review rework_requested],
+              %w[proposed cancelled],
+              %w[scoped cancelled]
+            ]
+          end
+          active_items = sorted_work_items(active_work_items(tasks))
+          statuses = (Array(workflow["statuses"]).map(&:to_s) + edges.flatten + active_items.map { |task| task["status"].to_s }).reject(&:empty?).uniq
+          puts "flowchart LR"
+          statuses.each do |status|
+            puts "  #{mermaid_id("S", status)}[\"#{status}\"]"
+          end
+          edges.each do |from, to|
+            puts "  #{mermaid_id("S", from)} --> #{mermaid_id("S", to)}"
+          end
+          active_items.each do |task|
+            task_node = mermaid_id("T", task["id"])
+            status_node = mermaid_id("S", task["status"])
+            puts "  #{task_node}[\"#{mermaid_label(task["id"], shorten(task["title"], 30))}\"] --> #{status_node}"
+            puts "  class #{task_node} #{mermaid_task_class(task)}"
+          end
+          statuses.each do |status|
+            node_class = %w[blocked rework_requested].include?(status) ? "blocked" : "workflow"
+            node_class = "cancelled" if status == "cancelled"
+            puts "  class #{mermaid_id("S", status)} #{node_class}"
+          end
+          puts ""
+          puts mermaid_class_defs
+        end
+
+        def render_mermaid_agents(snapshot)
+          tasks = snapshot.fetch("tasks", {})
+          items = sorted_work_items(active_work_items(tasks))
+          edges = []
+          nodes = {}
+          classes = {}
+          puts "flowchart LR"
+          items.each do |task|
+            agent = clean(task["target_agent"])
+            role = clean(task["target_role"])
+            agent_node = mermaid_id("A", agent)
+            role_node = mermaid_id("R", role)
+            task_node = mermaid_id("T", task["id"])
+            nodes[agent_node] = agent
+            nodes[role_node] = role
+            nodes[task_node] = mermaid_label(task["id"], task["status"])
+            classes[agent_node] = "agent"
+            classes[role_node] = "role"
+            classes[task_node] = mermaid_task_class(task)
+            edges << [agent_node, role_node]
+            edges << [role_node, task_node]
+          end
+          if items.empty?
+            none_node = mermaid_id("A", "none")
+            nodes[none_node] = "no active work"
+            classes[none_node] = "done"
+          end
+          nodes.each do |node, label|
+            puts "  #{node}[\"#{label}\"]"
+          end
+          edges.uniq.each { |from, to| puts "  #{from} --> #{to}" }
+          classes.each { |node, node_class| puts "  class #{node} #{node_class}" }
+          puts ""
+          puts mermaid_class_defs
+        end
+
+        def render_mermaid_blockers(snapshot, health_summary)
+          project = snapshot.fetch("project", {})
+          checks = Array(health_summary["checks"]).select { |check| %w[blocker warn].include?(check["level"].to_s) }
+          project_node = "P_project"
+          puts "flowchart TD"
+          puts "  #{project_node}[\"#{mermaid_label(project["name"] || File.basename(snapshot["target"].to_s), health_summary["overall"])}\"]"
+          if checks.empty?
+            ok_node = "C_none"
+            puts "  #{ok_node}[\"no blockers or warnings\"]"
+            puts "  #{project_node} --> #{ok_node}"
+            puts "  class #{ok_node} done"
+          else
+            checks.each do |check|
+              check_node = mermaid_id("C", check["code"])
+              level = check["level"].to_s == "blocker" ? "blocked" : "warning"
+              puts "  #{check_node}[\"#{mermaid_label(check["code"], shorten(check["message"], 48))}\"]"
+              puts "  #{project_node} --> #{check_node}"
+              puts "  class #{check_node} #{level}"
+              Array(check.dig("evidence", "tasks")).each do |task_id|
+                task_node = mermaid_id("T", task_id)
+                puts "  #{task_node}[\"#{mermaid_label(task_id)}\"]"
+                puts "  #{check_node} --> #{task_node}"
+                puts "  class #{task_node} unknown"
+              end
+            end
+          end
+          puts ""
+          puts mermaid_class_defs
+        end
+
+        def render_work_mermaid(snapshot, health_summary, map)
+          case map
+          when "dependencies"
+            render_mermaid_dependencies(snapshot)
+          when "workflow"
+            render_mermaid_workflow(snapshot)
+          when "agents"
+            render_mermaid_agents(snapshot)
+          when "blockers"
+            render_mermaid_blockers(snapshot, health_summary)
+          end
+        end
+
         project = snapshot.fetch("project", {})
         health = health_summary.fetch("summary", {})
         health_status = health_summary.fetch("overall", snapshot.fetch("health", {})["overall"])
@@ -3382,7 +3610,9 @@ cmd_project() {
         next_steps = Array(snapshot["next"]).map { |step| command_or_message(step) }.compact.uniq
 
         if view == "work"
-          if format == "tree"
+          if format == "mermaid"
+            render_work_mermaid(snapshot, health_summary, map)
+          elsif format == "tree"
             render_work_tree(snapshot, level, color_enabled)
           else
             render_work_terminal(snapshot, level, color_enabled)
@@ -3463,7 +3693,7 @@ cmd_project() {
           puts section(color_enabled, "Next")
           next_steps.first(level == "compact" ? 3 : next_steps.length).each { |step| puts "  - #{step}" }
         end
-      ' "$view" "$format" "$level" "$color"
+      ' "$view" "$format" "$level" "$color" "$map"
       ;;
     snapshot)
       target="$(pwd)"
@@ -3686,12 +3916,16 @@ cmd_project() {
             "workflow" => data["workflow"] || legacy_field(path, "workflow"),
             "target_role" => data["target_role"] || legacy_field(path, "target_role"),
             "target_agent" => data["target_agent"] || legacy_field(path, "target_agent"),
+            "depends_on" => list(data["depends_on"]),
+            "blocks" => list(data["blocks"]),
             "allowed_paths" => list(data["allowed_paths"]),
             "source_of_truth" => list(data["source_of_truth"]),
             "locked_by" => data["locked_by"] || legacy_field(path, "locked_by"),
             "lock_session" => data["lock_session"] || legacy_field(path, "lock_session"),
             "status_ref" => data["status_ref"] || legacy_field(path, "status_ref"),
             "status_ref_sha" => data["status_ref_sha"] || legacy_field(path, "status_ref_sha"),
+            "report_to" => data["report_to"],
+            "qa_to" => data["qa_to"],
             "branch" => data["branch"],
             "worktree" => data["worktree_path"] || data["worktree"],
             "path" => relative
@@ -3732,6 +3966,23 @@ cmd_project() {
             workflow_catalog = nil
           end
         end
+        default_workflow = workflow_catalog.is_a?(Hash) ? workflow_catalog["default_workflow"] : nil
+        default_workflow_definition = workflow_catalog.is_a?(Hash) ? workflow_catalog.dig("workflows", default_workflow.to_s) : nil
+        workflow_statuses = default_workflow_definition.is_a?(Hash) && default_workflow_definition["statuses"].is_a?(Hash) ? default_workflow_definition["statuses"].keys : []
+        workflow_transitions =
+          if default_workflow_definition.is_a?(Hash)
+            Array(default_workflow_definition["transitions"]).map do |transition|
+              next nil unless transition.is_a?(Hash)
+              next nil if transition["from"].to_s.empty? || transition["to"].to_s.empty?
+              {
+                "from" => transition["from"],
+                "to" => transition["to"],
+                "next_role" => transition["next_role"]
+              }
+            end.compact
+          else
+            []
+          end
 
         def value_at_path(data, path)
           current = data
@@ -4115,8 +4366,10 @@ cmd_project() {
           },
           "workflow" => {
             "catalog_present" => workflow_catalog.is_a?(Hash),
-            "default_workflow" => workflow_catalog.is_a?(Hash) ? workflow_catalog["default_workflow"] : nil,
-            "catalog_schema" => workflow_catalog.is_a?(Hash) ? workflow_catalog["schema"] : nil
+            "default_workflow" => default_workflow,
+            "catalog_schema" => workflow_catalog.is_a?(Hash) ? workflow_catalog["schema"] : nil,
+            "statuses" => workflow_statuses,
+            "transitions" => workflow_transitions
           },
           "policy" => {
             "catalog_present" => false,
