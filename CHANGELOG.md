@@ -10,6 +10,24 @@
 
 ## Unreleased
 
+## 0.12.0 - 2026-08-07
+
+### Added
+
+- `aiops project dashboard` 명령 추가
+- Main Dashboard에서 프로젝트 진행률, readiness, canonical status, Agent/Role 요약, blocker/warning, next command 표시
+- Work Dashboard에서 활성 Task의 status, workflow, target role, target agent, lock, 다음 Role Session 후보 표시
+- Work Dashboard tree 출력과 dependency/workflow/agents/blockers Mermaid map 출력 추가
+- Dashboard semantic color 출력 옵션 추가
+- `aiops project dashboard --json`과 `schemas/project_dashboard.schema.json` 추가
+- `aiops validate project-dashboard FILE` 명령 추가
+- Risk, Agent, Release 전문 dashboard view 추가
+
+### Changed
+
+- `docs/project_state.md`에 dashboard 사용법과 JSON projection 계약 설명 추가
+- Dashboard upgrade plan을 6차 완료 상태로 갱신
+
 ## 0.11.1 - 2026-08-07
 
 ### Changed
