@@ -13,7 +13,7 @@ Usage:
   aiops project snapshot [--target DIR] --json
   aiops project context --role ROLE [--target DIR] [--task TASK_ID] [--json]
   aiops project health [--target DIR] [--json]
-  aiops project dashboard [--target DIR] [--view main|work|risk|agents|release] [--level compact|standard|detail] [--format terminal|tree|mermaid] [--map dependencies|workflow|agents|blockers] [--json] [--color auto|always|never] [--no-color]
+  aiops project dashboard [--target DIR] [--view main|work|risk|agents|release] [--level compact|standard|detail] [--format terminal|tree|mermaid|html] [--map dependencies|workflow|agents|blockers] [--json] [--output FILE] [--color auto|always|never] [--no-color]
   aiops policy evaluate [--target DIR|--snapshot FILE] [--strict-level LEVEL] --json
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
@@ -74,6 +74,7 @@ Examples:
   aiops project dashboard --view agents
   aiops project dashboard --view release
   aiops project dashboard --view work --format mermaid --map dependencies
+  aiops project dashboard --format html --output dashboard.html
   aiops project dashboard --json
   aiops policy evaluate --json
   aiops validate --strict
@@ -2928,6 +2929,7 @@ cmd_project() {
       map="dependencies"
       color="auto"
       json="no"
+      output=""
 
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -2967,6 +2969,11 @@ cmd_project() {
           --json)
             json="yes"
             ;;
+          --output)
+            shift
+            [ "$#" -gt 0 ] || die "--output requires a value"
+            output="$1"
+            ;;
           -h|--help)
             usage
             exit 0
@@ -2991,10 +2998,7 @@ cmd_project() {
           ;;
       esac
       case "$format" in
-        terminal|tree|mermaid) ;;
-        html)
-          die "project dashboard --format $format is planned for a later dashboard phase"
-        ;;
+        terminal|tree|mermaid|html) ;;
         *)
           die "unknown project dashboard format: $format"
           ;;
@@ -3005,11 +3009,14 @@ cmd_project() {
           die "unknown project dashboard map: $map"
           ;;
       esac
-      if [ "$json" != "yes" ] && [ "$format" != "mermaid" ] && [ "$map" != "dependencies" ]; then
+      if [ "$json" != "yes" ] && [ "$format" != "mermaid" ] && [ "$format" != "html" ] && [ "$map" != "dependencies" ]; then
         die "project dashboard --map requires --format mermaid"
       fi
       if [ "$json" != "yes" ] && [ "$format" = "mermaid" ] && [ "$view" != "work" ]; then
         die "project dashboard --format mermaid currently requires --view work"
+      fi
+      if [ "$json" = "yes" ] && [ -n "$output" ]; then
+        die "project dashboard --json cannot be combined with --output"
       fi
       case "$color" in
         auto|always|never) ;;
@@ -3027,7 +3034,7 @@ cmd_project() {
         printf '%s\n' "$snapshot_json"
         printf '%s\n' "__AIOPS_DASHBOARD_HEALTH_JSON__"
         printf '%s\n' "$health_json"
-      } | ruby -rjson -e '
+      } | ruby -rjson -rstringio -e '
         snapshot_text, health_text = STDIN.read.split("__AIOPS_DASHBOARD_HEALTH_JSON__", 2)
         snapshot = JSON.parse(snapshot_text)
         health_summary = JSON.parse(health_text)
@@ -3037,6 +3044,7 @@ cmd_project() {
         color_mode = ARGV[3]
         map = ARGV[4]
         as_json = ARGV[5] == "yes"
+        output = ARGV[6].to_s
         color_enabled = color_mode == "always" || (color_mode == "auto" && STDOUT.tty? && ENV["NO_COLOR"].to_s.empty?)
 
         def colorize(enabled, text, code)
@@ -3828,6 +3836,20 @@ cmd_project() {
           end
         end
 
+        def html_escape(value)
+          value.to_s.gsub("&", "&amp;").gsub("<", "&lt;").gsub(">", "&gt;").gsub("\"", "&quot;")
+        end
+
+        def capture_output
+          previous = $stdout
+          buffer = StringIO.new
+          $stdout = buffer
+          yield
+          buffer.string
+        ensure
+          $stdout = previous
+        end
+
         def dashboard_task_item(task, target)
           {
             "id" => task["id"],
@@ -4063,6 +4085,139 @@ cmd_project() {
           }
         end
 
+        def html_status_class(value)
+          text = value.to_s.downcase
+          return "ok" if %w[ok complete allowed ready recorded_current not_required done true ready_for_release_check].include?(text)
+          return "warn" if %w[warning allowed_with_warnings sync_required not_recorded recorded_stale migration_needed review_needed review_required scoped proposed].include?(text)
+          return "bad" if %w[blocked missing partial needs_canonical_status_ref ref_not_found_locally false rework_requested].include?(text)
+          return "active" if %w[approved in_progress verification_ready completion_review].include?(text)
+          "neutral"
+        end
+
+        def html_badge(value, label = nil)
+          text = clean(label || value, "unknown")
+          %Q(<span class="badge #{html_status_class(value)}">#{html_escape(text)}</span>)
+        end
+
+        def html_metric_card(label, value, detail = nil, state = nil)
+          detail_html = detail.to_s.empty? ? "" : %Q(<p>#{html_escape(detail)}</p>)
+          state_class = html_status_class(state || value)
+          %Q(<article class="metric #{state_class}"><span>#{html_escape(label)}</span><strong>#{html_escape(value)}</strong>#{detail_html}</article>)
+        end
+
+        def html_map_title(name)
+          case name
+          when "dependencies"
+            "Task Dependency Map"
+          when "workflow"
+            "Workflow State Map"
+          when "agents"
+            "Agent / Role Map"
+          when "blockers"
+            "Blocker / Warning Map"
+          else
+            name.to_s
+          end
+        end
+
+        def render_html_dashboard(snapshot, health_summary, view, level, selected_map)
+          projection = dashboard_projection(snapshot, health_summary, view, level, "html", selected_map)
+          project = projection["project"]
+          status = projection["status"]
+          progress = projection["progress"]
+          readiness = projection["readiness"]
+          git = projection["git"]
+          agents = projection["agents"]
+          tasks = projection["tasks"]
+          risks = projection["risks"]
+          release = projection.dig("views", "release") || {}
+          active_items = Array(tasks["active_items"])
+          next_steps = Array(projection["next"]).map { |step| command_or_message(step) }.compact.uniq
+          done_ratio = progress["done_ratio"].to_f
+          progress_pct = (done_ratio * 100).round
+
+          map_names = ([selected_map] + %w[dependencies workflow agents blockers]).compact.uniq
+          mermaid_sources = map_names.each_with_object({}) do |name, out|
+            out[name] = capture_output { render_work_mermaid(snapshot, health_summary, name) }
+          end
+
+          rows = active_items.map do |task|
+            %Q(<tr><td><strong>#{html_escape(task["id"])}</strong><small>#{html_escape(task["title"])}</small></td><td>#{html_badge(task["status"])}</td><td>#{html_escape(clean(task["workflow"], "unknown"))}</td><td>#{html_escape(clean(task["target_role"]))}</td><td>#{html_escape(clean(task["target_agent"]))}</td><td>#{html_escape(task.dig("next", "action"))}</td></tr>)
+          end
+          rows << %Q(<tr><td colspan="6" class="empty">No active work</td></tr>) if rows.empty?
+
+          warning_items = Array(risks["warnings"]).first(8).map do |check|
+            %Q(<li><strong>#{html_escape(check["code"])}</strong><span>#{html_escape(check["message"])}</span></li>)
+          end
+          warning_items << %Q(<li><strong>none</strong><span>No warnings</span></li>) if warning_items.empty?
+
+          blocker_items = Array(risks["blockers"]).first(8).map do |check|
+            %Q(<li><strong>#{html_escape(check["code"])}</strong><span>#{html_escape(check["message"])}</span></li>)
+          end
+          blocker_items << %Q(<li><strong>none</strong><span>No blockers</span></li>) if blocker_items.empty?
+
+          agent_cards = Array(agents["items"]).map do |agent|
+            roles = Array(agent["declared_roles"]).join(", ")
+            caps = Array(agent["capabilities"]).first(5).join(", ")
+            %Q(<article class="agent-card"><div><strong>#{html_escape(agent["name"] || agent["id"])}</strong>#{html_badge(agent["status"])}</div><p>#{html_escape(agent["team"])}</p><small>#{html_escape(roles.empty? ? "no roles" : roles)}</small><small>#{html_escape(caps.empty? ? "no capabilities" : caps)}</small></article>)
+          end
+          agent_cards << %Q(<article class="agent-card"><strong>No agents</strong></article>) if agent_cards.empty?
+
+          next_items = next_steps.first(8).map { |step| %Q(<li><code>#{html_escape(step)}</code></li>) }
+          next_items << %Q(<li><code>none</code></li>) if next_items.empty?
+
+          map_sections = map_names.map do |name|
+            source = mermaid_sources[name]
+            %Q(<section class="panel map-panel"><div class="panel-head"><h2>#{html_escape(html_map_title(name))}</h2><span>#{html_escape(name)}</span></div><div class="mermaid">#{html_escape(source)}</div><details><summary>Mermaid source</summary><pre>#{html_escape(source)}</pre></details></section>)
+          end.join("\n")
+
+          [
+            "<!doctype html>",
+            "<html lang=\"en\">",
+            "<head>",
+            "<meta charset=\"utf-8\">",
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+            "<title>AI Ops Project Dashboard - #{html_escape(project["name"])}</title>",
+            "<style>",
+            ":root{color-scheme:light;--bg:#f8fafc;--panel:#ffffff;--ink:#0f172a;--muted:#64748b;--line:#dbe3ef;--ok:#15803d;--ok-bg:#dcfce7;--warn:#b45309;--warn-bg:#fef3c7;--bad:#b91c1c;--bad-bg:#fee2e2;--active:#1d4ed8;--active-bg:#dbeafe;--neutral:#475569;--neutral-bg:#f1f5f9;--violet:#6d28d9;--cyan:#0e7490}",
+            "*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;line-height:1.45}header{padding:28px 32px 18px;border-bottom:1px solid var(--line);background:linear-gradient(135deg,#ffffff 0%,#eef6ff 100%)}main{max-width:1440px;margin:0 auto;padding:24px 32px 40px}.eyebrow{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.08em}h1{margin:6px 0 8px;font-size:32px;letter-spacing:0}h2{margin:0;font-size:18px}p{margin:4px 0;color:var(--muted)}code,pre{font-family:SFMono-Regular,Consolas,monospace}.grid{display:grid;gap:16px}.metrics{grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin:22px 0}.metric,.panel,.agent-card{background:var(--panel);border:1px solid var(--line);border-radius:8px}.metric{padding:16px;border-left:5px solid var(--neutral)}.metric span{display:block;color:var(--muted);font-size:13px}.metric strong{display:block;margin-top:6px;font-size:24px}.metric.ok{border-left-color:var(--ok)}.metric.warn{border-left-color:var(--warn)}.metric.bad{border-left-color:var(--bad)}.metric.active{border-left-color:var(--active)}.panel{padding:18px;margin:16px 0}.panel-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}.panel-head span{color:var(--muted);font-size:13px}.two{grid-template-columns:minmax(0,1.4fr) minmax(280px,.6fr)}.progress{height:12px;background:#e2e8f0;border-radius:999px;overflow:hidden}.progress div{height:100%;background:linear-gradient(90deg,#16a34a,#0891b2);width:#{progress_pct}%}.badge{display:inline-flex;align-items:center;white-space:nowrap;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:700}.badge.ok{background:var(--ok-bg);color:var(--ok)}.badge.warn{background:var(--warn-bg);color:var(--warn)}.badge.bad{background:var(--bad-bg);color:var(--bad)}.badge.active{background:var(--active-bg);color:var(--active)}.badge.neutral{background:var(--neutral-bg);color:var(--neutral)}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.05em}td small{display:block;color:var(--muted);margin-top:2px}.empty{text-align:center;color:var(--muted)}ul.clean{list-style:none;padding:0;margin:0}ul.clean li{display:grid;grid-template-columns:minmax(120px,.4fr) minmax(0,1fr);gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}.agent-grid{grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}.agent-card{padding:14px}.agent-card div{display:flex;justify-content:space-between;gap:10px;align-items:center}.agent-card small{display:block;color:var(--muted);margin-top:6px}.map-panel{overflow:hidden}.mermaid{background:#ffffff;border:1px solid var(--line);border-radius:8px;padding:16px;overflow:auto;min-height:240px}details{margin-top:10px}summary{cursor:pointer;color:var(--active);font-weight:700}pre{overflow:auto;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:14px;font-size:12px}.kv{display:grid;grid-template-columns:160px minmax(0,1fr);gap:8px}.kv div{padding:6px 0;border-bottom:1px solid var(--line)}.footer{margin-top:24px;color:var(--muted);font-size:13px}@media(max-width:820px){header{padding:22px 18px}main{padding:18px}.two{grid-template-columns:1fr}.kv{grid-template-columns:1fr}th:nth-child(3),td:nth-child(3),th:nth-child(4),td:nth-child(4){display:none}}",
+            "</style>",
+            "</head>",
+            "<body>",
+            "<header><div class=\"eyebrow\">AI Ops Project Dashboard</div><h1>#{html_escape(project["name"])}</h1><p>Generated #{html_escape(projection["generated_at"])} · #{html_escape(projection["target"])}</p></header>",
+            "<main>",
+            "<section class=\"metrics grid\">",
+            html_metric_card("Overall", status_label(status["overall"]), "#{status["blockers"]} blockers, #{status["warnings"]} warnings", status["overall"]),
+            html_metric_card("Progress", "#{progress_pct}%", "#{progress["done_tasks"]} / #{progress["total_tasks"]} done", progress_pct >= 80 ? "ok" : "warning"),
+            html_metric_card("Active Work", progress["active_tasks"], "active tasks", progress["active_tasks"].to_i.zero? ? "ok" : "active"),
+            html_metric_card("Multi-agent", readiness["multi_agent"], "coordination state", readiness["multi_agent"]),
+            html_metric_card("Migration", readiness["migration"], "core #{project["core_version"]}", readiness["migration"]),
+            html_metric_card("Release Gate", release["gate_status"], "local readiness projection", release["gate_status"]),
+            "</section>",
+            "<section class=\"panel\"><div class=\"panel-head\"><h2>Progress</h2><span>#{progress["done_tasks"]} done / #{progress["total_tasks"]} total</span></div><div class=\"progress\"><div></div></div></section>",
+            "<section class=\"grid two\">",
+            "<article class=\"panel\"><div class=\"panel-head\"><h2>Project Settings</h2><span>#{html_escape(project["operating_mode"])}</span></div><div class=\"kv\"><div>Workflow</div><div>#{html_escape(project["workflow_policy"])}</div><div>Knowledge</div><div>#{html_escape(project["knowledge_mode"])}</div><div>Core</div><div>#{html_escape(project["core_version"])} recorded #{html_escape(project["recorded_core_version"])}</div><div>Branch</div><div>#{html_escape(git["branch"])} @ #{html_escape(git["head"])}</div><div>Canonical</div><div>#{html_badge(git["status_ref_state"])} #{html_escape(git["canonical_status_ref"])}</div></div></article>",
+            "<article class=\"panel\"><div class=\"panel-head\"><h2>Readiness</h2><span>status</span></div><div class=\"kv\"><div>Bootstrap</div><div>#{html_badge(readiness["bootstrap"])}</div><div>Task Work</div><div>#{html_badge(readiness["task_work"])}</div><div>Multi-agent</div><div>#{html_badge(readiness["multi_agent"])}</div><div>Migration</div><div>#{html_badge(readiness["migration"])}</div></div></article>",
+            "</section>",
+            "<section class=\"panel\"><div class=\"panel-head\"><h2>Work Dashboard</h2><span>#{active_items.length} actionable tasks</span></div><table><thead><tr><th>Task</th><th>Status</th><th>Workflow</th><th>Role</th><th>Agent</th><th>Next</th></tr></thead><tbody>#{rows.join}</tbody></table></section>",
+            map_sections,
+            "<section class=\"grid two\">",
+            "<article class=\"panel\"><div class=\"panel-head\"><h2>Blockers</h2><span>#{Array(risks["blockers"]).length}</span></div><ul class=\"clean\">#{blocker_items.join}</ul></article>",
+            "<article class=\"panel\"><div class=\"panel-head\"><h2>Warnings</h2><span>#{Array(risks["warnings"]).length}</span></div><ul class=\"clean\">#{warning_items.join}</ul></article>",
+            "</section>",
+            "<section class=\"panel\"><div class=\"panel-head\"><h2>Agent Dashboard</h2><span>#{agents["enabled"]} enabled / #{agents["deferred"]} deferred</span></div><div class=\"agent-grid grid\">#{agent_cards.join}</div></section>",
+            "<section class=\"grid two\">",
+            "<article class=\"panel\"><div class=\"panel-head\"><h2>Release Dashboard</h2><span>#{html_escape(release["gate_status"])}</span></div><div class=\"kv\"><div>Canonical</div><div>#{html_badge(git["status_ref_state"])}</div><div>Required approvals</div><div>#{html_escape(Array(release["required_approvals"]).join(", "))}</div><div>Release check</div><div><code>#{html_escape(release["release_check_command"])}</code></div></div></article>",
+            "<article class=\"panel\"><div class=\"panel-head\"><h2>Next</h2><span>commands</span></div><ul class=\"clean\">#{next_items.join}</ul></article>",
+            "</section>",
+            "<p class=\"footer\">Mermaid diagrams render in the browser through a CDN module. The raw Mermaid source remains embedded under each diagram.</p>",
+            "</main>",
+            "<script type=\"module\">import mermaid from \"https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs\"; mermaid.initialize({startOnLoad:true,securityLevel:\"strict\",theme:\"base\"});</script>",
+            "</body>",
+            "</html>"
+          ].join("\n")
+        end
+
         project = snapshot.fetch("project", {})
         health = health_summary.fetch("summary", {})
         health_status = health_summary.fetch("overall", snapshot.fetch("health", {})["overall"])
@@ -4093,6 +4248,17 @@ cmd_project() {
 
         if as_json
           puts JSON.pretty_generate(dashboard_projection(snapshot, health_summary, view, level, format, map))
+          exit 0
+        end
+
+        if format == "html"
+          html = render_html_dashboard(snapshot, health_summary, view, level, map)
+          if output.empty?
+            puts html
+          else
+            File.write(output, html)
+            puts "wrote: #{output}"
+          end
           exit 0
         end
 
@@ -4195,7 +4361,7 @@ cmd_project() {
           puts section(color_enabled, "Next")
           next_steps.first(level == "compact" ? 3 : next_steps.length).each { |step| puts "  - #{step}" }
         end
-      ' "$view" "$format" "$level" "$color" "$map" "$json"
+      ' "$view" "$format" "$level" "$color" "$map" "$json" "$output"
       ;;
     snapshot)
       target="$(pwd)"

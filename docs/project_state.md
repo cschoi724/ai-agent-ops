@@ -50,11 +50,12 @@ aiops project dashboard --view work --format mermaid --map dependencies
 aiops project dashboard --view work --format mermaid --map workflow
 aiops project dashboard --view work --format mermaid --map agents
 aiops project dashboard --view work --format mermaid --map blockers
+aiops project dashboard --format html --output dashboard.html
 aiops project dashboard --json
 aiops project dashboard --color always
 ```
 
-현재 dashboard 6차 구현은 Main Dashboard, Work Dashboard terminal/tree, Work Mermaid map, Dashboard JSON contract, Risk/Agent/Release 전문 view를 제공한다.
+현재 dashboard 구현은 Main Dashboard, Work Dashboard terminal/tree, Work Mermaid map, static HTML dashboard, Dashboard JSON contract, Risk/Agent/Release 전문 view를 제공한다.
 
 Main Dashboard 표시 항목은 프로젝트 진행률, readiness, canonical status sync, 운영 설정, Agent/Role 요약, blocker/warning, next command다.
 
@@ -70,13 +71,16 @@ Release Dashboard 표시 항목은 release 전 readiness, canonical status, bloc
 
 - `--view main|work|risk|agents|release`
 - `--level compact|standard|detail`
-- `--format terminal|tree|mermaid`
+- `--format terminal|tree|mermaid|html`
 - `--map dependencies|workflow|agents|blockers`
+- `--output FILE`
 - `--json`
 - `--color auto|always|never`
 - `--no-color`
 
-`--format mermaid`는 현재 `--view work`에서만 지원한다. dependency map은 `depends_on`/`blocks`, workflow map은 표준 상태 흐름, agents map은 target_agent/target_role, blockers map은 health warning/blocker를 Mermaid `flowchart`로 출력한다.
+`--format mermaid`는 현재 `--view work`에서만 지원하며, 터미널에는 렌더링된 그림이 아니라 Mermaid source text를 출력한다. dependency map은 `depends_on`/`blocks`, workflow map은 표준 상태 흐름, agents map은 target_agent/target_role, blockers map은 health warning/blocker를 Mermaid `flowchart`로 출력한다.
+
+`--format html --output dashboard.html`은 같은 dashboard projection과 Mermaid source를 정적 HTML로 감싸 브라우저에서 시각적으로 볼 수 있게 만든다. HTML은 Mermaid CDN module을 사용해 diagram을 렌더링하며, 각 diagram 아래에는 원본 Mermaid source도 함께 접어 둔다.
 
 `--json`은 `aiops.project_dashboard.v1` 계약을 출력한다. 이 계약은 project/health/snapshot 값을 dashboard 용도에 맞게 projection한 결과이며, terminal/tree/Mermaid와 같은 의미를 공유한다. 주요 필드는 status, progress, readiness, git, agents, tasks, risks, control, next, maps, views다.
 

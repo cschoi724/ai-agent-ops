@@ -534,6 +534,60 @@ ruby -rjson -e '
   abort("mermaid json map edge missing") unless dashboard.dig("maps", "dependencies", "edges").any? { |edge| edge["type"] == "depends_on" }
 ' /tmp/aiops-e2e-project-dashboard-mermaid-json.json
 
+before_html_hash="$(find "$project" -type f -not -path '*/.git/*' -print | sort | xargs shasum -a 256 | shasum -a 256 | awk "{print \$1}")"
+"$repo_root/bin/aiops" project dashboard --target "$project" --format html --output /tmp/aiops-e2e-project-dashboard.html >/tmp/aiops-e2e-project-dashboard-html.out
+"$repo_root/bin/aiops" project dashboard --target "$project" --format html >/tmp/aiops-e2e-project-dashboard-html-stdout.html
+"$repo_root/bin/aiops" project dashboard --target "$project" --format html --map agents --output /tmp/aiops-e2e-project-dashboard-agents.html >/tmp/aiops-e2e-project-dashboard-html-agents.out
+after_html_hash="$(find "$project" -type f -not -path '*/.git/*' -print | sort | xargs shasum -a 256 | shasum -a 256 | awk "{print \$1}")"
+[ "$before_html_hash" = "$after_html_hash" ] || {
+  printf '%s\n' "html dashboard modified project files" >&2
+  exit 1
+}
+grep -q 'wrote: /tmp/aiops-e2e-project-dashboard.html' /tmp/aiops-e2e-project-dashboard-html.out || {
+  printf '%s\n' "html dashboard output confirmation missing" >&2
+  exit 1
+}
+grep -q '<!doctype html>' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard doctype missing" >&2
+  exit 1
+}
+grep -q 'AI Ops Project Dashboard' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard title missing" >&2
+  exit 1
+}
+grep -q 'DashboardProject' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard project missing" >&2
+  exit 1
+}
+grep -q 'class="mermaid"' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard mermaid container missing" >&2
+  exit 1
+}
+grep -q 'T_T_20260807_001 --&gt; T_T_20260807_002' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard mermaid dependency edge missing" >&2
+  exit 1
+}
+grep -q 'Mermaid source' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard mermaid source missing" >&2
+  exit 1
+}
+grep -q '<!doctype html>' /tmp/aiops-e2e-project-dashboard-html-stdout.html || {
+  printf '%s\n' "html dashboard stdout doctype missing" >&2
+  exit 1
+}
+grep -q 'Agent / Role Map' /tmp/aiops-e2e-project-dashboard-agents.html || {
+  printf '%s\n' "html dashboard selected map missing" >&2
+  exit 1
+}
+if "$repo_root/bin/aiops" project dashboard --target "$project" --json --output /tmp/aiops-e2e-project-dashboard-invalid.html >/tmp/aiops-e2e-project-dashboard-html-invalid.out 2>&1; then
+  printf '%s\n' "json output combination unexpectedly succeeded" >&2
+  exit 1
+fi
+grep -q 'project dashboard --json cannot be combined with --output' /tmp/aiops-e2e-project-dashboard-html-invalid.out || {
+  printf '%s\n' "json output combination error missing" >&2
+  exit 1
+}
+
 "$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map workflow >/tmp/aiops-e2e-project-dashboard-mermaid-workflow.out
 grep -q 'S_proposed --> S_scoped' /tmp/aiops-e2e-project-dashboard-mermaid-workflow.out || {
   printf '%s\n' "workflow mermaid status edge missing" >&2
