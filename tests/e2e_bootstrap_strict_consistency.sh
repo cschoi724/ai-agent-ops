@@ -110,15 +110,22 @@ ruby -rjson -e '
   snapshot = JSON.parse(File.read(ARGV[0]))
   policy = JSON.parse(File.read(ARGV[1]))
   health = JSON.parse(File.read(ARGV[2]))
+  version = ARGV[3]
 
   abort("snapshot should not be blocked") unless snapshot.dig("health", "blockers") == 0
   abort("snapshot should allow task start") unless snapshot.dig("control", "can_start_task") == true
   abort("policy should not report blockers") unless policy.dig("summary", "blocker") == 0
   abort("health should not report blockers") unless health.dig("summary", "blockers") == 0
+  abort("snapshot should normalize quoted core_version") unless snapshot.dig("project", "recorded_core_version") == version
+  abort("health should normalize quoted core_version") unless health.dig("project", "recorded_core_version") == version
   abort("health should be warning for unresolved canonical/status decisions") unless %w[ok warning].include?(health["overall"])
   snapshot_missing = snapshot.fetch("checks").select { |check| check["id"] == "required_file_missing" }
   abort("snapshot should not report conditional required file missing") unless snapshot_missing.empty?
-' "$tmpdir/snapshot.json" "$tmpdir/policy.json" "$tmpdir/health.json"
+  snapshot_drift = snapshot.fetch("checks").any? { |check| check["id"] == "core_version_drift" }
+  health_drift = health.fetch("checks").any? { |check| check["code"] == "migration_needed" }
+  abort("snapshot should not report quoted core_version drift") if snapshot_drift
+  abort("health should not report quoted core_version drift") if health_drift
+' "$tmpdir/snapshot.json" "$tmpdir/policy.json" "$tmpdir/health.json" "$version"
 
 if grep -q 'differs from current core' "$tmpdir/doctor.out"; then
   printf '%s\n' "quoted core_version should not produce mismatch warning" >&2

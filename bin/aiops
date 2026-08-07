@@ -2755,14 +2755,14 @@ cmd_project() {
         core = ARGV[1]
 
         def scalar_string(value)
-          case value
-          when String
-            value
-          when Integer, Float, TrueClass, FalseClass
-            value.to_s
-          else
-            nil
+          return nil unless value.is_a?(String) || value.is_a?(Integer) || value.is_a?(Float) || value == true || value == false
+          string = value.to_s.strip
+          if string.length >= 2
+            quote_pairs = { 34.chr => 34.chr, 39.chr => 39.chr, 96.chr => 96.chr }
+            first = string[0]
+            string = string[1...-1].strip if quote_pairs[first] == string[-1]
           end
+          string
         end
 
         def invalid_scalar?(value)
@@ -3420,14 +3420,14 @@ cmd_project() {
           json = ARGV[1] == "yes"
 
           def scalar_string(value)
-            case value
-            when String
-              value
-            when Integer, Float, TrueClass, FalseClass
-              value.to_s
-            else
-              nil
+            return nil unless value.is_a?(String) || value.is_a?(Integer) || value.is_a?(Float) || value == true || value == false
+            string = value.to_s.strip
+            if string.length >= 2
+              quote_pairs = { 34.chr => 34.chr, 39.chr => 39.chr, 96.chr => 96.chr }
+              first = string[0]
+              string = string[1...-1].strip if quote_pairs[first] == string[-1]
             end
+            string
           end
 
           def front_matter(path)
@@ -3766,14 +3766,14 @@ cmd_project() {
         as_json = ARGV[5] == "yes"
 
         def scalar_string(value)
-          case value
-          when String
-            value
-          when Integer, Float, TrueClass, FalseClass
-            value.to_s
-          else
-            nil
+          return nil unless value.is_a?(String) || value.is_a?(Integer) || value.is_a?(Float) || value == true || value == false
+          string = value.to_s.strip
+          if string.length >= 2
+            quote_pairs = { 34.chr => 34.chr, 39.chr => 39.chr, 96.chr => 96.chr }
+            first = string[0]
+            string = string[1...-1].strip if quote_pairs[first] == string[-1]
           end
+          string
         end
 
         def front_matter(path)
@@ -4106,14 +4106,14 @@ cmd_project() {
         as_json = ARGV[1] == "yes"
 
         def scalar_string(value)
-          case value
-          when String
-            value
-          when Integer, Float, TrueClass, FalseClass
-            value.to_s
-          else
-            nil
+          return nil unless value.is_a?(String) || value.is_a?(Integer) || value.is_a?(Float) || value == true || value == false
+          string = value.to_s.strip
+          if string.length >= 2
+            quote_pairs = { 34.chr => 34.chr, 39.chr => 39.chr, 96.chr => 96.chr }
+            first = string[0]
+            string = string[1...-1].strip if quote_pairs[first] == string[-1]
           end
+          string
         end
 
         def front_matter(path)

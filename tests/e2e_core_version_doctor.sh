@@ -14,7 +14,7 @@ mkdir -p \
   "$tmpdir/.ai_project/reports" \
   "$tmpdir/.ai_project/qa"
 
-perl -0pi -e 's/\{\{CORE_VERSION\}\}/0.0.0/g' "$tmpdir/.ai_project/operating_model.md"
+perl -0pi -e 's/\{\{CORE_VERSION\}\}/"0.0.0"/g' "$tmpdir/.ai_project/operating_model.md"
 
 if "$repo_root/bin/aiops" doctor --target "$tmpdir" --strict >/tmp/aiops-e2e-version-doctor.out 2>&1; then
   printf '%s\n' "doctor --strict should fail when recorded core_version differs" >&2
