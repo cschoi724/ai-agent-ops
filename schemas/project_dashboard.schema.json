@@ -23,13 +23,14 @@
     "risks",
     "control",
     "next",
-    "maps"
+    "maps",
+    "views"
   ],
   "properties": {
     "schema": { "const": "aiops.project_dashboard.v1" },
     "generated_at": { "type": "string", "minLength": 1 },
     "target": { "type": "string", "minLength": 1 },
-    "view": { "type": "string", "enum": ["main", "work"] },
+    "view": { "type": "string", "enum": ["main", "work", "risk", "agents", "release"] },
     "level": { "type": "string", "enum": ["compact", "standard", "detail"] },
     "format": { "type": "string", "enum": ["terminal", "tree", "mermaid"] },
     "map": { "type": "string", "enum": ["dependencies", "workflow", "agents", "blockers"] },
@@ -149,6 +150,85 @@
         },
         "agents": { "$ref": "#/$defs/map" },
         "blockers": { "$ref": "#/$defs/map" }
+      }
+    },
+    "views": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["risk", "agents", "release"],
+      "properties": {
+        "risk": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "overall",
+            "blockers",
+            "warnings",
+            "policy_rules",
+            "agent_drift",
+            "blocked_actions",
+            "approval_required_actions",
+            "unresolved_decisions",
+            "task_metadata_missing",
+            "task_status_ref_missing",
+            "status_ref_state"
+          ],
+          "properties": {
+            "overall": { "type": ["string", "null"] },
+            "blockers": { "type": "array", "items": { "type": "object" } },
+            "warnings": { "type": "array", "items": { "type": "object" } },
+            "policy_rules": { "type": "array", "items": { "type": "object" } },
+            "agent_drift": { "type": "array", "items": { "type": "object" } },
+            "blocked_actions": { "type": "array", "items": { "type": "object" } },
+            "approval_required_actions": { "type": "array", "items": { "type": "string" } },
+            "unresolved_decisions": { "type": "integer", "minimum": 0 },
+            "task_metadata_missing": { "type": "integer", "minimum": 0 },
+            "task_status_ref_missing": { "type": "integer", "minimum": 0 },
+            "status_ref_state": { "type": ["string", "null"] }
+          }
+        },
+        "agents": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["enabled", "deferred", "total", "active_roles", "role_task_counts", "items", "unassigned_active_tasks"],
+          "properties": {
+            "enabled": { "type": "integer", "minimum": 0 },
+            "deferred": { "type": "integer", "minimum": 0 },
+            "total": { "type": "integer", "minimum": 0 },
+            "active_roles": { "type": "array", "items": { "type": "string" } },
+            "role_task_counts": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
+            "items": { "type": "array", "items": { "type": "object" } },
+            "unassigned_active_tasks": { "type": "array", "items": { "$ref": "#/$defs/taskItem" } }
+          }
+        },
+        "release": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "gate_status",
+            "readiness",
+            "canonical_status",
+            "blockers",
+            "warnings",
+            "policy_rules",
+            "blocked_actions",
+            "required_approvals",
+            "pending_checks",
+            "release_check_command"
+          ],
+          "properties": {
+            "gate_status": { "type": "string" },
+            "readiness": { "type": "object" },
+            "canonical_status": { "type": "object" },
+            "blockers": { "type": "array", "items": { "type": "object" } },
+            "warnings": { "type": "array", "items": { "type": "object" } },
+            "policy_rules": { "type": "array", "items": { "type": "object" } },
+            "blocked_actions": { "type": "array", "items": { "type": "object" } },
+            "required_approvals": { "type": "array", "items": { "type": "string" } },
+            "pending_checks": { "type": "array", "items": { "type": "object" } },
+            "release_check_command": { "type": "string" }
+          }
+        }
       }
     }
   },

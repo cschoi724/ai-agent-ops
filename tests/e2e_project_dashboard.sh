@@ -399,6 +399,86 @@ grep -q 'aiops role prompt execution' /tmp/aiops-e2e-project-dashboard-work-deta
   exit 1
 }
 
+"$repo_root/bin/aiops" project dashboard --target "$project" --view risk >/tmp/aiops-e2e-project-dashboard-risk.out
+grep -q 'AI Ops Risk Dashboard' /tmp/aiops-e2e-project-dashboard-risk.out || {
+  printf '%s\n' "risk dashboard header missing" >&2
+  exit 1
+}
+grep -q '^Risk Signals$' /tmp/aiops-e2e-project-dashboard-risk.out || {
+  printf '%s\n' "risk dashboard signals missing" >&2
+  exit 1
+}
+grep -q 'Task Status Ref Missing:' /tmp/aiops-e2e-project-dashboard-risk.out || {
+  printf '%s\n' "risk dashboard status ref signal missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --view risk --level detail >/tmp/aiops-e2e-project-dashboard-risk-detail.out
+grep -q '^Policy Rules$' /tmp/aiops-e2e-project-dashboard-risk-detail.out || {
+  printf '%s\n' "risk detail policy rules missing" >&2
+  exit 1
+}
+grep -q '^Approval Required$' /tmp/aiops-e2e-project-dashboard-risk-detail.out || {
+  printf '%s\n' "risk detail approval section missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --view agents >/tmp/aiops-e2e-project-dashboard-agents.out
+grep -q 'AI Ops Agent Dashboard' /tmp/aiops-e2e-project-dashboard-agents.out || {
+  printf '%s\n' "agents dashboard header missing" >&2
+  exit 1
+}
+grep -q 'Development Agent' /tmp/aiops-e2e-project-dashboard-agents.out || {
+  printf '%s\n' "agents dashboard development agent missing" >&2
+  exit 1
+}
+grep -q 'Execution Role' /tmp/aiops-e2e-project-dashboard-agents.out || {
+  printf '%s\n' "agents dashboard execution role missing" >&2
+  exit 1
+}
+grep -q '^Role Load$' /tmp/aiops-e2e-project-dashboard-agents.out || {
+  printf '%s\n' "agents dashboard role load missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --view agents --level detail >/tmp/aiops-e2e-project-dashboard-agents-detail.out
+grep -q 'Capabilities: implementation' /tmp/aiops-e2e-project-dashboard-agents-detail.out || {
+  printf '%s\n' "agents detail capabilities missing" >&2
+  exit 1
+}
+grep -q 'Assigned Active Tasks:' /tmp/aiops-e2e-project-dashboard-agents-detail.out || {
+  printf '%s\n' "agents detail assigned tasks missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --view release >/tmp/aiops-e2e-project-dashboard-release.out
+grep -q 'AI Ops Release Dashboard' /tmp/aiops-e2e-project-dashboard-release.out || {
+  printf '%s\n' "release dashboard header missing" >&2
+  exit 1
+}
+grep -q '^Readiness$' /tmp/aiops-e2e-project-dashboard-release.out || {
+  printf '%s\n' "release dashboard readiness missing" >&2
+  exit 1
+}
+grep -q 'Canonical Sync: recorded_current' /tmp/aiops-e2e-project-dashboard-release.out || {
+  printf '%s\n' "release dashboard canonical sync missing" >&2
+  exit 1
+}
+grep -q 'Release Check: aiops release-check --strict --allow-pending-release' /tmp/aiops-e2e-project-dashboard-release.out || {
+  printf '%s\n' "release dashboard release-check command missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --view release --json >/tmp/aiops-e2e-project-dashboard-release-json.json
+"$repo_root/bin/aiops" validate project-dashboard /tmp/aiops-e2e-project-dashboard-release-json.json >/tmp/aiops-e2e-project-dashboard-release-json-validate.out
+ruby -rjson -e '
+  dashboard = JSON.parse(File.read(ARGV[0]))
+  abort("release json view missing") unless dashboard["view"] == "release"
+  abort("dashboard views missing risk") unless dashboard.dig("views", "risk", "task_status_ref_missing").is_a?(Integer)
+  abort("dashboard views missing agents") unless dashboard.dig("views", "agents", "items").any? { |agent| agent["name"] == "Development Agent" && agent["assigned_active_tasks"].any? { |task| task["id"] == "T-20260807-002" } }
+  abort("dashboard views missing release") unless dashboard.dig("views", "release", "release_check_command") == "aiops release-check --strict --allow-pending-release"
+' /tmp/aiops-e2e-project-dashboard-release-json.json
+
 printf '%s\n' "stale marker" > "$project/stale.txt"
 git -C "$project" add stale.txt >/dev/null
 git -C "$project" commit -m "advance canonical ref" >/dev/null

@@ -13,7 +13,7 @@ Usage:
   aiops project snapshot [--target DIR] --json
   aiops project context --role ROLE [--target DIR] [--task TASK_ID] [--json]
   aiops project health [--target DIR] [--json]
-  aiops project dashboard [--target DIR] [--view main|work] [--level compact|standard|detail] [--format terminal|tree|mermaid] [--map dependencies|workflow|agents|blockers] [--json] [--color auto|always|never] [--no-color]
+  aiops project dashboard [--target DIR] [--view main|work|risk|agents|release] [--level compact|standard|detail] [--format terminal|tree|mermaid] [--map dependencies|workflow|agents|blockers] [--json] [--color auto|always|never] [--no-color]
   aiops policy evaluate [--target DIR|--snapshot FILE] [--strict-level LEVEL] --json
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
@@ -70,6 +70,9 @@ Examples:
   aiops project health
   aiops project dashboard
   aiops project dashboard --level compact
+  aiops project dashboard --view risk
+  aiops project dashboard --view agents
+  aiops project dashboard --view release
   aiops project dashboard --view work --format mermaid --map dependencies
   aiops project dashboard --json
   aiops policy evaluate --json
@@ -2976,10 +2979,7 @@ cmd_project() {
       done
 
       case "$view" in
-        main|work) ;;
-        risk|agents|release)
-          die "project dashboard --view $view is planned for a later dashboard phase"
-          ;;
+        main|work|risk|agents|release) ;;
         *)
           die "unknown project dashboard view: $view"
           ;;
@@ -3057,9 +3057,9 @@ cmd_project() {
           return "32" if text =~ /\A0\z/
           return "33" if text =~ /\A[1-9][0-9]*\z/
           case text
-          when "ok", "complete", "allowed", "ready", "recorded_current", "not_required", "done", "true"
+          when "ok", "complete", "allowed", "ready", "recorded_current", "not_required", "done", "true", "ready_for_release_check"
             "32"
-          when "warning", "allowed_with_warnings", "sync_required", "not_recorded", "recorded_stale", "migration_needed", "review_needed"
+          when "warning", "allowed_with_warnings", "sync_required", "not_recorded", "recorded_stale", "migration_needed", "review_needed", "review_required"
             "33"
           when "blocked", "missing", "partial", "needs_canonical_status_ref", "ref_not_found_locally", "false"
             "31"
@@ -3376,6 +3376,248 @@ cmd_project() {
               puts "#{child_prefix}#{detail_prefix}    Command: #{next_role_command(task, snapshot["target"])}"
             end
           end
+        end
+
+        def risk_dashboard_data(snapshot, health_summary)
+          checks = Array(health_summary["checks"])
+          agents = Array(value(snapshot, "agents", "active"))
+          agent_drift = agents.flat_map do |agent|
+            Array(agent["drift"]).map do |drift|
+              {
+                "agent" => agent["id"] || agent["name"],
+                "drift" => drift
+              }
+            end
+          end
+
+          {
+            "overall" => health_summary["overall"] || snapshot.dig("health", "overall"),
+            "blockers" => checks.select { |check| check["level"] == "blocker" },
+            "warnings" => checks.select { |check| check["level"] == "warn" },
+            "policy_rules" => Array(snapshot.dig("policy", "matched_rules")),
+            "agent_drift" => agent_drift,
+            "blocked_actions" => Array(snapshot.dig("control", "blocked_actions")),
+            "approval_required_actions" => Array(snapshot.dig("control", "requires_user_approval")),
+            "unresolved_decisions" => health_summary.dig("summary", "unresolved_decisions").to_i,
+            "task_metadata_missing" => snapshot.dig("tasks", "missing_metadata").to_i,
+            "task_status_ref_missing" => snapshot.dig("tasks", "missing_status_ref_sha").to_i,
+            "status_ref_state" => snapshot.dig("source_refs", "status_ref_state")
+          }
+        end
+
+        def agent_dashboard_data(snapshot)
+          tasks = snapshot.fetch("tasks", {})
+          active_items = sorted_work_items(active_work_items(tasks))
+          agents = Array(value(snapshot, "agents", "active"))
+          agent_names = agents.flat_map { |agent| [agent["id"], agent["name"]] }.compact.map(&:to_s)
+          task_groups = active_items.group_by { |task| clean(task["target_agent"]) }
+
+          agent_items = agents.map do |agent|
+            keys = [agent["id"], agent["name"]].compact.map(&:to_s)
+            assigned = keys.flat_map { |key| Array(task_groups[key]) }.uniq { |task| task["id"] }
+            {
+              "id" => agent["id"],
+              "name" => agent["name"],
+              "status" => agent["status"],
+              "team" => agent["team"],
+              "declared_roles" => Array(agent["declared_roles"]),
+              "capabilities" => Array(agent["capabilities"]),
+              "current_task" => agent["current_task"],
+              "branch" => agent["branch"],
+              "worktree" => agent["worktree"],
+              "drift" => Array(agent["drift"]),
+              "assigned_active_tasks" => assigned.map { |task| dashboard_task_item(task, snapshot["target"]) }
+            }
+          end
+
+          role_counts = active_items.each_with_object(Hash.new(0)) { |task, out| out[clean(task["target_role"])] += 1 }
+
+          {
+            "enabled" => agents.count { |agent| agent["status"] == "enabled" },
+            "deferred" => agents.count { |agent| agent["status"] == "deferred" },
+            "total" => agents.length,
+            "active_roles" => Array(value(snapshot, "agents", "active_roles")),
+            "role_task_counts" => role_counts.sort.to_h,
+            "items" => agent_items,
+            "unassigned_active_tasks" => active_items.select { |task| !agent_names.include?(clean(task["target_agent"])) }.map { |task| dashboard_task_item(task, snapshot["target"]) }
+          }
+        end
+
+        def release_dashboard_data(snapshot, health_summary)
+          readiness = health_summary.fetch("readiness", {})
+          blockers = Array(health_summary["checks"]).select { |check| check["level"] == "blocker" }
+          warnings = Array(health_summary["checks"]).select { |check| check["level"] == "warn" }
+          blocked_actions = Array(snapshot.dig("control", "blocked_actions"))
+          policy_rules = Array(snapshot.dig("policy", "matched_rules"))
+          status_ref_state = snapshot.dig("source_refs", "status_ref_state")
+
+          gate_status =
+            if !blockers.empty? || !blocked_actions.empty?
+              "blocked"
+            elsif status_ref_state != "recorded_current" || readiness["multi_agent"] == "sync_required"
+              "sync_required"
+            elsif !warnings.empty? || !policy_rules.empty?
+              "review_required"
+            else
+              "ready_for_release_check"
+            end
+
+          {
+            "gate_status" => gate_status,
+            "readiness" => {
+              "bootstrap" => readiness["bootstrap"],
+              "task_work" => readiness["task_work"],
+              "multi_agent" => readiness["multi_agent"],
+              "migration" => readiness["migration"]
+            },
+            "canonical_status" => {
+              "ref" => snapshot.dig("source_refs", "canonical_status_ref"),
+              "head" => snapshot.dig("source_refs", "local_head"),
+              "canonical_sha" => snapshot.dig("source_refs", "canonical_status_sha"),
+              "recorded_sha" => snapshot.dig("source_refs", "recorded_status_sha"),
+              "state" => status_ref_state
+            },
+            "blockers" => blockers,
+            "warnings" => warnings,
+            "policy_rules" => policy_rules,
+            "blocked_actions" => blocked_actions,
+            "required_approvals" => Array(snapshot.dig("control", "requires_user_approval")),
+            "pending_checks" => [],
+            "release_check_command" => "aiops release-check --strict --allow-pending-release"
+          }
+        end
+
+        def render_risk_dashboard(snapshot, health_summary, level, color_enabled)
+          data = risk_dashboard_data(snapshot, health_summary)
+          puts colorize(color_enabled, "AI Ops Risk Dashboard", "1;36")
+          puts "Project: #{snapshot.dig("project", "name") || File.basename(snapshot["target"].to_s)}"
+          puts "Status: #{status_value(color_enabled, status_label(data["overall"]))}    Blockers: #{status_value(color_enabled, data["blockers"].length)}    Warnings: #{status_value(color_enabled, data["warnings"].length)}"
+          puts ""
+
+          puts section(color_enabled, "Blockers")
+          data["blockers"].empty? ? puts("  none") : data["blockers"].each { |check| puts "  - #{colorize(color_enabled, check["code"], "31")}: #{check["message"]}" }
+          puts ""
+
+          unless level == "compact"
+            puts section(color_enabled, "Warnings")
+            data["warnings"].empty? ? puts("  none") : data["warnings"].each { |check| puts "  - #{colorize(color_enabled, check["code"], "33")}: #{check["message"]}" }
+            puts ""
+
+            puts section(color_enabled, "Risk Signals")
+            print_key_value("Canonical Sync", data["status_ref_state"], color_enabled)
+            print_key_value("Unresolved Decisions", data["unresolved_decisions"], color_enabled)
+            print_key_value("Task Metadata Missing", data["task_metadata_missing"], color_enabled)
+            print_key_value("Task Status Ref Missing", data["task_status_ref_missing"], color_enabled)
+            print_key_value("Agent Drift", data["agent_drift"].length, color_enabled)
+            puts ""
+          end
+
+          return unless level == "detail"
+
+          puts section(color_enabled, "Policy Rules")
+          data["policy_rules"].empty? ? puts("  none") : data["policy_rules"].each { |rule| puts "  - #{rule["id"]}: #{rule["severity"]} - #{rule["message"]}" }
+          puts ""
+
+          puts section(color_enabled, "Blocked Actions")
+          data["blocked_actions"].empty? ? puts("  none") : data["blocked_actions"].each { |action| puts "  - #{action["action"]}: #{action["reason"]}" }
+          puts ""
+
+          puts section(color_enabled, "Approval Required")
+          data["approval_required_actions"].empty? ? puts("  none") : puts("  #{data["approval_required_actions"].join(", ")}")
+        end
+
+        def render_agents_dashboard(snapshot, level, color_enabled)
+          data = agent_dashboard_data(snapshot)
+          puts colorize(color_enabled, "AI Ops Agent Dashboard", "1;36")
+          puts "Project: #{snapshot.dig("project", "name") || File.basename(snapshot["target"].to_s)}"
+          puts "Agents: #{data["enabled"]} enabled / #{data["deferred"]} deferred / #{data["total"]} total"
+          puts ""
+
+          if level == "compact"
+            puts section(color_enabled, "Agents")
+            data["items"].each { |agent| puts "  - #{agent["name"] || agent["id"]}: #{status_value(color_enabled, agent["status"])}" }
+            return
+          end
+
+          puts section(color_enabled, "Agents")
+          puts "Agent                         Status      Team                 Roles                 Active Tasks"
+          data["items"].each do |agent|
+            name = shorten(agent["name"] || agent["id"], 29)
+            status = clean(agent["status"], "unknown")
+            team = shorten(clean(agent["team"], "unknown"), 20)
+            roles = shorten(Array(agent["declared_roles"]).join(", "), 20)
+            task_count = Array(agent["assigned_active_tasks"]).length
+            puts [
+              padded(name, 29),
+              colorize(color_enabled, padded(status, 11), severity_color(status)),
+              padded(team, 20),
+              colorize(color_enabled, padded(roles, 20), "34"),
+              status_value(color_enabled, task_count)
+            ].join(" ")
+          end
+          puts ""
+
+          puts section(color_enabled, "Role Load")
+          data["role_task_counts"].empty? ? puts("  none") : data["role_task_counts"].each { |role, count_value| puts "  - #{role_value(color_enabled, role)}: #{count_value} active task(s)" }
+          puts ""
+
+          return unless level == "detail"
+
+          puts section(color_enabled, "Details")
+          data["items"].each do |agent|
+            puts "#{agent["name"] || agent["id"]}"
+            puts "  Status: #{status_value(color_enabled, agent["status"])}"
+            puts "  Team: #{meta_value(color_enabled, agent["team"], "unknown")}"
+            puts "  Roles: #{Array(agent["declared_roles"]).empty? ? "none" : Array(agent["declared_roles"]).join(", ")}"
+            puts "  Capabilities: #{Array(agent["capabilities"]).empty? ? "none" : Array(agent["capabilities"]).join(", ")}"
+            puts "  Current Task: #{meta_value(color_enabled, agent["current_task"], "none")}"
+            puts "  Branch: #{meta_value(color_enabled, agent["branch"], "none")}"
+            puts "  Worktree: #{meta_value(color_enabled, agent["worktree"], "none")}"
+            assigned = Array(agent["assigned_active_tasks"])
+            puts "  Assigned Active Tasks:"
+            assigned.empty? ? puts("    - none") : assigned.each { |task| puts "    - #{task["id"]} #{task_status_value(color_enabled, task["status"])} #{shorten(task["title"], 50)}" }
+            drift = Array(agent["drift"])
+            puts "  Drift: #{drift.empty? ? "none" : drift.join(", ")}"
+            puts ""
+          end
+        end
+
+        def render_release_dashboard(snapshot, health_summary, level, color_enabled)
+          data = release_dashboard_data(snapshot, health_summary)
+          puts colorize(color_enabled, "AI Ops Release Dashboard", "1;36")
+          puts "Project: #{snapshot.dig("project", "name") || File.basename(snapshot["target"].to_s)}"
+          puts "Gate: #{status_value(color_enabled, data["gate_status"])}"
+          puts ""
+
+          puts section(color_enabled, "Readiness")
+          data["readiness"].each { |key, state| print_key_value(key.split("_").map(&:capitalize).join(" "), state, color_enabled) }
+          print_key_value("Canonical Sync", data.dig("canonical_status", "state"), color_enabled)
+          puts ""
+
+          puts section(color_enabled, "Release Blockers")
+          data["blockers"].empty? && data["blocked_actions"].empty? ? puts("  none") : data["blockers"].each { |check| puts "  - #{colorize(color_enabled, check["code"], "31")}: #{check["message"]}" }
+          data["blocked_actions"].each { |action| puts "  - #{colorize(color_enabled, action["action"], "31")}: #{action["reason"]}" }
+          puts ""
+
+          unless level == "compact"
+            puts section(color_enabled, "Warnings")
+            data["warnings"].empty? ? puts("  none") : data["warnings"].each { |check| puts "  - #{colorize(color_enabled, check["code"], "33")}: #{check["message"]}" }
+            puts ""
+
+            puts section(color_enabled, "Required Approvals")
+            data["required_approvals"].empty? ? puts("  none") : puts("  #{data["required_approvals"].join(", ")}")
+            puts ""
+
+            puts section(color_enabled, "Checks")
+            puts "  Pending Checks: none recorded in local dashboard"
+            puts "  Release Check: #{data["release_check_command"]}"
+          end
+
+          return unless level == "detail"
+
+          puts ""
+          puts section(color_enabled, "Canonical")
+          data["canonical_status"].each { |key, value_text| print_key_value(key, value_text, color_enabled) }
         end
 
         def mermaid_id(prefix, value)
@@ -3812,6 +4054,11 @@ cmd_project() {
               "workflow" => workflow_map_data(snapshot),
               "agents" => agent_map_data(snapshot),
               "blockers" => blocker_map_data(snapshot, health_summary)
+            },
+            "views" => {
+              "risk" => risk_dashboard_data(snapshot, health_summary),
+              "agents" => agent_dashboard_data(snapshot),
+              "release" => release_dashboard_data(snapshot, health_summary)
             }
           }
         end
@@ -3857,6 +4104,21 @@ cmd_project() {
           else
             render_work_terminal(snapshot, level, color_enabled)
           end
+          exit 0
+        end
+
+        if view == "risk"
+          render_risk_dashboard(snapshot, health_summary, level, color_enabled)
+          exit 0
+        end
+
+        if view == "agents"
+          render_agents_dashboard(snapshot, level, color_enabled)
+          exit 0
+        end
+
+        if view == "release"
+          render_release_dashboard(snapshot, health_summary, level, color_enabled)
           exit 0
         end
 
