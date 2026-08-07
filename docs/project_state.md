@@ -44,7 +44,7 @@ aiops project dashboard --level detail
 aiops project dashboard --color always
 ```
 
-현재 dashboard 1차 구현은 Main Dashboard terminal 출력만 제공한다. 표시 항목은 프로젝트 진행률, readiness, canonical status sync, 운영 설정, Agent/Role 요약, blocker/warning, next command다.
+현재 dashboard 2차 구현은 Main Dashboard terminal 출력만 제공한다. 표시 항목은 프로젝트 진행률, readiness, canonical status sync, 운영 설정, Agent/Role 요약, blocker/warning, next command다.
 
 지원 범위:
 
