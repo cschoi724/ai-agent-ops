@@ -130,6 +130,66 @@ source_of_truth:
 # Approved dashboard fixture task
 EOF
 
+cat > "$project/.ai_project/tasks/active/T-20260807-003_dashboard-scoped.md" <<'EOF'
+---
+schema: aiops.task.v1
+id: T-20260807-003
+title: Scoped dashboard fixture task
+status: scoped
+workflow: feature
+target_role: Lead Role
+target_agent: Lead Agent
+required_capabilities:
+  - scope_definition
+allowed_paths:
+  - planning/
+source_of_truth:
+  - .ai_project/source_of_truth.md
+---
+
+# Scoped dashboard fixture task
+EOF
+
+cat > "$project/.ai_project/tasks/active/T-20260807-004_dashboard-verification.md" <<'EOF'
+---
+schema: aiops.task.v1
+id: T-20260807-004
+title: Verification dashboard fixture task
+status: verification_ready
+workflow: feature
+target_role: Verification Role
+target_agent: Lead Agent
+required_capabilities:
+  - verification
+allowed_paths:
+  - qa/
+source_of_truth:
+  - .ai_project/source_of_truth.md
+---
+
+# Verification dashboard fixture task
+EOF
+
+cat > "$project/.ai_project/tasks/active/T-20260807-005_dashboard-completion.md" <<'EOF'
+---
+schema: aiops.task.v1
+id: T-20260807-005
+title: Completion dashboard fixture task
+status: completion_review
+workflow: feature
+target_role: Completion Role
+target_agent: Lead Agent
+required_capabilities:
+  - completion_review
+allowed_paths:
+  - reports/
+source_of_truth:
+  - .ai_project/source_of_truth.md
+---
+
+# Completion dashboard fixture task
+EOF
+
 git -C "$project" add .ai .gitignore AGENTS.md .ai_project >/dev/null
 git -C "$project" commit -m "seed project dashboard fixture" >/dev/null
 git -C "$project" push -u origin develop >/dev/null 2>&1
@@ -153,7 +213,7 @@ grep -q 'Project: DashboardProject' /tmp/aiops-e2e-project-dashboard.out || {
   printf '%s\n' "dashboard project name missing" >&2
   exit 1
 }
-grep -q '1 / 2 done' /tmp/aiops-e2e-project-dashboard.out || {
+grep -q '1 / 5 done' /tmp/aiops-e2e-project-dashboard.out || {
   printf '%s\n' "dashboard progress missing" >&2
   exit 1
 }
@@ -210,6 +270,68 @@ grep -q '^Control$' /tmp/aiops-e2e-project-dashboard-detail.out || {
   exit 1
 }
 
+"$repo_root/bin/aiops" project dashboard --target "$project" --view work >/tmp/aiops-e2e-project-dashboard-work.out
+grep -q 'AI Ops Work Dashboard' /tmp/aiops-e2e-project-dashboard-work.out || {
+  printf '%s\n' "work dashboard header missing" >&2
+  exit 1
+}
+grep -q 'Active Work: 4 / 5 tasks' /tmp/aiops-e2e-project-dashboard-work.out || {
+  printf '%s\n' "work dashboard active count missing" >&2
+  exit 1
+}
+grep -q 'T-20260807-002' /tmp/aiops-e2e-project-dashboard-work.out || {
+  printf '%s\n' "work dashboard approved task missing" >&2
+  exit 1
+}
+grep -q 'start execution' /tmp/aiops-e2e-project-dashboard-work.out || {
+  printf '%s\n' "work dashboard execution next action missing" >&2
+  exit 1
+}
+grep -q 'approve or split' /tmp/aiops-e2e-project-dashboard-work.out || {
+  printf '%s\n' "work dashboard lead next action missing" >&2
+  exit 1
+}
+grep -q 'start verification' /tmp/aiops-e2e-project-dashboard-work.out || {
+  printf '%s\n' "work dashboard verification next action missing" >&2
+  exit 1
+}
+grep -q 'start completion' /tmp/aiops-e2e-project-dashboard-work.out || {
+  printf '%s\n' "work dashboard completion next action missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --view work --format tree >/tmp/aiops-e2e-project-dashboard-work-tree.out
+grep -q 'AI Ops Work Tree' /tmp/aiops-e2e-project-dashboard-work-tree.out || {
+  printf '%s\n' "work tree header missing" >&2
+  exit 1
+}
+grep -q 'active_work' /tmp/aiops-e2e-project-dashboard-work-tree.out || {
+  printf '%s\n' "work tree root missing" >&2
+  exit 1
+}
+grep -q 'approved' /tmp/aiops-e2e-project-dashboard-work-tree.out || {
+  printf '%s\n' "work tree approved group missing" >&2
+  exit 1
+}
+grep -q 'verification_ready' /tmp/aiops-e2e-project-dashboard-work-tree.out || {
+  printf '%s\n' "work tree verification group missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --view work --level detail >/tmp/aiops-e2e-project-dashboard-work-detail.out
+grep -q 'Allowed Paths:' /tmp/aiops-e2e-project-dashboard-work-detail.out || {
+  printf '%s\n' "work detail allowed paths missing" >&2
+  exit 1
+}
+grep -q 'Source of Truth:' /tmp/aiops-e2e-project-dashboard-work-detail.out || {
+  printf '%s\n' "work detail source of truth missing" >&2
+  exit 1
+}
+grep -q 'aiops role prompt execution' /tmp/aiops-e2e-project-dashboard-work-detail.out || {
+  printf '%s\n' "work detail role prompt missing" >&2
+  exit 1
+}
+
 printf '%s\n' "stale marker" > "$project/stale.txt"
 git -C "$project" add stale.txt >/dev/null
 git -C "$project" commit -m "advance canonical ref" >/dev/null
@@ -237,12 +359,12 @@ grep -q 'core_missing' /tmp/aiops-e2e-project-dashboard-empty.out || {
   exit 1
 }
 
-if "$repo_root/bin/aiops" project dashboard --target "$project" --view work >/tmp/aiops-e2e-project-dashboard-work.out 2>&1; then
-  printf '%s\n' "work dashboard unexpectedly succeeded in phase 2" >&2
+if "$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid >/tmp/aiops-e2e-project-dashboard-mermaid.out 2>&1; then
+  printf '%s\n' "mermaid dashboard unexpectedly succeeded in phase 3" >&2
   exit 1
 fi
-grep -q 'planned for a later dashboard phase' /tmp/aiops-e2e-project-dashboard-work.out || {
-  printf '%s\n' "work dashboard did not report later phase" >&2
+grep -q 'planned for a later dashboard phase' /tmp/aiops-e2e-project-dashboard-mermaid.out || {
+  printf '%s\n' "mermaid dashboard did not report later phase" >&2
   exit 1
 }
 

@@ -149,6 +149,8 @@ Agent가 우선 참고하는 상태 조회 명령:
 
 ```bash
 aiops project dashboard
+aiops project dashboard --view work
+aiops project dashboard --view work --format tree
 aiops project health
 aiops project inspect
 aiops project context --role ROLE --task TASK_ID
