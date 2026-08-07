@@ -6,7 +6,7 @@
 
 이 문서는 AI Ops가 Agent에게 프로젝트 상태를 더 정확하고 일관되게 읽히고, Agent 행동을 통제 가능한 방식으로 제한하기 위한 개선 계획이다.
 
-사용자용 summary, dashboard, visualization은 별도 계획인 `project_visualization_next_phase_note.md`에서 다룬다. 이 문서는 그 전에 필요한 Agent/CLI 통제 기반만 다룬다.
+사용자용 summary, dashboard, visualization은 별도 계획인 `project_dashboard_upgrade_plan.md`에서 다룬다. 이 문서는 그 전에 필요한 Agent/CLI 통제 기반만 다룬다.
 
 ## 핵심 목표
 
@@ -433,7 +433,7 @@ summary가 health와 다른 규칙 사용
 시각화 결과물을 source of truth로 수동 관리
 ```
 
-시각화 상세 계획은 `project_visualization_next_phase_note.md`에서 별도로 확정한다.
+시각화 상세 계획은 `project_dashboard_upgrade_plan.md`에서 별도로 확정한다.
 
 ## 전체 완료 후 정리 기준
 
