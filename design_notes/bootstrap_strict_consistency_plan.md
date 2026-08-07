@@ -2,7 +2,7 @@
 
 작성일: 2026-08-06
 브랜치: `feature/bootstrap-strict-consistency`
-상태: 계획
+상태: 5단계 구현 완료, 독립 검증 대기
 
 ## 목표
 
@@ -234,7 +234,7 @@ warn: .ai_project core_version "0.11.0" differs from current core 0.11.0
 
 ## 5단계: E2E 회귀 테스트 추가
 
-새 테스트를 추가한다.
+새 테스트를 추가한다. 현재 구현은 `tests/e2e_bootstrap_strict_consistency.sh`에 통합했다.
 
 후보 파일:
 
@@ -263,6 +263,7 @@ aiops policy evaluate --snapshot snapshot.json --json
 aiops validate policy-evaluation policy.json
 aiops project health --json
 aiops session-guide
+aiops bootstrap-guide
 ```
 
 기대:
@@ -272,6 +273,29 @@ aiops session-guide
 - policy evaluation schema-valid
 - missing branch_pr_strategy/workflow_overrides/ops_migration_plan 출력 없음
 - session-guide의 활성 Role/현재 초점 섹션이 비어 있지 않음
+- bootstrap-guide의 활성 Role/현재 초점 섹션이 비어 있지 않음
+- `core_version: "현재 VERSION"`이 quote 때문에 drift로 오탐되지 않음
+- `branch_pr: branch_per_task`처럼 전략이 활성화됐는데 `branch_pr_strategy.md`가 없으면 doctor/validate/snapshot/policy/health가 모두 blocker로 판단함
+
+현재 검증 범위:
+
+- 신규 guided_full fixture
+- `.ai` symlink
+- `AGENTS.md`, `CLAUDE.md`
+- `.ai_project` core required files
+- `branch_pr: pending_decision`
+- `workflow_policy: skip_scoped_for_simple_tasks`
+- migration 없음
+- `core_version: "현재 VERSION"`
+- `canonical_status_ref: unresolved`
+- `session-guide`, `bootstrap-guide` 안내 출력
+
+완료 조건:
+
+- `sh tests/e2e_bootstrap_strict_consistency.sh` 통과
+- `sh tests/e2e_session_role_prompt.sh` 통과
+- `sh scripts/test.sh` 통과
+- `bin/aiops release-check --strict --allow-pending-release` 통과
 
 ## 독립 검증 요청 문구
 
