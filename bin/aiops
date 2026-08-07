@@ -3066,6 +3066,36 @@ cmd_project() {
           }
         end
 
+        def conditional_project_file_required?(file_name, project)
+          case file_name
+          when "branch_pr_strategy.md"
+            value = project["branch_pr"].to_s
+            !value.empty? && !%w[null unresolved pending pending_decision none unknown].include?(value)
+          when "workflow_overrides.md"
+            project["workflow_policy"].to_s == "custom" ||
+              project["workflow_override"].to_s == "true" ||
+              project["workflow_overrides"].to_s == "true"
+          when "ops_migration_plan.md"
+            bootstrap_mode = project["bootstrap_mode"].to_s
+            bootstrap_mode == "migrated" || bootstrap_mode.include?("migration")
+          else
+            true
+          end
+        end
+
+        def conditional_project_file_reason(file_name, project)
+          case file_name
+          when "branch_pr_strategy.md"
+            "branch_pr #{project["branch_pr"] || "pending_decision"}"
+          when "workflow_overrides.md"
+            "workflow_policy #{project["workflow_policy"] || "unknown"}"
+          when "ops_migration_plan.md"
+            "bootstrap_mode #{project["bootstrap_mode"] || "unknown"}"
+          else
+            "conditional project file"
+          end
+        end
+
         project = {
           "present" => Dir.exist?(project_dir),
           "name" => value_from(operating, operating_path, "project") || File.basename(target),
@@ -3077,9 +3107,12 @@ cmd_project() {
           "operating_mode" => value_from(operating, operating_path, "operating_mode") || "unknown",
           "team_pattern" => value_from(operating, operating_path, "team_pattern") || "unknown",
           "workflow_policy" => value_from(operating, operating_path, "workflow_policy") || "unknown",
+          "workflow_override" => value_from(operating, operating_path, "workflow_override"),
+          "workflow_overrides" => value_from(operating, operating_path, "workflow_overrides"),
           "ownership_model" => value_from(operating, operating_path, "ownership_model") || "unknown",
           "coordination" => value_from(operating, operating_path, "coordination") || "unknown",
           "board_model" => value_from(operating, operating_path, "board_model") || "unknown",
+          "branch_pr" => value_from(operating, operating_path, "branch_pr") || "pending_decision",
           "knowledge_mode" => value_from(operating, operating_path, "knowledge_mode") || "unknown"
         }
 
@@ -3137,6 +3170,31 @@ cmd_project() {
               add_check.call("required_dir_present", "info", "high", ".ai_project/#{name} exists", { "path" => ".ai_project/#{name}" })
             else
               add_check.call("required_dir_missing", "blocker", "high", ".ai_project/#{name} missing", { "path" => ".ai_project/#{name}" })
+            end
+          end
+
+          %w[branch_pr_strategy.md workflow_overrides.md ops_migration_plan.md].each do |name|
+            path = File.join(project_dir, name)
+            if conditional_project_file_required?(name, project)
+              if File.file?(path)
+                add_check.call("required_file_present", "info", "high", ".ai_project/#{name} exists", {
+                  "path" => ".ai_project/#{name}",
+                  "conditional" => true
+                })
+              else
+                add_check.call("required_file_missing", "blocker", "high", ".ai_project/#{name} missing", {
+                  "path" => ".ai_project/#{name}",
+                  "conditional" => true,
+                  "reason" => conditional_project_file_reason(name, project)
+                })
+              end
+            elsif File.exist?(path)
+              add_check.call("optional_file_present", "info", "medium", ".ai_project/#{name} exists", { "path" => ".ai_project/#{name}" })
+            else
+              add_check.call("conditional_file_not_required", "info", "medium", ".ai_project/#{name} not required", {
+                "path" => ".ai_project/#{name}",
+                "reason" => conditional_project_file_reason(name, project)
+              })
             end
           end
         end
@@ -4149,6 +4207,36 @@ cmd_project() {
           end
         end
 
+        def conditional_project_file_required?(file_name, project)
+          case file_name
+          when "branch_pr_strategy.md"
+            value = project["branch_pr"].to_s
+            !value.empty? && !%w[null unresolved pending pending_decision none unknown].include?(value)
+          when "workflow_overrides.md"
+            project["workflow_policy"].to_s == "custom" ||
+              project["workflow_override"].to_s == "true" ||
+              project["workflow_overrides"].to_s == "true"
+          when "ops_migration_plan.md"
+            bootstrap_mode = project["bootstrap_mode"].to_s
+            bootstrap_mode == "migrated" || bootstrap_mode.include?("migration")
+          else
+            true
+          end
+        end
+
+        def conditional_project_file_reason(file_name, project)
+          case file_name
+          when "branch_pr_strategy.md"
+            "branch_pr #{project["branch_pr"] || "pending_decision"}"
+          when "workflow_overrides.md"
+            "workflow_policy #{project["workflow_policy"] || "unknown"}"
+          when "ops_migration_plan.md"
+            "bootstrap_mode #{project["bootstrap_mode"] || "unknown"}"
+          else
+            "conditional project file"
+          end
+        end
+
         checks = []
         add = lambda do |level, code, message|
           checks << { "level" => level, "code" => code, "message" => message }
@@ -4166,6 +4254,13 @@ cmd_project() {
         registry = front_matter(registry_path)
         recorded_core_version = value_from(operating, operating_path, "core_version")
         project_name = value_from(operating, operating_path, "project") || File.basename(target)
+        project = {
+          "bootstrap_mode" => value_from(operating, operating_path, "bootstrap_mode") || "unknown",
+          "workflow_policy" => value_from(operating, operating_path, "workflow_policy") || "unknown",
+          "workflow_override" => value_from(operating, operating_path, "workflow_override"),
+          "workflow_overrides" => value_from(operating, operating_path, "workflow_overrides"),
+          "branch_pr" => value_from(operating, operating_path, "branch_pr") || "pending_decision"
+        }
 
         if File.exist?(ai_path)
           add.call("ok", "core_connected", ".ai core is connected")
@@ -4200,6 +4295,21 @@ cmd_project() {
             add.call("ok", "required_file_present", ".ai_project/#{name} exists")
           else
             add.call("blocker", "required_file_missing", ".ai_project/#{name} missing")
+          end
+        end
+
+        %w[branch_pr_strategy.md workflow_overrides.md ops_migration_plan.md].each do |name|
+          path = File.join(project_dir, name)
+          if conditional_project_file_required?(name, project)
+            if File.file?(path)
+              add.call("ok", "required_file_present", ".ai_project/#{name} exists")
+            else
+              add.call("blocker", "required_file_missing", ".ai_project/#{name} missing; #{conditional_project_file_reason(name, project)}")
+            end
+          elsif File.exist?(path)
+            add.call("ok", "optional_file_present", ".ai_project/#{name} exists")
+          else
+            add.call("ok", "conditional_file_not_required", ".ai_project/#{name} not required; #{conditional_project_file_reason(name, project)}")
           end
         end
 

@@ -26,6 +26,7 @@ mkdir -p \
 for file in current_context.md source_of_truth.md task_board.md ops_decisions.md ops_issues.md; do
   printf '# %s\n' "$file" > "$project/.ai_project/$file"
 done
+printf '# branch_pr_strategy.md\n' > "$project/.ai_project/branch_pr_strategy.md"
 
 cat > "$project/.ai_project/operating_model.md" <<EOF
 ---
