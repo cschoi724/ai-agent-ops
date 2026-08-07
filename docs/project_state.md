@@ -33,6 +33,31 @@ aiops.project_snapshot.v1
 
 `snapshot`은 source of truth가 아니다. `.ai_project/`, workflow catalog, Git 상태를 읽어 만든 projection이다. 사용자용 monitor나 dashboard도 이 snapshot 또는 같은 상태 계약을 읽어야 한다.
 
+## Dashboard
+
+`aiops project dashboard`는 snapshot 기반 상태를 사람이 읽기 쉬운 한 화면으로 보여준다.
+
+```sh
+aiops project dashboard
+aiops project dashboard --level compact
+aiops project dashboard --level detail
+aiops project dashboard --color always
+```
+
+현재 dashboard 1차 구현은 Main Dashboard terminal 출력만 제공한다. 표시 항목은 프로젝트 진행률, readiness, canonical status sync, 운영 설정, Agent/Role 요약, blocker/warning, next command다.
+
+지원 범위:
+
+- `--view main`
+- `--level compact|standard|detail`
+- `--format terminal`
+- `--color auto|always|never`
+- `--no-color`
+
+Work dashboard, tree, Mermaid, JSON contract는 후속 dashboard phase에서 추가한다.
+
+이 명령은 파일을 수정하지 않는다. Dashboard 출력은 source of truth가 아니며, Agent의 기계 판정 기준은 `project snapshot --json`의 `control`, `checks`, `source_refs`를 우선한다.
+
 ## Inspect
 
 `aiops project inspect`는 현재 프로젝트의 운영 상태를 읽기 전용으로 요약한다.

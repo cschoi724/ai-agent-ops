@@ -13,6 +13,7 @@ Usage:
   aiops project snapshot [--target DIR] --json
   aiops project context --role ROLE [--target DIR] [--task TASK_ID] [--json]
   aiops project health [--target DIR] [--json]
+  aiops project dashboard [--target DIR] [--view main] [--level compact|standard|detail] [--format terminal] [--color auto|always|never] [--no-color]
   aiops policy evaluate [--target DIR|--snapshot FILE] [--strict-level LEVEL] --json
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
@@ -66,6 +67,8 @@ Examples:
   aiops action plan --role execution --task T-YYYYMMDD-001 --json
   aiops action validate /tmp/action_plan.json
   aiops project health
+  aiops project dashboard
+  aiops project dashboard --level compact
   aiops policy evaluate --json
   aiops validate --strict
   aiops validate project --target /path/to/project --strict
@@ -2906,10 +2909,311 @@ cmd_doctor() {
 
 cmd_project() {
   action="${1:-}"
-  [ "$#" -gt 0 ] || die "project requires an action: inspect, snapshot, context, health"
+  [ "$#" -gt 0 ] || die "project requires an action: inspect, snapshot, context, health, dashboard"
   shift
 
   case "$action" in
+    dashboard)
+      target="$(pwd)"
+      view="main"
+      level="standard"
+      format="terminal"
+      color="auto"
+
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --target)
+            shift
+            [ "$#" -gt 0 ] || die "--target requires a value"
+            target="$1"
+            ;;
+          --view)
+            shift
+            [ "$#" -gt 0 ] || die "--view requires a value"
+            view="$1"
+            ;;
+          --level)
+            shift
+            [ "$#" -gt 0 ] || die "--level requires a value"
+            level="$1"
+            ;;
+          --format)
+            shift
+            [ "$#" -gt 0 ] || die "--format requires a value"
+            format="$1"
+            ;;
+          --no-color)
+            color="never"
+            ;;
+          --color)
+            shift
+            [ "$#" -gt 0 ] || die "--color requires a value"
+            color="$1"
+            ;;
+          --json)
+            die "project dashboard --json is planned for the dashboard JSON contract phase"
+            ;;
+          -h|--help)
+            usage
+            exit 0
+            ;;
+          *)
+            die "unknown project dashboard option: $1"
+            ;;
+        esac
+        shift
+      done
+
+      case "$view" in
+        main) ;;
+        work|risk|agents|release)
+          die "project dashboard --view $view is planned for a later dashboard phase"
+          ;;
+        *)
+          die "unknown project dashboard view: $view"
+          ;;
+      esac
+      case "$level" in
+        compact|standard|detail) ;;
+        *)
+          die "unknown project dashboard level: $level"
+          ;;
+      esac
+      case "$format" in
+        terminal) ;;
+        tree|mermaid|html)
+          die "project dashboard --format $format is planned for a later dashboard phase"
+          ;;
+        *)
+          die "unknown project dashboard format: $format"
+          ;;
+      esac
+      case "$color" in
+        auto|always|never) ;;
+        *)
+          die "unknown project dashboard color mode: $color"
+          ;;
+      esac
+
+      target="$(abs_path "$target")"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for project dashboard"
+      snapshot_json="$("$0" project snapshot --target "$target" --json)"
+
+      printf '%s\n' "$snapshot_json" | ruby -rjson -e '
+        snapshot = JSON.parse(STDIN.read)
+        level = ARGV[0]
+        color_mode = ARGV[1]
+        color_enabled = color_mode == "always" || (color_mode == "auto" && STDOUT.tty? && ENV["NO_COLOR"].to_s.empty?)
+
+        def colorize(enabled, text, code)
+          return text unless enabled
+          "#{27.chr}[#{code}m#{text}#{27.chr}[0m"
+        end
+
+        def section(enabled, text)
+          colorize(enabled, text, "1;34")
+        end
+
+        def muted(enabled, text)
+          colorize(enabled, text, "90")
+        end
+
+        def severity_color(status)
+          text = status.to_s.downcase
+          return "32" if text =~ /\A0\z/
+          return "33" if text =~ /\A[1-9][0-9]*\z/
+          case text
+          when "ok", "complete", "allowed", "ready", "recorded_current", "not_required", "done", "true"
+            "32"
+          when "warning", "allowed_with_warnings", "sync_required", "not_recorded", "recorded_stale", "migration_needed", "review_needed"
+            "33"
+          when "blocked", "missing", "partial", "needs_canonical_status_ref", "ref_not_found_locally", "false"
+            "31"
+          else
+            "36"
+          end
+        end
+
+        def status_value(enabled, value)
+          text = value.nil? || value.to_s.empty? ? "unknown" : value.to_s
+          colorize(enabled, text, severity_color(text))
+        end
+
+        def value(data, *keys)
+          keys.reduce(data) do |current, key|
+            return nil unless current.is_a?(Hash)
+            current[key]
+          end
+        end
+
+        def count(data, key)
+          value = data[key]
+          value.is_a?(Numeric) ? value.to_i : 0
+        end
+
+        def status_label(status)
+          status.to_s.empty? ? "UNKNOWN" : status.to_s.upcase
+        end
+
+        def progress_bar(done, total, width = 30, color_enabled = false)
+          return "[#{45.chr * width}] 0%" if total <= 0
+          ratio = [[done.to_f / total, 0.0].max, 1.0].min
+          filled = (ratio * width).round
+          done_part = 35.chr * filled
+          rest_part = 45.chr * (width - filled)
+          done_part = colorize(color_enabled, done_part, "32") unless done_part.empty?
+          rest_part = muted(color_enabled, rest_part) unless rest_part.empty?
+          "[#{done_part}#{rest_part}] #{(ratio * 100).round}%"
+        end
+
+        def command_or_message(step)
+          return step unless step.is_a?(Hash)
+          step["command"] || step["message"] || step["action"]
+        end
+
+        def print_key_value(key, value, color_enabled = false)
+          puts "  #{key}: #{status_value(color_enabled, value)}"
+        end
+
+        project = snapshot.fetch("project", {})
+        health = snapshot.fetch("health", {})
+        source_refs = snapshot.fetch("source_refs", {})
+        tasks = snapshot.fetch("tasks", {})
+        task_status = tasks.fetch("by_status", {})
+        readiness = {
+          "Bootstrap" => begin
+            if health["blockers"].to_i.positive? && project["present"] == false
+              "missing"
+            elsif health["blockers"].to_i.positive?
+              "partial"
+            else
+              "complete"
+            end
+          end,
+          "Task Work" => begin
+            if health["blockers"].to_i.positive?
+              "blocked"
+            elsif health["warnings"].to_i.positive?
+              "allowed_with_warnings"
+            else
+              "allowed"
+            end
+          end,
+          "Multi-agent" => begin
+            state = source_refs["status_ref_state"].to_s
+            if state == "recorded_current"
+              "ready"
+            elsif state == "ref_not_found_locally"
+              "blocked"
+            elsif state == "unresolved"
+              "needs_canonical_status_ref"
+            else
+              "sync_required"
+            end
+          end,
+          "Migration" => begin
+            checks = Array(snapshot["checks"])
+            if project["present"] == false
+              "not_configured"
+            elsif checks.any? { |check| check["id"] == "core_version_drift" }
+              "migration_needed"
+            elsif checks.any? { |check| check["id"].to_s.end_with?("_schema_missing") }
+              "review_needed"
+            else
+              "not_required"
+            end
+          end
+        }
+
+        total_tasks = tasks["total"].to_i
+        done_tasks = task_status["done"].to_i
+        active_tasks = tasks["active"].to_i
+        proposed_tasks = task_status["proposed"].to_i
+        scoped_tasks = task_status["scoped"].to_i
+        approved_tasks = task_status["approved"].to_i
+        warning_checks = Array(snapshot["checks"]).select { |check| check["severity"] == "warn" }
+        blocker_checks = Array(snapshot["checks"]).select { |check| check["severity"] == "blocker" }
+        agents = Array(value(snapshot, "agents", "active"))
+        enabled_agents = agents.count { |agent| agent["status"] == "enabled" }
+        deferred_agents = agents.count { |agent| agent["status"] == "deferred" }
+        active_roles = Array(value(snapshot, "agents", "active_roles")).map(&:to_s).reject(&:empty?)
+        next_steps = Array(snapshot["next"]).map { |step| command_or_message(step) }.compact.uniq
+
+        puts colorize(color_enabled, "AI Ops Dashboard", "1;36")
+        puts "Project: #{project["name"] || File.basename(snapshot["target"].to_s)}"
+        puts "Status: #{status_value(color_enabled, status_label(health["overall"]))}    Blockers: #{status_value(color_enabled, health["blockers"].to_i)}    Warnings: #{status_value(color_enabled, health["warnings"].to_i)}"
+        puts "Target: #{snapshot["target"]}" if level == "detail"
+        puts ""
+
+        puts section(color_enabled, "Progress")
+        puts "#{progress_bar(done_tasks, total_tasks, 30, color_enabled)}  #{done_tasks} / #{total_tasks} done"
+        unless level == "compact"
+          puts "Active: #{active_tasks}    Proposed: #{proposed_tasks}    Scoped: #{scoped_tasks}    Approved: #{approved_tasks}"
+        end
+        puts ""
+
+        puts section(color_enabled, "Operations")
+        readiness.each { |key, state| print_key_value(key, state, color_enabled) }
+        print_key_value("Canonical Sync", source_refs["status_ref_state"], color_enabled)
+        if level != "compact"
+          print_key_value("Branch", source_refs["local_branch"], color_enabled)
+          print_key_value("Head", source_refs["local_head"], color_enabled)
+        end
+        puts ""
+
+        if level != "compact"
+          puts section(color_enabled, "Settings")
+          print_key_value("Core", "#{snapshot["core_version"]} (recorded #{project["recorded_core_version"] || "unrecorded"})", color_enabled)
+          print_key_value("Operating Mode", project["operating_mode"], color_enabled)
+          print_key_value("Workflow Policy", project["workflow_policy"], color_enabled)
+          print_key_value("Knowledge Mode", project["knowledge_mode"], color_enabled)
+          puts ""
+
+          puts section(color_enabled, "Agents")
+          puts "  Enabled: #{enabled_agents}    Deferred: #{deferred_agents}    Total: #{agents.length}"
+          print_key_value("Roles", active_roles.empty? ? "none" : active_roles.join(", "), color_enabled)
+          puts ""
+        end
+
+        if level == "detail"
+          puts section(color_enabled, "Task Status")
+          if task_status.empty?
+            puts "  none"
+          else
+            task_status.sort.each { |key, value| print_key_value(key, value, color_enabled) }
+          end
+          puts ""
+
+          blocked_actions = Array(value(snapshot, "control", "blocked_actions"))
+          puts section(color_enabled, "Control")
+          print_key_value("Can Start Task", value(snapshot, "control", "can_start_task"), color_enabled)
+          print_key_value("Can Transition", value(snapshot, "control", "can_transition"), color_enabled)
+          if blocked_actions.empty?
+            puts "  Blocked Actions: none"
+          else
+            blocked_actions.each do |action|
+              puts "  - #{action["action"]}: #{action["reason"]}"
+            end
+          end
+          puts ""
+        end
+
+        puts blocker_checks.empty? ? "#{section(color_enabled, "Blockers")}\n  none" : section(color_enabled, "Blockers")
+        blocker_checks.each { |check| puts "  - #{colorize(color_enabled, check["id"], "31")}: #{check["message"]}" }
+        puts ""
+
+        unless level == "compact"
+          puts warning_checks.empty? ? "#{section(color_enabled, "Warnings")}\n  none" : section(color_enabled, "Warnings")
+          warning_checks.each { |check| puts "  - #{colorize(color_enabled, check["id"], "33")}: #{check["message"]}" }
+          puts ""
+        end
+
+        unless next_steps.empty?
+          puts section(color_enabled, "Next")
+          next_steps.first(level == "compact" ? 3 : next_steps.length).each { |step| puts "  - #{step}" }
+        end
+      ' "$level" "$color"
+      ;;
     snapshot)
       target="$(pwd)"
       json="no"

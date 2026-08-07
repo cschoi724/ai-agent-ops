@@ -148,10 +148,13 @@ worktree 상태가 이상한 것 같아.
 Agent가 우선 참고하는 상태 조회 명령:
 
 ```bash
+aiops project dashboard
 aiops project health
 aiops project inspect
 aiops project context --role ROLE --task TASK_ID
 ```
+
+`project dashboard`는 사람이 빠르게 보는 요약 화면이다. 실제 터미널에서는 색상이 자동 적용되고, 로그/파이프에서는 plain text로 출력된다. Agent의 기계 판정 기준은 여전히 `project snapshot --json`과 `project context --json`이다.
 
 문제가 있거나 업데이트가 필요할 때:
 
