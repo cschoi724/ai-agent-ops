@@ -42,6 +42,9 @@ aiops project dashboard
 aiops project dashboard --level compact
 aiops project dashboard --level detail
 aiops project dashboard --view work
+aiops project dashboard --view risk
+aiops project dashboard --view agents
+aiops project dashboard --view release
 aiops project dashboard --view work --format tree
 aiops project dashboard --view work --format mermaid --map dependencies
 aiops project dashboard --view work --format mermaid --map workflow
@@ -51,15 +54,21 @@ aiops project dashboard --json
 aiops project dashboard --color always
 ```
 
-현재 dashboard 5차 구현은 Main Dashboard, Work Dashboard terminal/tree, Work Mermaid map, Dashboard JSON contract 출력을 제공한다.
+현재 dashboard 6차 구현은 Main Dashboard, Work Dashboard terminal/tree, Work Mermaid map, Dashboard JSON contract, Risk/Agent/Release 전문 view를 제공한다.
 
 Main Dashboard 표시 항목은 프로젝트 진행률, readiness, canonical status sync, 운영 설정, Agent/Role 요약, blocker/warning, next command다.
 
 Work Dashboard 표시 항목은 활성 일감, status, workflow, target role, target agent, lock, 다음 Role Session 후보, detail 레벨의 allowed_paths/source_of_truth다.
 
+Risk Dashboard 표시 항목은 blocker/warning, policy rule, canonical sync, unresolved decisions, Task metadata/status_ref 누락, Agent drift, blocked action, 승인 필요 action이다.
+
+Agent Dashboard 표시 항목은 Agent status/team/role/capability/current task/branch/worktree/drift와 Agent별 활성 Task 배정이다.
+
+Release Dashboard 표시 항목은 release 전 readiness, canonical status, blocker/warning, policy rule, blocked action, required approval, release-check 실행 명령이다. 이 view는 실제 CI나 GitHub required check 결과를 대체하지 않는다.
+
 지원 범위:
 
-- `--view main|work`
+- `--view main|work|risk|agents|release`
 - `--level compact|standard|detail`
 - `--format terminal|tree|mermaid`
 - `--map dependencies|workflow|agents|blockers`
@@ -69,7 +78,7 @@ Work Dashboard 표시 항목은 활성 일감, status, workflow, target role, ta
 
 `--format mermaid`는 현재 `--view work`에서만 지원한다. dependency map은 `depends_on`/`blocks`, workflow map은 표준 상태 흐름, agents map은 target_agent/target_role, blockers map은 health warning/blocker를 Mermaid `flowchart`로 출력한다.
 
-`--json`은 `aiops.project_dashboard.v1` 계약을 출력한다. 이 계약은 project/health/snapshot 값을 dashboard 용도에 맞게 projection한 결과이며, terminal/tree/Mermaid와 같은 의미를 공유한다. 주요 필드는 status, progress, readiness, git, agents, tasks, risks, control, next, maps다.
+`--json`은 `aiops.project_dashboard.v1` 계약을 출력한다. 이 계약은 project/health/snapshot 값을 dashboard 용도에 맞게 projection한 결과이며, terminal/tree/Mermaid와 같은 의미를 공유한다. 주요 필드는 status, progress, readiness, git, agents, tasks, risks, control, next, maps, views다.
 
 이 명령은 파일을 수정하지 않는다. Dashboard 출력은 source of truth가 아니며, Agent의 기계 판정 기준은 `project snapshot --json`의 `control`, `checks`, `source_refs`를 우선한다.
 

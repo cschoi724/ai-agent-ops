@@ -1,6 +1,6 @@
 # Project Dashboard Upgrade Plan
 
-상태: 5차 Dashboard JSON Contract 구현 완료, 6차 Risk/Agent/Release View 확장 대기
+상태: 6차 Risk/Agent/Release View 구현 완료, 7차 HTML / Static Dashboard 재검토 대기
 대상: 5차 policy evaluation / project snapshot / action plan 계약 이후
 담당: AI Ops 운영자
 
@@ -617,6 +617,14 @@ aiops project dashboard --view release
 - 각 view가 기존 main/work와 핵심 값 충돌 없음
 - release view가 release-check 결과를 왜곡하지 않음
 - agents view가 agent_registry와 snapshot agents 값을 일관되게 표시
+
+구현 상태:
+
+- `aiops project dashboard --view risk` 지원
+- `aiops project dashboard --view agents` 지원
+- `aiops project dashboard --view release` 지원
+- Dashboard JSON `views.risk`, `views.agents`, `views.release` projection 추가
+- release view는 로컬 readiness와 release-check 후보 명령만 표시하며 실제 CI/required check 결과를 대체하지 않음
 
 ### 7차. HTML / Static Dashboard 재검토
 
