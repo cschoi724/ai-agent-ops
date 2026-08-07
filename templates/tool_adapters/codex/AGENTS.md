@@ -143,7 +143,7 @@ Agent Role은 사용자가 세션에 부여한다. PM/Development/QA/AI Ops는 �
 
 실제 파일 수정, 빌드, 테스트 범위는 Task의 `allowed_paths`가 결정하고, 기준 문서는 `source_of_truth`가 결정한다. 현재 작업 디렉토리와 `allowed_paths`가 다르면 작업 전에 기준 경로를 명확히 보고하고 `allowed_paths` 안에서만 작업한다.
 
-다중 worktree 환경에서는 현재 worktree의 `.ai_project/` 문서를 최신 공용 상태로 가정하지 않는다. 프로젝트에 `canonical_status_ref`가 있으면 작업 시작 전 `aiops status-ref`, `aiops sync-status`, 필요한 경우 `aiops task status TASK_ID --source canonical`로 기준 ref와 SHA를 확인하고 보고한다.
+다중 worktree 환경에서는 현재 worktree의 `.ai_project/` 문서를 최신 공용 상태로 가정하지 않는다. 프로젝트에 `canonical_status_ref`가 있으면 작업 시작 전 `aiops status-ref`, `aiops sync-status`, 필요한 경우 `aiops task status TASK_ID --source canonical`로 기준 ref와 SHA를 확인하고 보고한다. `.ai_project/.runtime/status_ref`는 로컬 runtime cache이므로 commit/PR에 포함하지 않는다.
 
 상태 전이 후 `target_agent` 또는 `target_role`이 다른 Agent/Role로 바뀌면 `.ai/runtime/role_handoff.md` 기준으로 Task 파일과 최종 응답에 `다음 Agent에게 전달할 말`을 남긴다. 이 문구는 Codex 전용 명령이 아니라 Claude도 그대로 이해할 수 있는 Role 기반 지시로 작성한다.
 
