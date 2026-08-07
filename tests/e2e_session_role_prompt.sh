@@ -8,9 +8,19 @@ trap 'rm -rf "$tmpdir"' EXIT INT TERM
 ln -s "$repo_root" "$tmpdir/.ai"
 mkdir -p "$tmpdir/.ai_project/tasks/active" "$tmpdir/.ai_project/tasks/backlog" "$tmpdir/.ai_project/tasks/archive"
 
-for file in README.md current_context.md source_of_truth.md task_board.md ops_decisions.md ops_issues.md; do
+for file in README.md source_of_truth.md task_board.md ops_decisions.md ops_issues.md; do
   printf '# %s\n' "$file" > "$tmpdir/.ai_project/$file"
 done
+
+cat > "$tmpdir/.ai_project/current_context.md" <<'EOF'
+# Current Agent Context
+
+## 다음 초점
+
+1. Session prompt validation을 실행 가능한 Task 흐름으로 점검
+2. Role Session 전환 문구와 인계 기준 확인
+3. Verification Role이 독립 검증할 수 있는 입력 유지
+EOF
 
 cat > "$tmpdir/.ai_project/operating_model.md" <<'EOF'
 ---
@@ -70,6 +80,13 @@ agents:
       - Verification Role
     capabilities:
       - qa_review
+  - agent: Release Agent
+    status: deferred
+    team: Product Team
+    roles:
+      - Release Role
+    capabilities:
+      - release_coordination
 ---
 
 # Project Agent Registry
@@ -102,6 +119,39 @@ grep -q 'aiops role prompt execution' /tmp/aiops-e2e-session-guide.out || {
 
 grep -q '선택 기준:' /tmp/aiops-e2e-session-guide.out || {
   printf '%s\n' "session-guide did not include role selection criteria" >&2
+  exit 1
+}
+
+grep -q 'Lead Agent: Lead Role / Completion Role (active / Product Team)' /tmp/aiops-e2e-session-guide.out || {
+  printf '%s\n' "session-guide did not include active agent role mapping" >&2
+  cat /tmp/aiops-e2e-session-guide.out >&2
+  exit 1
+}
+
+grep -q 'Release Agent: Release Role (deferred / Product Team)' /tmp/aiops-e2e-session-guide.out || {
+  printf '%s\n' "session-guide did not include deferred agent role mapping" >&2
+  cat /tmp/aiops-e2e-session-guide.out >&2
+  exit 1
+}
+
+grep -q '현재 초점:' /tmp/aiops-e2e-session-guide.out || {
+  printf '%s\n' "session-guide did not include current focus header" >&2
+  exit 1
+}
+
+grep -q 'Session prompt validation을 실행 가능한 Task 흐름으로 점검' /tmp/aiops-e2e-session-guide.out || {
+  printf '%s\n' "session-guide did not include current focus content" >&2
+  cat /tmp/aiops-e2e-session-guide.out >&2
+  exit 1
+}
+
+grep -q '추천 다음 세션:' /tmp/aiops-e2e-session-guide.out || {
+  printf '%s\n' "session-guide did not include recommended next sessions" >&2
+  exit 1
+}
+
+grep -q 'aiops role prompt direction' /tmp/aiops-e2e-session-guide.out || {
+  printf '%s\n' "session-guide did not include direction prompt command" >&2
   exit 1
 }
 

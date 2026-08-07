@@ -2316,9 +2316,123 @@ print_markdown_section_list() {
   ' "$file"
 }
 
+print_current_focus_rows() {
+  file="$1"
+  [ -f "$file" ] || return 1
+  command -v ruby >/dev/null 2>&1 || return 1
+  ruby -e '
+    path = ARGV[0]
+    lines = File.readlines(path, chomp: true)
+    headings = [
+      /\A##[[:space:]]+다음 초점[[:space:]]*\z/,
+      /\A##[[:space:]]+Current Focus[[:space:]]*\z/,
+      /\A##[[:space:]]+(?:[0-9]+[.][[:space:]]*)?현재 운영 상태[[:space:]]*\z/
+    ]
+
+    selected = nil
+    headings.each do |pattern|
+      index = lines.index { |line| line.match?(pattern) }
+      if index
+        selected = index
+        break
+      end
+    end
+    exit 2 unless selected
+
+    body = []
+    lines[(selected + 1)..].to_a.each do |line|
+      break if line.start_with?("## ")
+      body << line
+    end
+
+    rows = []
+    body.each do |line|
+      stripped = line.strip
+      next if stripped.empty?
+      next if stripped.match?(/\A\|[[:space:]-]+\|/)
+
+      if stripped.start_with?("|")
+        cells = stripped.split("|").map(&:strip).reject(&:empty?)
+        next if cells.length < 2
+        next if cells[0].match?(/\A-+\z/) || cells[0] == "항목"
+        rows << "- #{cells[0]}: #{cells[1]}"
+      elsif stripped.match?(/\A[0-9]+[.][[:space:]]+/)
+        rows << "- #{stripped.sub(/\A[0-9]+[.][[:space:]]+/, "")}"
+      elsif stripped.start_with?("- ")
+        rows << stripped
+      end
+    end
+
+    rows = rows.reject { |row| row.include?("{{") && row.include?("}}") }
+    rows = body.grep(/\S/).first(3).map { |line| "- #{line.strip}" } if rows.empty?
+    rows.first(5).each { |row| puts "      #{row}" }
+    exit(rows.empty? ? 2 : 0)
+  ' "$file"
+}
+
 print_agent_registry_rows() {
   file="$1"
   [ -f "$file" ] || return 0
+  if command -v ruby >/dev/null 2>&1; then
+    ruby -ryaml -rdate -e '
+      path = ARGV[0]
+      text = File.read(path)
+      rows = []
+
+      if text.start_with?("---\n")
+        lines = text.lines
+        closing = nil
+        lines[1..].each_with_index do |line, idx|
+          if line.strip == "---"
+            closing = idx + 1
+            break
+          end
+        end
+        if closing
+          data = YAML.safe_load(lines[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+          Array(data["agents"]).each do |agent|
+            next unless agent.is_a?(Hash)
+            name = agent["agent"] || agent["id"]
+            status = agent["status"] || "unknown"
+            team = agent["team"]
+            roles = Array(agent["roles"]).compact.map(&:to_s).reject(&:empty?)
+            next if name.to_s.empty? || roles.empty?
+            label =
+              case status
+              when "enabled" then "active"
+              when "deferred" then "deferred"
+              when "inactive" then "inactive"
+              else status.to_s
+              end
+            suffix = team.to_s.empty? ? "" : " / #{team}"
+            rows << "      - #{name}: #{roles.join(" / ")} (#{label}#{suffix})"
+          end
+        end
+      end
+
+      if rows.empty?
+        text.each_line do |line|
+          next unless line.start_with?("|")
+          next if line.include?("---")
+          cells = line.split("|").map(&:strip).reject(&:empty?)
+          next if cells.empty? || %w[담당 Agent Role].include?(cells[0])
+          status = cells.find { |cell| %w[enabled deferred inactive].include?(cell) }
+          next unless status
+          name = cells[0]
+          role = cells.find { |cell| cell.include?("Role") } || cells[2]
+          label =
+            case status
+            when "enabled" then "active"
+            else status
+            end
+          rows << "      - #{name}: #{role} (#{label})" if name && role
+        end
+      end
+
+      rows.each { |row| puts row }
+      exit(rows.empty? ? 2 : 0)
+    ' "$file" && return 0
+  fi
   awk -F'|' '
     substr($0, 1, 1) == "|" && $0 !~ /---/ && $0 !~ /^\|[ \t]*(담당|Agent)[ \t]*\|/ && $0 ~ /enabled/ {
       left=$2
@@ -6517,10 +6631,52 @@ cmd_session_guide() {
 
   info "활성 Agent / Role 후보:"
   if [ -f "$target/.ai_project/agent_registry.md" ]; then
-    print_agent_registry_rows "$target/.ai_project/agent_registry.md"
+    agent_rows="$(print_agent_registry_rows "$target/.ai_project/agent_registry.md" || true)"
+    if [ -n "$agent_rows" ]; then
+      printf '%s\n' "$agent_rows" | while IFS= read -r line; do
+        info "$line"
+      done
+    else
+      info "      - agent_registry.md에서 표시할 Agent/Role을 찾지 못함"
+    fi
   else
     info "      - .ai_project/agent_registry.md 없음"
   fi
+  info ""
+
+  info "현재 초점:"
+  if [ -f "$target/.ai_project/current_context.md" ]; then
+    focus_rows="$(print_current_focus_rows "$target/.ai_project/current_context.md" || true)"
+    if [ -n "$focus_rows" ]; then
+      printf '%s\n' "$focus_rows" | while IFS= read -r line; do
+        info "$line"
+      done
+    else
+      info "      - current_context.md에 현재 초점이 비어 있음"
+    fi
+  elif [ -f "$target/.ai_project/task_board.md" ]; then
+    focus_rows="$(print_current_focus_rows "$target/.ai_project/task_board.md" || true)"
+    if [ -n "$focus_rows" ]; then
+      printf '%s\n' "$focus_rows" | while IFS= read -r line; do
+        info "$line"
+      done
+    else
+      info "      - task_board.md에 현재 초점이 비어 있음"
+    fi
+  else
+    info "      - current_context.md 없음"
+  fi
+  info ""
+
+  info "추천 다음 세션:"
+  info "  - 제품 방향/요구사항을 정리하려면:"
+  info "      aiops role prompt direction --target \"$target\""
+  info "  - 다음 Task를 등록/조율하려면:"
+  info "      aiops role prompt lead --target \"$target\""
+  info "  - 승인된 Task를 실행하려면:"
+  info "      aiops role prompt execution --target \"$target\" --task TASK_ID"
+  info "  - 운영모델 자체를 점검하려면:"
+  info "      aiops role prompt ops --target \"$target\""
   info ""
 
   info "Role Session 시작 문구 생성:"
@@ -7900,16 +8056,37 @@ cmd_bootstrap_guide() {
     info ""
     info "활성 Agent / Role 후보:"
     if [ -f "$target/.ai_project/agent_registry.md" ]; then
-      print_agent_registry_rows "$target/.ai_project/agent_registry.md"
+      agent_rows="$(print_agent_registry_rows "$target/.ai_project/agent_registry.md" || true)"
+      if [ -n "$agent_rows" ]; then
+        printf '%s\n' "$agent_rows" | while IFS= read -r line; do
+          info "$line"
+        done
+      else
+        info "      - agent_registry.md에서 표시할 Agent/Role을 찾지 못함"
+      fi
     else
       info "      - agent_registry.md 없음"
     fi
     info ""
     info "현재 초점:"
     if [ -f "$target/.ai_project/current_context.md" ]; then
-      print_markdown_section_list "$target/.ai_project/current_context.md" "## 다음 초점"
+      focus_rows="$(print_current_focus_rows "$target/.ai_project/current_context.md" || true)"
+      if [ -n "$focus_rows" ]; then
+        printf '%s\n' "$focus_rows" | while IFS= read -r line; do
+          info "$line"
+        done
+      else
+        info "      - current_context.md에 현재 초점이 비어 있음"
+      fi
     elif [ -f "$target/.ai_project/task_board.md" ]; then
-      print_markdown_section_list "$target/.ai_project/task_board.md" "## Current Focus"
+      focus_rows="$(print_current_focus_rows "$target/.ai_project/task_board.md" || true)"
+      if [ -n "$focus_rows" ]; then
+        printf '%s\n' "$focus_rows" | while IFS= read -r line; do
+          info "$line"
+        done
+      else
+        info "      - task_board.md에 현재 초점이 비어 있음"
+      fi
     else
       info "      - current_context.md 없음"
     fi

@@ -71,9 +71,21 @@ agents:
 # Agent Registry
 EOF
 
-for file in current_context.md source_of_truth.md task_board.md ops_decisions.md ops_issues.md; do
+for file in source_of_truth.md task_board.md ops_decisions.md ops_issues.md; do
   printf '# %s\n' "$file" > "$tmpdir/.ai_project/$file"
 done
+
+cat > "$tmpdir/.ai_project/current_context.md" <<'EOF'
+# Current Agent Context
+
+## 2. 현재 운영 상태
+
+| 항목 | 값 |
+|---|---|
+| 현재 운영 모드 | solo_light |
+| 활성 Team | single_team |
+| 현재 우선 Task | 없음 |
+EOF
 
 "$repo_root/bin/aiops" doctor --target "$tmpdir" --strict > "$tmpdir/doctor.out"
 "$repo_root/bin/aiops" validate project --target "$tmpdir" --strict > "$tmpdir/validate.out"
@@ -82,6 +94,8 @@ done
 "$repo_root/bin/aiops" policy evaluate --snapshot "$tmpdir/snapshot.json" --json > "$tmpdir/policy.json"
 "$repo_root/bin/aiops" validate policy-evaluation "$tmpdir/policy.json" >/dev/null
 "$repo_root/bin/aiops" project health --target "$tmpdir" --json > "$tmpdir/health.json"
+"$repo_root/bin/aiops" session-guide --target "$tmpdir" > "$tmpdir/session-guide.out"
+"$repo_root/bin/aiops" bootstrap-guide --target "$tmpdir" > "$tmpdir/bootstrap-guide.out"
 
 for output in "$tmpdir/doctor.out" "$tmpdir/validate.out"; do
   grep -q 'not_required: .ai_project/branch_pr_strategy.md' "$output" || {
@@ -132,6 +146,24 @@ if grep -q 'differs from current core' "$tmpdir/doctor.out"; then
   cat "$tmpdir/doctor.out" >&2
   exit 1
 fi
+
+for output in "$tmpdir/session-guide.out" "$tmpdir/bootstrap-guide.out"; do
+  grep -q 'current-ai-agent-session: Direction Role / Lead Role / Ops Governance Role (active / single_team)' "$output" || {
+    printf '%s\n' "guide did not include active agent role mapping in $output" >&2
+    cat "$output" >&2
+    exit 1
+  }
+  grep -q '현재 초점:' "$output" || {
+    printf '%s\n' "guide did not include current focus header in $output" >&2
+    cat "$output" >&2
+    exit 1
+  }
+  grep -q '현재 운영 모드: solo_light' "$output" || {
+    printf '%s\n' "guide did not include current focus content in $output" >&2
+    cat "$output" >&2
+    exit 1
+  }
+done
 
 cp -R "$tmpdir" "$active_branch_project"
 ruby -0pi -e 'gsub("branch_pr: pending_decision", "branch_pr: branch_per_task")' "$active_branch_project/.ai_project/operating_model.md"
