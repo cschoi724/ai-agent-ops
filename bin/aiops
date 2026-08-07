@@ -13,7 +13,7 @@ Usage:
   aiops project snapshot [--target DIR] --json
   aiops project context --role ROLE [--target DIR] [--task TASK_ID] [--json]
   aiops project health [--target DIR] [--json]
-  aiops project dashboard [--target DIR] [--view main|work] [--level compact|standard|detail] [--format terminal|tree|mermaid] [--map dependencies|workflow|agents|blockers] [--color auto|always|never] [--no-color]
+  aiops project dashboard [--target DIR] [--view main|work] [--level compact|standard|detail] [--format terminal|tree|mermaid] [--map dependencies|workflow|agents|blockers] [--json] [--color auto|always|never] [--no-color]
   aiops policy evaluate [--target DIR|--snapshot FILE] [--strict-level LEVEL] --json
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
@@ -26,6 +26,7 @@ Usage:
   aiops validate policy-rules [--core DIR]
   aiops validate workflow-catalog [--target DIR|--core DIR]
   aiops validate project-snapshot FILE
+  aiops validate project-dashboard FILE
   aiops validate policy-evaluation FILE
   aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
   aiops task status TASK_ID [--target DIR] [--source local|canonical]
@@ -70,6 +71,7 @@ Examples:
   aiops project dashboard
   aiops project dashboard --level compact
   aiops project dashboard --view work --format mermaid --map dependencies
+  aiops project dashboard --json
   aiops policy evaluate --json
   aiops validate --strict
   aiops validate project --target /path/to/project --strict
@@ -78,6 +80,7 @@ Examples:
   aiops validate policy-rules
   aiops validate workflow-catalog
   aiops validate project-snapshot /tmp/project_snapshot.json
+  aiops validate project-dashboard /tmp/project_dashboard.json
   aiops validate policy-evaluation /tmp/policy_evaluation.json
   aiops task create --title "로그인 화면 구현" --workflow feature --role "Lead Role"
   aiops task status T-YYYYMMDD-001 --source canonical
@@ -2921,6 +2924,7 @@ cmd_project() {
       format="terminal"
       map="dependencies"
       color="auto"
+      json="no"
 
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -2958,7 +2962,7 @@ cmd_project() {
             color="$1"
             ;;
           --json)
-            die "project dashboard --json is planned for the dashboard JSON contract phase"
+            json="yes"
             ;;
           -h|--help)
             usage
@@ -3001,10 +3005,10 @@ cmd_project() {
           die "unknown project dashboard map: $map"
           ;;
       esac
-      if [ "$format" != "mermaid" ] && [ "$map" != "dependencies" ]; then
+      if [ "$json" != "yes" ] && [ "$format" != "mermaid" ] && [ "$map" != "dependencies" ]; then
         die "project dashboard --map requires --format mermaid"
       fi
-      if [ "$format" = "mermaid" ] && [ "$view" != "work" ]; then
+      if [ "$json" != "yes" ] && [ "$format" = "mermaid" ] && [ "$view" != "work" ]; then
         die "project dashboard --format mermaid currently requires --view work"
       fi
       case "$color" in
@@ -3032,6 +3036,7 @@ cmd_project() {
         level = ARGV[2]
         color_mode = ARGV[3]
         map = ARGV[4]
+        as_json = ARGV[5] == "yes"
         color_enabled = color_mode == "always" || (color_mode == "auto" && STDOUT.tty? && ENV["NO_COLOR"].to_s.empty?)
 
         def colorize(enabled, text, code)
@@ -3581,6 +3586,236 @@ cmd_project() {
           end
         end
 
+        def dashboard_task_item(task, target)
+          {
+            "id" => task["id"],
+            "title" => task["title"],
+            "status" => task["status"],
+            "status_class" => mermaid_task_class(task),
+            "workflow" => task["workflow"],
+            "target_role" => task["target_role"],
+            "target_agent" => task["target_agent"],
+            "locked_by" => task["locked_by"],
+            "lock_state" => clean(task["locked_by"], "none") == "none" ? "none" : "locked",
+            "branch" => task["branch"],
+            "worktree" => task["worktree"],
+            "depends_on" => Array(task["depends_on"]),
+            "blocks" => Array(task["blocks"]),
+            "allowed_paths" => Array(task["allowed_paths"]),
+            "source_of_truth" => Array(task["source_of_truth"]),
+            "report_to" => task["report_to"],
+            "qa_to" => task["qa_to"],
+            "path" => task["path"],
+            "next" => {
+              "action" => next_action_label(task),
+              "command" => next_role_command(task, target)
+            }
+          }
+        end
+
+        def dependency_map_data(snapshot)
+          tasks = snapshot.fetch("tasks", {})
+          all_items = Array(tasks["items"])
+          active_items = active_work_items(tasks)
+          by_id = all_items.each_with_object({}) { |task, out| out[task["id"].to_s] = task }
+          selected = {}
+          edges = []
+
+          active_items.each do |task|
+            selected[task["id"].to_s] = task
+            Array(task["depends_on"]).each do |dependency|
+              dep_id = dependency.to_s
+              selected[dep_id] = by_id[dep_id] || { "id" => dep_id, "title" => "external dependency", "status" => "unknown" }
+              edges << { "from" => dep_id, "to" => task["id"].to_s, "type" => "depends_on" }
+            end
+            Array(task["blocks"]).each do |blocked|
+              blocked_id = blocked.to_s
+              selected[blocked_id] = by_id[blocked_id] || { "id" => blocked_id, "title" => "external blocked task", "status" => "unknown" }
+              edges << { "from" => task["id"].to_s, "to" => blocked_id, "type" => "blocks" }
+            end
+          end
+
+          {
+            "type" => "dependencies",
+            "direction" => "LR",
+            "nodes" => selected.values.sort_by { |task| task["id"].to_s }.map do |task|
+              { "id" => mermaid_id("T", task["id"]), "task_id" => task["id"].to_s, "label" => mermaid_label(task["id"], shorten(task["title"], 36), task["status"]), "class" => mermaid_task_class(task) }
+            end,
+            "edges" => edges.uniq
+          }
+        end
+
+        def workflow_map_data(snapshot)
+          tasks = snapshot.fetch("tasks", {})
+          workflow = snapshot.fetch("workflow", {})
+          transitions = Array(workflow["transitions"]).map { |edge| { "from" => edge["from"].to_s, "to" => edge["to"].to_s, "next_role" => edge["next_role"] } }.reject { |edge| edge["from"].empty? || edge["to"].empty? }
+          active_items = sorted_work_items(active_work_items(tasks))
+          statuses = (Array(workflow["statuses"]).map(&:to_s) + transitions.flat_map { |edge| [edge["from"], edge["to"]] } + active_items.map { |task| task["status"].to_s }).reject(&:empty?).uniq
+          {
+            "type" => "workflow",
+            "direction" => "LR",
+            "statuses" => statuses.map do |status|
+              node_class = %w[blocked rework_requested].include?(status) ? "blocked" : "workflow"
+              node_class = "cancelled" if status == "cancelled"
+              { "id" => mermaid_id("S", status), "status" => status, "class" => node_class }
+            end,
+            "transitions" => transitions,
+            "task_positions" => active_items.map do |task|
+              { "task_id" => task["id"], "task_node_id" => mermaid_id("T", task["id"]), "status" => task["status"], "status_node_id" => mermaid_id("S", task["status"]), "class" => mermaid_task_class(task) }
+            end
+          }
+        end
+
+        def agent_map_data(snapshot)
+          tasks = snapshot.fetch("tasks", {})
+          items = sorted_work_items(active_work_items(tasks))
+          nodes = {}
+          edges = []
+
+          items.each do |task|
+            agent = clean(task["target_agent"])
+            role = clean(task["target_role"])
+            agent_node = mermaid_id("A", agent)
+            role_node = mermaid_id("R", role)
+            task_node = mermaid_id("T", task["id"])
+            nodes[agent_node] = { "id" => agent_node, "label" => agent, "kind" => "agent", "class" => "agent" }
+            nodes[role_node] = { "id" => role_node, "label" => role, "kind" => "role", "class" => "role" }
+            nodes[task_node] = { "id" => task_node, "label" => mermaid_label(task["id"], task["status"]), "kind" => "task", "task_id" => task["id"], "class" => mermaid_task_class(task) }
+            edges << { "from" => agent_node, "to" => role_node, "type" => "agent_role" }
+            edges << { "from" => role_node, "to" => task_node, "type" => "role_task" }
+          end
+
+          if items.empty?
+            none_node = mermaid_id("A", "none")
+            nodes[none_node] = { "id" => none_node, "label" => "no active work", "kind" => "empty", "class" => "done" }
+          end
+
+          {
+            "type" => "agents",
+            "direction" => "LR",
+            "nodes" => nodes.values,
+            "edges" => edges.uniq
+          }
+        end
+
+        def blocker_map_data(snapshot, health_summary)
+          project = snapshot.fetch("project", {})
+          checks = Array(health_summary["checks"]).select { |check| %w[blocker warn].include?(check["level"].to_s) }
+          project_node = { "id" => "P_project", "label" => mermaid_label(project["name"] || File.basename(snapshot["target"].to_s), health_summary["overall"]), "kind" => "project", "class" => health_summary["overall"] == "blocked" ? "blocked" : "warning" }
+          nodes = [project_node]
+          edges = []
+
+          if checks.empty?
+            nodes << { "id" => "C_none", "label" => "no blockers or warnings", "kind" => "check", "class" => "done" }
+            edges << { "from" => "P_project", "to" => "C_none", "type" => "status" }
+          else
+            checks.each do |check|
+              check_node = mermaid_id("C", check["code"])
+              node_class = check["level"].to_s == "blocker" ? "blocked" : "warning"
+              nodes << { "id" => check_node, "label" => mermaid_label(check["code"], shorten(check["message"], 48)), "kind" => "check", "code" => check["code"], "level" => check["level"], "class" => node_class }
+              edges << { "from" => "P_project", "to" => check_node, "type" => check["level"] }
+              Array(check.dig("evidence", "tasks")).each do |task_id|
+                task_node = mermaid_id("T", task_id)
+                nodes << { "id" => task_node, "label" => mermaid_label(task_id), "kind" => "task", "task_id" => task_id, "class" => "unknown" }
+                edges << { "from" => check_node, "to" => task_node, "type" => "evidence" }
+              end
+            end
+          end
+
+          {
+            "type" => "blockers",
+            "direction" => "TD",
+            "nodes" => nodes.uniq { |node| node["id"] },
+            "edges" => edges.uniq
+          }
+        end
+
+        def dashboard_projection(snapshot, health_summary, view, level, format, map)
+          project = snapshot.fetch("project", {})
+          tasks = snapshot.fetch("tasks", {})
+          task_status = tasks.fetch("by_status", {})
+          total_tasks = tasks["total"].to_i
+          done_tasks = task_status["done"].to_i
+          active_items = sorted_work_items(active_work_items(tasks))
+          warning_checks = Array(health_summary["checks"]).select { |check| check["level"] == "warn" }
+          blocker_checks = Array(health_summary["checks"]).select { |check| check["level"] == "blocker" }
+          readiness_source = health_summary.fetch("readiness", {})
+          source_refs = snapshot.fetch("source_refs", {})
+          agents = Array(value(snapshot, "agents", "active"))
+          enabled_agents = agents.count { |agent| agent["status"] == "enabled" }
+          deferred_agents = agents.count { |agent| agent["status"] == "deferred" }
+          ratio = total_tasks.positive? ? done_tasks.to_f / total_tasks : 0.0
+
+          {
+            "schema" => "aiops.project_dashboard.v1",
+            "generated_at" => snapshot["generated_at"],
+            "target" => snapshot["target"],
+            "view" => view,
+            "level" => level,
+            "format" => format,
+            "map" => map,
+            "project" => {
+              "name" => project["name"] || File.basename(snapshot["target"].to_s),
+              "core_version" => snapshot["core_version"],
+              "recorded_core_version" => project["recorded_core_version"],
+              "operating_mode" => project["operating_mode"],
+              "workflow_policy" => project["workflow_policy"],
+              "knowledge_mode" => project["knowledge_mode"]
+            },
+            "status" => {
+              "overall" => health_summary["overall"] || snapshot.dig("health", "overall"),
+              "blockers" => health_summary.dig("summary", "blockers").to_i,
+              "warnings" => health_summary.dig("summary", "warnings").to_i
+            },
+            "progress" => {
+              "total_tasks" => total_tasks,
+              "done_tasks" => done_tasks,
+              "active_tasks" => tasks["active"].to_i,
+              "done_ratio" => ratio.round(4)
+            },
+            "readiness" => {
+              "bootstrap" => readiness_source["bootstrap"],
+              "task_work" => readiness_source["task_work"],
+              "multi_agent" => readiness_source["multi_agent"],
+              "migration" => readiness_source["migration"]
+            },
+            "git" => {
+              "branch" => source_refs["local_branch"],
+              "head" => source_refs["local_head"],
+              "canonical_status_ref" => source_refs["canonical_status_ref"],
+              "canonical_status_sha" => source_refs["canonical_status_sha"],
+              "recorded_status_sha" => source_refs["recorded_status_sha"],
+              "status_ref_state" => source_refs["status_ref_state"]
+            },
+            "agents" => {
+              "enabled" => enabled_agents,
+              "deferred" => deferred_agents,
+              "total" => agents.length,
+              "active_roles" => Array(value(snapshot, "agents", "active_roles")),
+              "items" => agents
+            },
+            "tasks" => {
+              "total" => total_tasks,
+              "active" => tasks["active"].to_i,
+              "by_status" => task_status,
+              "items" => Array(tasks["items"]).map { |task| dashboard_task_item(task, snapshot["target"]) },
+              "active_items" => active_items.map { |task| dashboard_task_item(task, snapshot["target"]) }
+            },
+            "risks" => {
+              "blockers" => blocker_checks,
+              "warnings" => warning_checks
+            },
+            "control" => snapshot["control"],
+            "next" => Array(snapshot["next"]),
+            "maps" => {
+              "dependencies" => dependency_map_data(snapshot),
+              "workflow" => workflow_map_data(snapshot),
+              "agents" => agent_map_data(snapshot),
+              "blockers" => blocker_map_data(snapshot, health_summary)
+            }
+          }
+        end
+
         project = snapshot.fetch("project", {})
         health = health_summary.fetch("summary", {})
         health_status = health_summary.fetch("overall", snapshot.fetch("health", {})["overall"])
@@ -3608,6 +3843,11 @@ cmd_project() {
         deferred_agents = agents.count { |agent| agent["status"] == "deferred" }
         active_roles = Array(value(snapshot, "agents", "active_roles")).map(&:to_s).reject(&:empty?)
         next_steps = Array(snapshot["next"]).map { |step| command_or_message(step) }.compact.uniq
+
+        if as_json
+          puts JSON.pretty_generate(dashboard_projection(snapshot, health_summary, view, level, format, map))
+          exit 0
+        end
 
         if view == "work"
           if format == "mermaid"
@@ -3693,7 +3933,7 @@ cmd_project() {
           puts section(color_enabled, "Next")
           next_steps.first(level == "compact" ? 3 : next_steps.length).each { |step| puts "  - #{step}" }
         end
-      ' "$view" "$format" "$level" "$color" "$map"
+      ' "$view" "$format" "$level" "$color" "$map" "$json"
       ;;
     snapshot)
       target="$(pwd)"
@@ -5964,7 +6204,7 @@ cmd_validate() {
       ' "$catalog"
       info "ok: workflow catalog"
       ;;
-    project-snapshot|policy-evaluation)
+    project-snapshot|project-dashboard|policy-evaluation)
       file=""
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -5990,6 +6230,10 @@ cmd_validate() {
         project-snapshot)
           schema="$core/schemas/project_snapshot.schema.json"
           label="project snapshot"
+          ;;
+        project-dashboard)
+          schema="$core/schemas/project_dashboard.schema.json"
+          label="project dashboard"
           ;;
         policy-evaluation)
           schema="$core/schemas/policy_evaluation.schema.json"
@@ -8687,6 +8931,7 @@ cmd_release_check() {
     "$core/schemas/bootstrap_options.schema.json" \
     "$core/schemas/runtime_export.schema.json" \
     "$core/schemas/project_snapshot.schema.json" \
+    "$core/schemas/project_dashboard.schema.json" \
     "$core/schemas/policy_rules.schema.json" \
     "$core/schemas/policy_evaluation.schema.json" \
     "$core/schemas/action_plan.schema.json" \
@@ -8776,6 +9021,8 @@ cmd_release_check() {
     "$core/bin/aiops" export runtime --target "$release_tmp" >/dev/null
     "$core/bin/aiops" project snapshot --target "$release_tmp" --json > "$release_tmp/project_snapshot.json"
     "$core/bin/aiops" validate project-snapshot "$release_tmp/project_snapshot.json" >/dev/null
+    "$core/bin/aiops" project dashboard --target "$release_tmp" --json > "$release_tmp/project_dashboard.json"
+    "$core/bin/aiops" validate project-dashboard "$release_tmp/project_dashboard.json" >/dev/null
     "$core/bin/aiops" policy evaluate --target "$release_tmp" --json > "$release_tmp/policy_evaluation.json"
     "$core/bin/aiops" validate policy-evaluation "$release_tmp/policy_evaluation.json" >/dev/null
     printf '{}\n' > "$release_tmp/invalid_project_snapshot.json"
