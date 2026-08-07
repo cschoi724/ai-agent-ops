@@ -1,6 +1,6 @@
 # Project Dashboard Upgrade Plan
 
-상태: 6차 Risk/Agent/Release View 구현 완료, 7차 HTML / Static Dashboard 재검토 대기
+상태: 7차 HTML / Static Dashboard 구현 진행
 대상: 5차 policy evaluation / project snapshot / action plan 계약 이후
 담당: AI Ops 운영자
 
@@ -35,6 +35,7 @@ aiops project dashboard --view work --format mermaid --map dependencies
 aiops project dashboard --view work --format mermaid --map workflow
 aiops project dashboard --view work --format mermaid --map agents
 aiops project dashboard --json
+aiops project dashboard --format html --output dashboard.html
 ```
 
 ## 데이터 원천
@@ -626,11 +627,13 @@ aiops project dashboard --view release
 - Dashboard JSON `views.risk`, `views.agents`, `views.release` projection 추가
 - release view는 로컬 readiness와 release-check 후보 명령만 표시하며 실제 CI/required check 결과를 대체하지 않음
 
-### 7차. HTML / Static Dashboard 재검토
+### 7차. HTML / Static Dashboard
 
 목표:
 
-- CLI dashboard와 JSON 계약이 충분히 사용된 뒤 HTML/static dashboard 필요성 판단
+- CLI Mermaid source를 브라우저에서 바로 시각적으로 볼 수 있는 정적 HTML dashboard 제공
+- Main / Work / Risk / Agent / Release 요약과 Mermaid map을 한 파일에 묶음
+- raw Mermaid source를 유지해 FigJam, 문서, 외부 renderer로 재사용 가능하게 함
 
 진행 조건:
 
@@ -638,13 +641,29 @@ aiops project dashboard --view release
 - JSON 계약이 안정화됨
 - 사용자가 CLI보다 별도 화면을 명확히 요구함
 
-후보:
+명령:
 
 ```sh
 aiops project dashboard --format html --output dashboard.html
 ```
 
-초기 2~6차에는 포함하지 않는다.
+구현 범위:
+
+- `--format html` 지원
+- `--output FILE` 지원
+- project setting, readiness, progress, active work, risk, agent, release 요약 표시
+- dependencies / workflow / agents / blockers Mermaid map 렌더링 영역 제공
+- Mermaid source detail 제공
+- dashboard 실행 시 target project 파일을 수정하지 않음
+
+검증:
+
+- HTML stdout 출력
+- HTML file 출력
+- Mermaid container와 source 포함
+- selected `--map` 우선 표시
+- `--json --output` 조합 차단
+- e2e fixture에서 target project file hash 불변 확인
 
 ## 차수별 큰 검증 게이트
 

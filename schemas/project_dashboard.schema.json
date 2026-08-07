@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ai-agent-ops.local/schemas/project_dashboard.schema.json",
   "title": "AI Ops Project Dashboard",
-  "description": "Machine-readable dashboard projection for terminal, tree, Mermaid, and later UI renderers.",
+  "description": "Machine-readable dashboard projection for terminal, tree, Mermaid, HTML, and later UI renderers.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -32,7 +32,7 @@
     "target": { "type": "string", "minLength": 1 },
     "view": { "type": "string", "enum": ["main", "work", "risk", "agents", "release"] },
     "level": { "type": "string", "enum": ["compact", "standard", "detail"] },
-    "format": { "type": "string", "enum": ["terminal", "tree", "mermaid"] },
+    "format": { "type": "string", "enum": ["terminal", "tree", "mermaid", "html"] },
     "map": { "type": "string", "enum": ["dependencies", "workflow", "agents", "blockers"] },
     "project": {
       "type": "object",
