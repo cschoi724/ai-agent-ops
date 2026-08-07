@@ -1,6 +1,6 @@
 # Project Dashboard Upgrade Plan
 
-상태: 실행 계획
+상태: 4차 Mermaid Maps 구현 완료, 5차 JSON Contract 대기
 대상: 5차 policy evaluation / project snapshot / action plan 계약 이후
 담당: AI Ops 운영자
 
@@ -552,6 +552,16 @@ Dashboard는 정보량을 선택할 수 있어야 한다.
 - agents map이 target_agent/target_role을 반영
 - blocker map이 policy/health warning을 연결
 - Mermaid 출력은 파일을 수정하지 않음
+
+구현 상태:
+
+- `--format mermaid` 지원
+- `--map dependencies|workflow|agents|blockers` 지원
+- 현재 범위는 `--view work` 전용
+- dependency map은 snapshot task projection의 `depends_on`/`blocks`를 사용
+- workflow map은 snapshot에 포함된 workflow catalog 상태/전이를 표시
+- agents map은 `target_agent -> target_role -> task` 관계를 표시
+- blockers map은 project health의 warning/blocker를 표시
 
 ### 5차. Dashboard JSON Contract
 

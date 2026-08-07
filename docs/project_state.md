@@ -43,10 +43,14 @@ aiops project dashboard --level compact
 aiops project dashboard --level detail
 aiops project dashboard --view work
 aiops project dashboard --view work --format tree
+aiops project dashboard --view work --format mermaid --map dependencies
+aiops project dashboard --view work --format mermaid --map workflow
+aiops project dashboard --view work --format mermaid --map agents
+aiops project dashboard --view work --format mermaid --map blockers
 aiops project dashboard --color always
 ```
 
-현재 dashboard 3차 구현은 Main Dashboard와 Work Dashboard terminal/tree 출력을 제공한다.
+현재 dashboard 4차 구현은 Main Dashboard, Work Dashboard terminal/tree, Work Mermaid map 출력을 제공한다.
 
 Main Dashboard 표시 항목은 프로젝트 진행률, readiness, canonical status sync, 운영 설정, Agent/Role 요약, blocker/warning, next command다.
 
@@ -56,11 +60,14 @@ Work Dashboard 표시 항목은 활성 일감, status, workflow, target role, ta
 
 - `--view main|work`
 - `--level compact|standard|detail`
-- `--format terminal|tree`
+- `--format terminal|tree|mermaid`
+- `--map dependencies|workflow|agents|blockers`
 - `--color auto|always|never`
 - `--no-color`
 
-Mermaid, JSON contract는 후속 dashboard phase에서 추가한다.
+`--format mermaid`는 현재 `--view work`에서만 지원한다. dependency map은 `depends_on`/`blocks`, workflow map은 표준 상태 흐름, agents map은 target_agent/target_role, blockers map은 health warning/blocker를 Mermaid `flowchart`로 출력한다.
+
+JSON contract는 후속 dashboard phase에서 추가한다.
 
 이 명령은 파일을 수정하지 않는다. Dashboard 출력은 source of truth가 아니며, Agent의 기계 판정 기준은 `project snapshot --json`의 `control`, `checks`, `source_refs`를 우선한다.
 
