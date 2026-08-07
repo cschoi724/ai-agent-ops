@@ -13,7 +13,7 @@ Usage:
   aiops project snapshot [--target DIR] --json
   aiops project context --role ROLE [--target DIR] [--task TASK_ID] [--json]
   aiops project health [--target DIR] [--json]
-  aiops project dashboard [--target DIR] [--view main] [--level compact|standard|detail] [--format terminal] [--color auto|always|never] [--no-color]
+  aiops project dashboard [--target DIR] [--view main|work] [--level compact|standard|detail] [--format terminal|tree] [--color auto|always|never] [--no-color]
   aiops policy evaluate [--target DIR|--snapshot FILE] [--strict-level LEVEL] --json
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
@@ -2965,8 +2965,8 @@ cmd_project() {
       done
 
       case "$view" in
-        main) ;;
-        work|risk|agents|release)
+        main|work) ;;
+        risk|agents|release)
           die "project dashboard --view $view is planned for a later dashboard phase"
           ;;
         *)
@@ -2980,8 +2980,8 @@ cmd_project() {
           ;;
       esac
       case "$format" in
-        terminal) ;;
-        tree|mermaid|html)
+        terminal|tree) ;;
+        mermaid|html)
           die "project dashboard --format $format is planned for a later dashboard phase"
           ;;
         *)
@@ -3008,8 +3008,10 @@ cmd_project() {
         snapshot_text, health_text = STDIN.read.split("__AIOPS_DASHBOARD_HEALTH_JSON__", 2)
         snapshot = JSON.parse(snapshot_text)
         health_summary = JSON.parse(health_text)
-        level = ARGV[0]
-        color_mode = ARGV[1]
+        view = ARGV[0]
+        format = ARGV[1]
+        level = ARGV[2]
+        color_mode = ARGV[3]
         color_enabled = color_mode == "always" || (color_mode == "auto" && STDOUT.tty? && ENV["NO_COLOR"].to_s.empty?)
 
         def colorize(enabled, text, code)
@@ -3082,6 +3084,182 @@ cmd_project() {
           puts "  #{key}: #{status_value(color_enabled, value)}"
         end
 
+        def clean(value, fallback = "unassigned")
+          text = value.to_s.strip
+          text.empty? ? fallback : text
+        end
+
+        def shorten(text, limit = 44)
+          value = text.to_s.strip
+          return "untitled" if value.empty?
+          return value if value.length <= limit
+          "#{value[0, limit - 3]}..."
+        end
+
+        def active_work_items(tasks)
+          Array(tasks["items"]).reject { |task| %w[done cancelled].include?(task["status"].to_s) }
+        end
+
+        def status_order(status)
+          order = {
+            "approved" => 0,
+            "in_progress" => 1,
+            "rework_requested" => 2,
+            "verification_ready" => 3,
+            "verification_passed" => 4,
+            "completion_review" => 5,
+            "scoped" => 6,
+            "proposed" => 7
+          }
+          order.fetch(status.to_s, 50)
+        end
+
+        def sorted_work_items(items)
+          items.sort_by { |task| [status_order(task["status"]), task["id"].to_s] }
+        end
+
+        def next_role_command(task, target)
+          role = clean(task["target_role"], "")
+          status = task["status"].to_s
+          role = "Execution Role" if role.empty? && status == "approved"
+          role = "Lead Role" if role.empty? && %w[scoped proposed].include?(status)
+          role = "Verification Role" if role.empty? && status == "verification_ready"
+          role = "Completion Role" if role.empty? && %w[verification_passed completion_review].include?(status)
+          return "assign target_role before starting" if role.empty?
+          role_key = role.split.first.to_s.downcase
+          "aiops role prompt #{role_key} --target #{target} --task #{task["id"]}"
+        end
+
+        def next_action_label(task)
+          case task["status"].to_s
+          when "approved"
+            "start execution"
+          when "in_progress"
+            "continue work"
+          when "rework_requested"
+            "address rework"
+          when "verification_ready"
+            "start verification"
+          when "verification_passed", "completion_review"
+            "start completion"
+          when "scoped"
+            "approve or split"
+          when "proposed"
+            "scope or approve"
+          else
+            "inspect task"
+          end
+        end
+
+        def render_work_terminal(snapshot, level, color_enabled)
+          project = snapshot.fetch("project", {})
+          tasks = snapshot.fetch("tasks", {})
+          items = sorted_work_items(active_work_items(tasks))
+          puts colorize(color_enabled, "AI Ops Work Dashboard", "1;36")
+          puts "Project: #{project["name"] || File.basename(snapshot["target"].to_s)}"
+          puts "Active Work: #{items.length} / #{tasks["total"].to_i} tasks"
+          puts ""
+
+          if items.empty?
+            puts section(color_enabled, "Active Work")
+            puts "  none"
+            return
+          end
+
+          if level == "compact"
+            puts section(color_enabled, "Active Work")
+            items.first(8).each do |task|
+              puts "  - #{task["id"]}  #{status_value(color_enabled, task["status"])}  #{shorten(task["title"], 36)}"
+            end
+            remaining = items.length - 8
+            puts "  ... #{remaining} more" if remaining.positive?
+            return
+          end
+
+          puts section(color_enabled, "Active Work")
+          puts "Task              Status              Workflow    Role                Agent               Lock        Next"
+          items.each do |task|
+            id = clean(task["id"], "unknown")
+            status = status_value(color_enabled, clean(task["status"], "unknown"))
+            workflow = shorten(clean(task["workflow"], "unknown"), 10)
+            role = shorten(clean(task["target_role"]), 18)
+            agent = shorten(clean(task["target_agent"]), 18)
+            lock = shorten(clean(task["locked_by"], "none"), 10)
+            next_action = next_action_label(task)
+            printf "%-17s %-19s %-11s %-19s %-19s %-11s %s\n", id, status, workflow, role, agent, lock, next_action
+          end
+
+          return unless level == "detail"
+
+          puts ""
+          puts section(color_enabled, "Details")
+          items.each do |task|
+            puts "#{task["id"]} #{shorten(task["title"], 72)}"
+            print_key_value("Status", task["status"], color_enabled)
+            print_key_value("Workflow", task["workflow"], color_enabled)
+            print_key_value("Role", clean(task["target_role"]), color_enabled)
+            print_key_value("Agent", clean(task["target_agent"]), color_enabled)
+            print_key_value("Lock", clean(task["locked_by"], "none"), color_enabled)
+            print_key_value("Branch", clean(task["branch"], "unresolved"), color_enabled)
+            print_key_value("Worktree", clean(task["worktree"], "unresolved"), color_enabled)
+            puts "  Allowed Paths:"
+            paths = Array(task["allowed_paths"])
+            if paths.empty?
+              puts "    - unrestricted_by_task"
+            else
+              paths.each { |path| puts "    - #{path}" }
+            end
+            puts "  Source of Truth:"
+            sources = Array(task["source_of_truth"])
+            if sources.empty?
+              puts "    - none"
+            else
+              sources.each { |source| puts "    - #{source}" }
+            end
+            puts "  Next: #{next_role_command(task, snapshot["target"])}"
+            puts ""
+          end
+        end
+
+        def render_work_tree(snapshot, level, color_enabled)
+          project = snapshot.fetch("project", {})
+          tasks = snapshot.fetch("tasks", {})
+          items = sorted_work_items(active_work_items(tasks))
+          grouped = items.group_by { |task| task["status"].to_s.empty? ? "unknown" : task["status"].to_s }
+          ordered_statuses = grouped.keys.sort_by { |status| [status_order(status), status] }
+          puts colorize(color_enabled, "AI Ops Work Tree", "1;36")
+          puts "Project: #{project["name"] || File.basename(snapshot["target"].to_s)}"
+          puts ""
+
+          if ordered_statuses.empty?
+            puts "active_work"
+            puts "`-- none"
+            return
+          end
+
+          puts "active_work"
+          ordered_statuses.each_with_index do |status, status_index|
+            status_last = status_index == ordered_statuses.length - 1
+            status_prefix = status_last ? "`--" : "|--"
+            child_prefix = status_last ? "   " : "|  "
+            puts "#{status_prefix} #{status_value(color_enabled, status)}"
+            grouped[status].each_with_index do |task, task_index|
+              task_last = task_index == grouped[status].length - 1
+              task_prefix = task_last ? "`--" : "|--"
+              detail_prefix = task_last ? "   " : "|  "
+              puts "#{child_prefix}#{task_prefix} #{task["id"]} #{shorten(task["title"], 56)}"
+              next if level == "compact"
+              puts "#{child_prefix}#{detail_prefix}|-- Role: #{clean(task["target_role"])}"
+              puts "#{child_prefix}#{detail_prefix}|-- Agent: #{clean(task["target_agent"])}"
+              puts "#{child_prefix}#{detail_prefix}|-- Workflow: #{clean(task["workflow"], "unknown")}"
+              puts "#{child_prefix}#{detail_prefix}|-- Lock: #{clean(task["locked_by"], "none")}"
+              puts "#{child_prefix}#{detail_prefix}`-- Next: #{next_action_label(task)}"
+              next unless level == "detail"
+              puts "#{child_prefix}#{detail_prefix}    Command: #{next_role_command(task, snapshot["target"])}"
+            end
+          end
+        end
+
         project = snapshot.fetch("project", {})
         health = health_summary.fetch("summary", {})
         health_status = health_summary.fetch("overall", snapshot.fetch("health", {})["overall"])
@@ -3109,6 +3287,15 @@ cmd_project() {
         deferred_agents = agents.count { |agent| agent["status"] == "deferred" }
         active_roles = Array(value(snapshot, "agents", "active_roles")).map(&:to_s).reject(&:empty?)
         next_steps = Array(snapshot["next"]).map { |step| command_or_message(step) }.compact.uniq
+
+        if view == "work"
+          if format == "tree"
+            render_work_tree(snapshot, level, color_enabled)
+          else
+            render_work_terminal(snapshot, level, color_enabled)
+          end
+          exit 0
+        end
 
         puts colorize(color_enabled, "AI Ops Dashboard", "1;36")
         puts "Project: #{project["name"] || File.basename(snapshot["target"].to_s)}"
@@ -3183,7 +3370,7 @@ cmd_project() {
           puts section(color_enabled, "Next")
           next_steps.first(level == "compact" ? 3 : next_steps.length).each { |step| puts "  - #{step}" }
         end
-      ' "$level" "$color"
+      ' "$view" "$format" "$level" "$color"
       ;;
     snapshot)
       target="$(pwd)"
