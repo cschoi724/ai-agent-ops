@@ -22,6 +22,11 @@ trap 'rm -rf "$tmpdir"' EXIT INT TERM
   exit 1
 }
 
+grep -Eq '^\.ai_project/\.runtime/$' "$tmpdir/.gitignore" || {
+  printf '%s\n' "missing AI Ops runtime cache gitignore rule" >&2
+  exit 1
+}
+
 "$repo_root/bin/aiops" doctor --target "$tmpdir" --strict >/tmp/aiops-e2e-seed-doctor.out
 
 printf '%s\n' "ok: seed both and doctor strict"

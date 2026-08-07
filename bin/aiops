@@ -108,6 +108,37 @@ same_file_content() {
   [ -f "$1" ] && [ -f "$2" ] && cmp -s "$1" "$2"
 }
 
+aiops_runtime_ignore_present() {
+  gitignore="$1"
+  [ -f "$gitignore" ] || return 1
+  grep -Eq '^/?\.ai_project/\.runtime/?$' "$gitignore"
+}
+
+ensure_aiops_runtime_ignored() {
+  target="$1"
+  gitignore="$target/.gitignore"
+
+  if aiops_runtime_ignore_present "$gitignore"; then
+    return 1
+  fi
+
+  if [ -s "$gitignore" ]; then
+    printf '\n# AI Ops local runtime cache\n.ai_project/.runtime/\n' >> "$gitignore"
+  else
+    {
+      printf '# AI Ops local runtime cache\n'
+      printf '.ai_project/.runtime/\n'
+    } > "$gitignore"
+  fi
+  return 0
+}
+
+runtime_status_ref_tracked() {
+  target="$1"
+  git -C "$target" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+  git -C "$target" ls-files --error-unmatch .ai_project/.runtime/status_ref >/dev/null 2>&1
+}
+
 check_required_file() {
   file="$1"
   label="$2"
@@ -1637,6 +1668,9 @@ cmd_sync_status() {
   info "worktree_head: $worktree_head"
 
   if [ -d "$target/.ai_project" ]; then
+    if ensure_aiops_runtime_ignored "$target"; then
+      info "updated: .gitignore ignores .ai_project/.runtime/"
+    fi
     runtime_dir="$target/.ai_project/.runtime"
     mkdir -p "$runtime_dir"
     {
@@ -1647,6 +1681,7 @@ cmd_sync_status() {
       printf 'checked_at: %s\n' "$(date +%Y-%m-%d)"
     } > "$runtime_dir/status_ref"
     info "recorded: .ai_project/.runtime/status_ref"
+    info "runtime_cache: local_only"
   fi
 }
 
@@ -1801,6 +1836,9 @@ project_needs_review_decision() {
   if [ -f "$target/CLAUDE.md" ] && [ -f "$target/.ai/templates/tool_adapters/claude/CLAUDE.md" ] && ! same_file_content "$target/CLAUDE.md" "$target/.ai/templates/tool_adapters/claude/CLAUDE.md"; then
     return 0
   fi
+  if runtime_status_ref_tracked "$target"; then
+    return 0
+  fi
 
   return 1
 }
@@ -1900,6 +1938,10 @@ print_migration_lists() {
     info "  - .ai_knowledge/context_packs/_template.md"
     safe_count=$((safe_count + 1))
   fi
+  if ! aiops_runtime_ignore_present "$target/.gitignore"; then
+    info "  - .gitignore AI Ops runtime cache rule"
+    safe_count=$((safe_count + 1))
+  fi
   if [ "$safe_count" -eq 0 ]; then
     info "  - none"
   fi
@@ -1927,6 +1969,10 @@ print_migration_lists() {
     info "  - CLAUDE.md adapter update"
     decision_count=$((decision_count + 1))
   fi
+  if runtime_status_ref_tracked "$target"; then
+    info "  - tracked .ai_project/.runtime/status_ref removal"
+    decision_count=$((decision_count + 1))
+  fi
   if [ "$decision_count" -eq 0 ]; then
     info "  - none"
   fi
@@ -1951,6 +1997,7 @@ print_migration_lists() {
     info "  - .ai_project/tasks/"
     info "  - .ai_project/handoffs/"
     info "  - .ai_knowledge/"
+    info "  - .gitignore"
     info ""
     info "approval_prompt:"
     info "  위 safe_auto_fix와 apply_scope 범위만 적용해도 될까요?"
@@ -2065,6 +2112,16 @@ cmd_migrate_verify() {
     failed=1
   fi
 
+  if aiops_runtime_ignore_present "$target/.gitignore"; then
+    info "ok: .gitignore ignores .ai_project/.runtime/"
+  else
+    info "missing: .gitignore AI Ops runtime cache rule"
+    failed=1
+  fi
+  if runtime_status_ref_tracked "$target"; then
+    info "needs_user_decision: tracked .ai_project/.runtime/status_ref removal"
+  fi
+
   [ "$failed" -eq 0 ] || return 1
   info "verification: passed"
 }
@@ -2131,6 +2188,7 @@ cmd_migrate() {
       [ -d "$target/.ai_knowledge/context_packs" ] || status="migration_needed"
       [ -f "$target/.ai_knowledge/context_packs/_template.md" ] || status="migration_needed"
     fi
+    aiops_runtime_ignore_present "$target/.gitignore" || status="migration_needed"
     if [ "$status" = "up_to_date" ] && project_needs_review_decision "$target"; then
       status="review_needed"
     fi
@@ -2149,6 +2207,7 @@ cmd_migrate() {
   info "  - product code: not touched"
   info "  - product Docs: not touched"
   info "  - .ai_project/.ai_knowledge: safe migration scope only"
+  info "  - .gitignore: AI Ops runtime cache ignore only"
   info "  - adapter files: report drift, do not rewrite automatically"
 
   if [ "$mode" != "apply" ]; then
@@ -2223,7 +2282,7 @@ cmd_migrate() {
       printf '| core_version | %s |\n' "$current_version"
       printf '| core_source | %s |\n' "$core_source"
       printf '| apply_scope | safe_auto_fix |\n'
-      printf '| safe_fixes | core_version, tasks directories, handoffs directory, ops records, knowledge context packs |\n'
+      printf '| safe_fixes | core_version, tasks directories, handoffs directory, ops records, knowledge context packs, runtime cache ignore |\n'
       printf '| review_scope | schema front matter, adapter drift, source_of_truth, Task metadata |\n'
     } > "$target/.ai_project/ops_migration_plan.md"
     info "created: .ai_project/ops_migration_plan.md"
@@ -2235,7 +2294,7 @@ cmd_migrate() {
       printf '| core_version | %s |\n' "$current_version"
       printf '| core_source | %s |\n' "$core_source"
       printf '| apply_scope | safe_auto_fix |\n'
-      printf '| safe_fixes | core_version, tasks directories, handoffs directory, ops records, knowledge context packs |\n'
+      printf '| safe_fixes | core_version, tasks directories, handoffs directory, ops records, knowledge context packs, runtime cache ignore |\n'
       printf '| review_scope | schema front matter, adapter drift, source_of_truth, Task metadata |\n'
     } >> "$target/.ai_project/ops_migration_plan.md"
     info "updated: .ai_project/ops_migration_plan.md"
@@ -2288,6 +2347,12 @@ cmd_migrate() {
     fi
   fi
 
+  if ensure_aiops_runtime_ignored "$target"; then
+    info "updated: .gitignore ignores .ai_project/.runtime/"
+  else
+    info "ok: .gitignore ignores .ai_project/.runtime/"
+  fi
+
   info ""
   info "AI Ops migration apply complete."
   info ""
@@ -2295,6 +2360,7 @@ cmd_migrate() {
   info "  - .ai_project operating records"
   info "  - task/handoff directories"
   info "  - .ai_knowledge minimal structure when missing"
+  info "  - .gitignore AI Ops runtime cache rule"
   info "not_changed:"
   info "  - product code"
   info "  - product Docs"
@@ -2629,6 +2695,12 @@ cmd_seed() {
       ;;
   esac
 
+  if ensure_aiops_runtime_ignored "$target"; then
+    info "updated: .gitignore ignores .ai_project/.runtime/"
+  else
+    info "ok: .gitignore ignores .ai_project/.runtime/"
+  fi
+
   info ""
   info "AI Ops seed complete."
   info "Next: open an agent session in $target and say:"
@@ -2812,6 +2884,10 @@ cmd_doctor() {
     else
       info "note: canonical_status_ref unresolved; recommended for multi-worktree projects"
     fi
+    if runtime_status_ref_tracked "$target"; then
+      info "warn: .ai_project/.runtime/status_ref is tracked; remove it from Git and keep .ai_project/.runtime/ ignored"
+      warnings=$((warnings + 1))
+    fi
   else
     info "note: .ai_project missing; run bootstrap when ready"
   fi
@@ -2949,6 +3025,11 @@ cmd_project() {
           stdout.strip
         end
 
+        def git_tracked?(target, path)
+          _stdout, _stderr, status = Open3.capture3("git", "-C", target, "ls-files", "--error-unmatch", path)
+          status.success?
+        end
+
         def files_under(path)
           return [] unless Dir.exist?(path)
           files = []
@@ -3020,6 +3101,7 @@ cmd_project() {
 
         status_ref = value_from(operating, operating_path, "canonical_status_ref")
         git_inside = git(target, "rev-parse", "--is-inside-work-tree") == "true"
+        runtime_status_tracked = git_inside && git_tracked?(target, ".ai_project/.runtime/status_ref")
         local_branch = git_inside ? git(target, "rev-parse", "--abbrev-ref", "HEAD") : nil
         local_head = git_inside ? git(target, "rev-parse", "--short", "HEAD") : nil
         status_ref_sha = git_inside && status_ref ? git(target, "rev-parse", "--verify", "#{status_ref}^{commit}") : nil
@@ -3337,6 +3419,13 @@ cmd_project() {
                 "normalized_value" => key == "project" ? project["name"] : project[key]
               })
             end
+          end
+
+          if runtime_status_tracked
+            add_check.call("runtime_status_ref_tracked", "warn", "high", ".ai_project/.runtime/status_ref is tracked; remove it from Git and keep .ai_project/.runtime/ ignored", {
+              "path" => ".ai_project/.runtime/status_ref",
+              "expected_ignore" => ".ai_project/.runtime/"
+            })
           end
 
           case status_ref_state
@@ -4288,6 +4377,11 @@ cmd_project() {
           stdout.strip
         end
 
+        def git_tracked?(target, path)
+          _stdout, _stderr, status = Open3.capture3("git", "-C", target, "ls-files", "--error-unmatch", path)
+          status.success?
+        end
+
         def files_under(path)
           return [] unless Dir.exist?(path)
           files = []
@@ -4471,6 +4565,9 @@ cmd_project() {
 
         status_ref = value_from(operating, operating_path, "canonical_status_ref")
         git_inside = git(target, "rev-parse", "--is-inside-work-tree") == "true"
+        if git_inside && git_tracked?(target, ".ai_project/.runtime/status_ref")
+          add.call("warn", "runtime_status_ref_tracked", ".ai_project/.runtime/status_ref is tracked; remove it from Git and keep .ai_project/.runtime/ ignored")
+        end
         git_branch = git_inside ? git(target, "rev-parse", "--abbrev-ref", "HEAD") : nil
         git_head = git_inside ? git(target, "rev-parse", "--short", "HEAD") : nil
         status_ref_sha = git_inside && status_ref ? git(target, "rev-parse", "--verify", "#{status_ref}^{commit}") : nil
@@ -6981,6 +7078,7 @@ cmd_role() {
       info "- Role이 바뀌면 최종 응답에 '다음 Agent에게 전달할 말'을 남긴다."
       info "- 다중 worktree 환경에서는 현재 worktree 문서를 최신 공용 상태로 가정하지 않는다."
       info "- 작업 상태 판단 전 canonical status ref와 SHA를 확인한다."
+      info "- .ai_project/.runtime/status_ref는 로컬 runtime cache이므로 commit/PR에 포함하지 않는다."
       info "- 실제 파일 수정, 상태 전이, lock, handoff, commit, push, PR, merge, deploy, 외부 설정 변경 전에는 aiops action plan으로 의도와 차단 항목을 확인한다."
       info "- Action Plan의 blocked_actions가 있으면 진행하지 않고 이유와 evidence를 사용자에게 요약한다."
       info "- Action Plan의 requires_user_approval 항목은 사용자 승인 전 실행하지 않는다."

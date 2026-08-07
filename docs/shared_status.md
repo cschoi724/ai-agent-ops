@@ -38,6 +38,8 @@ aiops sync-status
 
 `sync-status`는 `git fetch --prune origin`을 실행하고 확인한 SHA를 출력한다. `.ai_project/`가 있으면 `.ai_project/.runtime/status_ref`에도 기록한다.
 
+`.ai_project/.runtime/status_ref`는 공유 운영 문서가 아니라 로컬 runtime cache다. 프로젝트는 `.ai_project/.runtime/`를 Git에서 ignore해야 하며, 이 파일을 commit/PR에 포함하지 않는다. canonical 기준이 필요할 때마다 각 worktree에서 `aiops sync-status`로 다시 만든다.
+
 ## 3. Task 상태 확인
 
 현재 worktree의 local 상태:
