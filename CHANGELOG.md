@@ -10,6 +10,20 @@
 
 ## Unreleased
 
+## 0.11.1 - 2026-08-07
+
+### Changed
+
+- 신규 guided full bootstrap 프로젝트에서 `branch_pr_strategy.md`, `workflow_overrides.md`, `ops_migration_plan.md`를 상황에 맞는 조건부 문서로 판정하도록 정렬
+- `doctor`, `validate project`, `project snapshot`, `project health`, `policy evaluate`가 조건부 문서 누락을 서로 다르게 판단하지 않도록 일관성 보강
+- `core_version` 비교 시 quote/backtick 포함 값이 현재 core version과 다르다고 오탐되지 않도록 scalar 정규화
+- `session-guide`와 `bootstrap-guide`가 `agent_registry.md`의 active/deferred Agent Role과 `current_context.md`의 현재 초점을 표시하도록 개선
+
+### Fixed
+
+- 신규 bootstrap 완료 프로젝트에서 선택 문서가 불필요하게 strict missing/blocker로 처리되던 문제 수정
+- `branch_pr` 전략이 실제 활성화된 경우에는 `branch_pr_strategy.md` 누락을 doctor/validate/snapshot/health/policy가 모두 blocker로 판단하도록 보강
+
 ## 0.11.0 - 2026-08-06
 
 ### Added
