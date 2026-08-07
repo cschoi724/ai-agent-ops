@@ -210,6 +210,8 @@ git -C "$project" push -u origin develop >/dev/null 2>&1
 before_hash="$(find "$project" -type f -not -path '*/.git/*' -print | sort | xargs shasum -a 256 | shasum -a 256 | awk "{print \$1}")"
 "$repo_root/bin/aiops" project dashboard --target "$project" >/tmp/aiops-e2e-project-dashboard.out
 "$repo_root/bin/aiops" project health --target "$project" --json >/tmp/aiops-e2e-project-dashboard-health.json
+"$repo_root/bin/aiops" project dashboard --target "$project" --json >/tmp/aiops-e2e-project-dashboard.json
+"$repo_root/bin/aiops" validate project-dashboard /tmp/aiops-e2e-project-dashboard.json >/tmp/aiops-e2e-project-dashboard-validate.out
 after_hash="$(find "$project" -type f -not -path '*/.git/*' -print | sort | xargs shasum -a 256 | shasum -a 256 | awk "{print \$1}")"
 [ "$before_hash" = "$after_hash" ] || {
   printf '%s\n' "project dashboard modified project files" >&2
@@ -248,6 +250,24 @@ ruby -rjson -e '
     abort("dashboard readiness #{key} diverges from project health") unless dashboard.include?("#{label}: #{value}")
   end
 ' /tmp/aiops-e2e-project-dashboard-health.json /tmp/aiops-e2e-project-dashboard.out
+ruby -rjson -e '
+  health = JSON.parse(File.read(ARGV[0]))
+  dashboard = JSON.parse(File.read(ARGV[1]))
+  abort("dashboard json schema mismatch") unless dashboard["schema"] == "aiops.project_dashboard.v1"
+  abort("dashboard json project mismatch") unless dashboard.dig("project", "name") == "DashboardProject"
+  abort("dashboard json status diverges") unless dashboard.dig("status", "overall") == health["overall"]
+  abort("dashboard json blocker count diverges") unless dashboard.dig("status", "blockers") == health.dig("summary", "blockers")
+  abort("dashboard json warning count diverges") unless dashboard.dig("status", "warnings") == health.dig("summary", "warnings")
+  abort("dashboard json progress missing") unless dashboard.dig("progress", "total_tasks") == 5 && dashboard.dig("progress", "done_tasks") == 1
+  abort("dashboard json readiness diverges") unless dashboard.dig("readiness", "multi_agent") == health.dig("readiness", "multi_agent")
+  active = dashboard.dig("tasks", "active_items")
+  abort("dashboard json active items missing") unless active.is_a?(Array) && active.length == 4
+  approved = active.find { |task| task["id"] == "T-20260807-002" }
+  abort("dashboard json approved task missing") unless approved
+  abort("dashboard json next action missing") unless approved.dig("next", "action") == "start execution"
+  abort("dashboard json dependency missing") unless approved["depends_on"].include?("T-20260807-001")
+  abort("dashboard json maps missing") unless dashboard.dig("maps", "dependencies", "edges").any? { |edge| edge["from"] == "T-20260807-001" && edge["to"] == "T-20260807-002" }
+' /tmp/aiops-e2e-project-dashboard-health.json /tmp/aiops-e2e-project-dashboard.json
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --level compact >/tmp/aiops-e2e-project-dashboard-compact.out
 grep -q 'Project: DashboardProject' /tmp/aiops-e2e-project-dashboard-compact.out || {
@@ -423,6 +443,16 @@ grep -q 'classDef proposed' /tmp/aiops-e2e-project-dashboard-mermaid-dependencie
   printf '%s\n' "dependency mermaid classDef missing" >&2
   exit 1
 }
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map dependencies --json >/tmp/aiops-e2e-project-dashboard-mermaid-json.json
+"$repo_root/bin/aiops" validate project-dashboard /tmp/aiops-e2e-project-dashboard-mermaid-json.json >/tmp/aiops-e2e-project-dashboard-mermaid-json-validate.out
+ruby -rjson -e '
+  dashboard = JSON.parse(File.read(ARGV[0]))
+  abort("mermaid json format missing") unless dashboard["format"] == "mermaid"
+  abort("mermaid json map missing") unless dashboard["map"] == "dependencies"
+  abort("mermaid json work view missing") unless dashboard["view"] == "work"
+  abort("mermaid json map edge missing") unless dashboard.dig("maps", "dependencies", "edges").any? { |edge| edge["type"] == "depends_on" }
+' /tmp/aiops-e2e-project-dashboard-mermaid-json.json
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map workflow >/tmp/aiops-e2e-project-dashboard-mermaid-workflow.out
 grep -q 'S_proposed --> S_scoped' /tmp/aiops-e2e-project-dashboard-mermaid-workflow.out || {

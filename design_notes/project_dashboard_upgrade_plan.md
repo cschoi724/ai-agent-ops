@@ -1,6 +1,6 @@
 # Project Dashboard Upgrade Plan
 
-상태: 4차 Mermaid Maps 구현 완료, 5차 JSON Contract 대기
+상태: 5차 Dashboard JSON Contract 구현 완료, 6차 Risk/Agent/Release View 확장 대기
 대상: 5차 policy evaluation / project snapshot / action plan 계약 이후
 담당: AI Ops 운영자
 
@@ -583,6 +583,14 @@ Dashboard는 정보량을 선택할 수 있어야 한다.
 - snapshot/health/policy와 핵심 값 일치
 - empty/guided/stale/custom policy fixture 통과
 - invalid target 또는 broken snapshot 처리 non-zero
+
+구현 상태:
+
+- `aiops project dashboard --json` 지원
+- `schemas/project_dashboard.schema.json` 추가
+- `aiops validate project-dashboard FILE` 지원
+- Dashboard JSON에 status, progress, readiness, git, agents, tasks, risks, control, next, maps 포함
+- maps는 dependencies/workflow/agents/blockers를 nodes/edges 계약으로 제공
 
 ### 6차. Risk / Agent / Release View 확장
 

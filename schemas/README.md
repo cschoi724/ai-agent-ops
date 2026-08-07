@@ -55,6 +55,7 @@ CLI는 front matter를 읽어 schema로 검증하고, 본문은 사람이 읽는
 | `runtime_export.schema.json` | `aiops export runtime` JSON | 외부 runtime adapter가 읽을 Task/Role/Handoff snapshot |
 | `bootstrap_options.schema.json` | `runtime/bootstrap_options.json` | Bootstrap 선택 후보 catalog |
 | `project_snapshot.schema.json` | `aiops project snapshot --json` JSON | Agent가 먼저 읽는 프로젝트 상태 계약과 통제 신호 |
+| `project_dashboard.schema.json` | `aiops project dashboard --json` JSON | dashboard terminal/tree/Mermaid/UI renderer가 공유하는 projection 계약 |
 | `policy_rules.schema.json` | `runtime/policy_rules.json` | 운영 판단 규칙 catalog |
 | `policy_evaluation.schema.json` | `aiops policy evaluate --json` JSON | snapshot에 policy rule을 적용한 평가 결과 |
 | `action_plan.schema.json` | `aiops action plan --json` JSON | Agent 작업 착수 전 의도/승인/차단 검토 계약 |
@@ -76,6 +77,8 @@ Workflow catalog 단계 이후 `runtime/workflows.json`은 상태별 checkpoint�
 Policy rules 단계 이후 `runtime/policy_rules.json`은 health, snapshot, validate에서 사용하는 운영 판단 규칙을 데이터화하기 위한 catalog 역할을 한다. `aiops policy evaluate --json`은 project snapshot을 입력으로 받아 적용된 rule을 `aiops.policy_evaluation.v1` 계약으로 출력한다. `project snapshot --json`도 같은 policy 평가 요약을 포함한다.
 
 Action plan 단계 이후 Agent는 작업 착수 전 `aiops action plan --json`으로 의도한 행동과 승인 필요 항목, 차단 항목을 구조화할 수 있다. 이 계약은 자동 실행 엔진이 아니라 작업 전 검토 결과다.
+
+Dashboard JSON 단계 이후 `aiops project dashboard --json`은 사람이 보는 terminal/tree/Mermaid 출력과 같은 의미를 공유하는 projection 계약을 제공한다. Dashboard JSON은 source of truth가 아니며 `project snapshot --json`과 `project health --json`에서 파생된다.
 
 ## 호환성 원칙
 

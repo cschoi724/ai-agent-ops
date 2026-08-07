@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/project_dashboard.schema.json",
+  "title": "AI Ops Project Dashboard",
+  "description": "Machine-readable dashboard projection for terminal, tree, Mermaid, and later UI renderers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "generated_at",
+    "target",
+    "view",
+    "level",
+    "format",
+    "map",
+    "project",
+    "status",
+    "progress",
+    "readiness",
+    "git",
+    "agents",
+    "tasks",
+    "risks",
+    "control",
+    "next",
+    "maps"
+  ],
+  "properties": {
+    "schema": { "const": "aiops.project_dashboard.v1" },
+    "generated_at": { "type": "string", "minLength": 1 },
+    "target": { "type": "string", "minLength": 1 },
+    "view": { "type": "string", "enum": ["main", "work"] },
+    "level": { "type": "string", "enum": ["compact", "standard", "detail"] },
+    "format": { "type": "string", "enum": ["terminal", "tree", "mermaid"] },
+    "map": { "type": "string", "enum": ["dependencies", "workflow", "agents", "blockers"] },
+    "project": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["name", "core_version", "operating_mode", "workflow_policy", "knowledge_mode"],
+      "properties": {
+        "name": { "type": "string" },
+        "core_version": { "type": "string" },
+        "recorded_core_version": { "type": ["string", "null"] },
+        "operating_mode": { "type": ["string", "null"] },
+        "workflow_policy": { "type": ["string", "null"] },
+        "knowledge_mode": { "type": ["string", "null"] }
+      }
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["overall", "blockers", "warnings"],
+      "properties": {
+        "overall": { "type": "string", "enum": ["ok", "warning", "blocked"] },
+        "blockers": { "type": "integer", "minimum": 0 },
+        "warnings": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_tasks", "done_tasks", "active_tasks", "done_ratio"],
+      "properties": {
+        "total_tasks": { "type": "integer", "minimum": 0 },
+        "done_tasks": { "type": "integer", "minimum": 0 },
+        "active_tasks": { "type": "integer", "minimum": 0 },
+        "done_ratio": { "type": "number", "minimum": 0 }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["bootstrap", "task_work", "multi_agent", "migration"],
+      "properties": {
+        "bootstrap": { "type": ["string", "null"] },
+        "task_work": { "type": ["string", "null"] },
+        "multi_agent": { "type": ["string", "null"] },
+        "migration": { "type": ["string", "null"] }
+      }
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["branch", "head", "canonical_status_ref", "canonical_status_sha", "recorded_status_sha", "status_ref_state"],
+      "properties": {
+        "branch": { "type": ["string", "null"] },
+        "head": { "type": ["string", "null"] },
+        "canonical_status_ref": { "type": ["string", "null"] },
+        "canonical_status_sha": { "type": ["string", "null"] },
+        "recorded_status_sha": { "type": ["string", "null"] },
+        "status_ref_state": { "type": ["string", "null"] }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["enabled", "deferred", "total", "active_roles", "items"],
+      "properties": {
+        "enabled": { "type": "integer", "minimum": 0 },
+        "deferred": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 },
+        "active_roles": { "type": "array", "items": { "type": "string" } },
+        "items": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "tasks": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["total", "active", "by_status", "items", "active_items"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "active": { "type": "integer", "minimum": 0 },
+        "by_status": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/taskItem" } },
+        "active_items": { "type": "array", "items": { "$ref": "#/$defs/taskItem" } }
+      }
+    },
+    "risks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blockers", "warnings"],
+      "properties": {
+        "blockers": { "type": "array", "items": { "type": "object" } },
+        "warnings": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "control": { "type": "object" },
+    "next": { "type": "array", "items": { "type": "object" } },
+    "maps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dependencies", "workflow", "agents", "blockers"],
+      "properties": {
+        "dependencies": { "$ref": "#/$defs/map" },
+        "workflow": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["type", "direction", "statuses", "transitions", "task_positions"],
+          "properties": {
+            "type": { "const": "workflow" },
+            "direction": { "type": "string" },
+            "statuses": { "type": "array", "items": { "type": "object" } },
+            "transitions": { "type": "array", "items": { "type": "object" } },
+            "task_positions": { "type": "array", "items": { "type": "object" } }
+          }
+        },
+        "agents": { "$ref": "#/$defs/map" },
+        "blockers": { "$ref": "#/$defs/map" }
+      }
+    }
+  },
+  "$defs": {
+    "taskItem": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "status",
+        "status_class",
+        "workflow",
+        "target_role",
+        "target_agent",
+        "lock_state",
+        "depends_on",
+        "blocks",
+        "allowed_paths",
+        "source_of_truth",
+        "next",
+        "path"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": ["string", "null"] },
+        "status": { "type": ["string", "null"] },
+        "status_class": { "type": "string" },
+        "workflow": { "type": ["string", "null"] },
+        "target_role": { "type": ["string", "null"] },
+        "target_agent": { "type": ["string", "null"] },
+        "locked_by": { "type": ["string", "null"] },
+        "lock_state": { "type": "string", "enum": ["none", "locked"] },
+        "branch": { "type": ["string", "object", "null"] },
+        "worktree": { "type": ["string", "null"] },
+        "depends_on": { "type": "array", "items": { "type": "string" } },
+        "blocks": { "type": "array", "items": { "type": "string" } },
+        "allowed_paths": { "type": "array", "items": { "type": "string" } },
+        "source_of_truth": { "type": "array", "items": { "type": "string" } },
+        "report_to": { "type": ["string", "null"] },
+        "qa_to": { "type": ["string", "null"] },
+        "path": { "type": "string" },
+        "next": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "command"],
+          "properties": {
+            "action": { "type": "string" },
+            "command": { "type": "string" }
+          }
+        }
+      }
+    },
+    "map": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "direction", "nodes", "edges"],
+      "properties": {
+        "type": { "type": "string" },
+        "direction": { "type": "string" },
+        "nodes": { "type": "array", "items": { "type": "object" } },
+        "edges": { "type": "array", "items": { "type": "object" } }
+      }
+    }
+  }
+}
