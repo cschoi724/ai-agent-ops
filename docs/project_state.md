@@ -90,6 +90,18 @@ aiops project dashboard --color always
 
 사용자용 top-level 명령은 파일을 수정하지 않으며, 실행할 때마다 `project snapshot --json`과 `project health --json`을 다시 계산한 현재 projection을 표시한다. Agent와 자동화가 읽어야 하는 기계 계약은 여전히 `aiops project snapshot --json`, `aiops project health --json`, `aiops project dashboard --json`이다.
 
+사용자용 help는 자주 쓰는 명령을 먼저 보여준다.
+
+```sh
+aiops help
+aiops help work
+aiops help dashboard
+aiops help ai
+aiops help all
+```
+
+기본 `aiops help`는 `project snapshot --json` 같은 Agent/자동화용 명령을 숨긴다. 기계 계약 명령은 `aiops help ai`, 전체 명령 목록은 `aiops help all`에서 확인한다. 도움말 문구는 기본 한국어이며 `AIOPS_LOCALE=en` 또는 `--locale en`으로 영어 표시를 선택할 수 있다.
+
 Main Dashboard 표시 항목은 프로젝트 진행률, readiness, canonical status sync, 운영 설정, Agent/Role 요약, blocker/warning, next command다.
 
 Work Dashboard 표시 항목은 활성 일감, status, workflow, target role, target agent, lock, 다음 Role Session 후보, detail 레벨의 allowed_paths/source_of_truth다.

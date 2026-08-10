@@ -13,6 +13,7 @@
 ### Added
 
 - User-facing dashboard shortcuts: `aiops status`, `aiops work`, `aiops risks`, `aiops agents`, and `aiops release`.
+- User-focused help UX with `aiops help ai`, `aiops help all`, command-specific help topics, and Korean/English help text selection.
 
 ### Fixed
 
