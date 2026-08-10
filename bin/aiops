@@ -5191,8 +5191,17 @@ cmd_project() {
           colorize(enabled, html_role_label(value), "34")
         end
 
+        def cli_entity_name(value, fallback)
+          text = value.to_s.strip
+          text.empty? ? fallback : text
+        end
+
         def cli_agent_value(enabled, value)
-          colorize(enabled, html_agent_label(value), "36")
+          colorize(enabled, cli_entity_name(value, html_fallback_label("agent")), "36")
+        end
+
+        def cli_team_label(value)
+          cli_entity_name(value, html_fallback_label("team"))
         end
 
         def cli_workflow_value(enabled, value)
@@ -5207,11 +5216,23 @@ cmd_project() {
           snapshot.dig("project", "name") || File.basename(snapshot["target"].to_s)
         end
 
-        def cli_check_message(message)
+        def cli_check_message(message, check_code = nil, evidence = nil)
           text = message.to_s
+          path = evidence.is_a?(Hash) ? evidence["path"].to_s.strip : ""
+          path = text.sub(/ missing(?:;.*)?\z/, "") if path.empty? && text =~ / missing(?:;.*)?\z/
+          case check_code.to_s
+          when "required_file_missing"
+            return "#{path} 파일이 없습니다" unless path.empty?
+          when "required_dir_missing"
+            return "#{path} 디렉터리가 없습니다" unless path.empty?
+          when "workflow_catalog_missing"
+            return "#{path} 파일을 읽을 수 없습니다" unless path.empty?
+          end
           case text
           when /\A\.ai core missing; run aiops seed first\z/
             "AI Ops 코어가 없습니다. aiops seed를 먼저 실행하세요"
+          when /\AAI Ops core가 연결되지 않았습니다\. seed 설치가 필요합니다\.\z/
+            "AI Ops 코어가 연결되지 않았습니다. seed 설치가 필요합니다."
           when /\A\.ai_project missing; run bootstrap first\z/
             ".ai_project가 없습니다. bootstrap을 먼저 실행하세요"
           when /\Aworkflow catalog missing or unreadable\z/
@@ -5235,9 +5256,19 @@ cmd_project() {
           cli_check_message(reason)
         end
 
+        def display_command_or_message(step)
+          if step.is_a?(Hash) && step["command"]
+            step["command"]
+          elsif step.is_a?(Hash) && step["message"]
+            cli_check_message(step["message"])
+          else
+            command_or_message(step)
+          end
+        end
+
         def cli_check_line(enabled, check)
           code = check["level"] == "blocker" ? "31" : "33"
-          "#{colorize(enabled, cli_check_label(check["code"]), code)}: #{cli_check_message(check["message"])}"
+          "#{colorize(enabled, cli_check_label(check["code"]), code)}: #{cli_check_message(check["message"], check["code"], check["evidence"])}"
         end
 
         def cli_task_groups(items)
@@ -5257,7 +5288,7 @@ cmd_project() {
         end
 
         def cli_next_steps(snapshot, health_summary, limit)
-          Array(snapshot["next"]).map { |step| command_or_message(step) }.compact.uniq.first(limit)
+          Array(snapshot["next"]).map { |step| display_command_or_message(step) }.compact.uniq.first(limit)
         end
 
         def render_user_status_dashboard(snapshot, health_summary, level, color_enabled)
@@ -5401,7 +5432,7 @@ cmd_project() {
             roles = Array(agent["declared_roles"]).map { |role| html_role_label(role) }.join(", ")
             roles = "역할 미지정" if roles.empty?
             task_count = Array(agent["assigned_active_tasks"]).length
-            puts "  #{cli_agent_value(color_enabled, agent["name"] || agent["id"])}  #{cli_status_value(color_enabled, agent["status"])}  #{html_team_label(agent["team"])}  담당 일감 #{task_count}개"
+            puts "  #{cli_agent_value(color_enabled, agent["name"] || agent["id"])}  #{cli_status_value(color_enabled, agent["status"])}  #{cli_team_label(agent["team"])}  담당 일감 #{task_count}개"
             puts "    역할: #{roles}" unless level == "compact"
           end
           puts ""
@@ -5467,7 +5498,7 @@ cmd_project() {
           risks = projection["risks"]
           release = projection.dig("views", "release") || {}
           active_items = Array(tasks["active_items"])
-          next_steps = Array(projection["next"]).map { |step| command_or_message(step) }.compact.uniq
+          next_steps = Array(projection["next"]).map { |step| display_command_or_message(step) }.compact.uniq
           done_ratio = progress["done_ratio"].to_f
           progress_pct = (done_ratio * 100).round
 
@@ -5601,7 +5632,7 @@ cmd_project() {
         enabled_agents = agents.count { |agent| agent["status"] == "enabled" }
         deferred_agents = agents.count { |agent| agent["status"] == "deferred" }
         active_roles = Array(value(snapshot, "agents", "active_roles")).map(&:to_s).reject(&:empty?)
-        next_steps = Array(snapshot["next"]).map { |step| command_or_message(step) }.compact.uniq
+        next_steps = Array(snapshot["next"]).map { |step| display_command_or_message(step) }.compact.uniq
 
         if as_json
           puts JSON.pretty_generate(dashboard_projection(snapshot, health_summary, view, level, format, map, focus, depth, group_by))
@@ -6330,7 +6361,7 @@ cmd_project() {
           next_steps << {
             "audience" => "user",
             "action" => "approve_seed",
-            "message" => "AI Ops 코어가 연결되지 않았습니다. seed 설치가 필요합니다."
+            "message" => "AI Ops core가 연결되지 않았습니다. seed 설치가 필요합니다."
           }
         end
         unless project["present"]

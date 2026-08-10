@@ -405,6 +405,10 @@ grep -q '구현 시작' /tmp/aiops-e2e-user-work.out || {
   printf '%s\n' "user work localized next action missing" >&2
   exit 1
 }
+grep -q '담당 에이전트: Development Agent' /tmp/aiops-e2e-user-work.out || {
+  printf '%s\n' "user work should preserve agent name" >&2
+  exit 1
+}
 if grep -q '^AI Ops Work Dashboard$' /tmp/aiops-e2e-user-work.out; then
   printf '%s\n' "user work should not use advanced work dashboard output" >&2
   exit 1
@@ -586,10 +590,18 @@ grep -q '^역할별 일감$' /tmp/aiops-e2e-user-agents.out || {
   printf '%s\n' "user agents role load section missing" >&2
   exit 1
 }
-grep -q '개발 담당' /tmp/aiops-e2e-user-agents.out || {
-  printf '%s\n' "user agents localized agent label missing" >&2
+grep -q 'Development Agent' /tmp/aiops-e2e-user-agents.out || {
+  printf '%s\n' "user agents should preserve agent name" >&2
   exit 1
 }
+grep -q 'Product Team' /tmp/aiops-e2e-user-agents.out || {
+  printf '%s\n' "user agents should preserve team name" >&2
+  exit 1
+}
+if grep -Eq '개발 담당|제품팀' /tmp/aiops-e2e-user-agents.out; then
+  printf '%s\n' "user agents translated agent or team proper name" >&2
+  exit 1
+fi
 if grep -q '^AI Ops Agent Dashboard$' /tmp/aiops-e2e-user-agents.out; then
   printf '%s\n' "user agents should not use advanced agent dashboard output" >&2
   exit 1
@@ -681,6 +693,19 @@ fi
 empty_project="$tmpdir/empty"
 mkdir -p "$empty_project"
 "$repo_root/bin/aiops" project dashboard --target "$empty_project" >/tmp/aiops-e2e-project-dashboard-empty.out
+"$repo_root/bin/aiops" project dashboard --target "$empty_project" --format html --output /tmp/aiops-e2e-project-dashboard-empty.html >/tmp/aiops-e2e-project-dashboard-empty-html.out
+"$repo_root/bin/aiops" project snapshot --target "$empty_project" --json >/tmp/aiops-e2e-project-snapshot-empty.json
+"$repo_root/bin/aiops" project dashboard --target "$empty_project" --json >/tmp/aiops-e2e-project-dashboard-empty.json
+"$repo_root/bin/aiops" validate project-dashboard /tmp/aiops-e2e-project-dashboard-empty.json >/tmp/aiops-e2e-project-dashboard-empty-validate.out
+ruby -rjson -e '
+  expected = "AI Ops core가 연결되지 않았습니다. seed 설치가 필요합니다."
+  snapshot = JSON.parse(File.read(ARGV[0]))
+  dashboard = JSON.parse(File.read(ARGV[1]))
+  snapshot_message = Array(snapshot["next"]).find { |step| step["action"] == "approve_seed" }&.fetch("message", nil)
+  dashboard_message = Array(dashboard["next"]).find { |step| step["action"] == "approve_seed" }&.fetch("message", nil)
+  abort("empty snapshot machine message changed") unless snapshot_message == expected
+  abort("empty dashboard machine message changed") unless dashboard_message == expected
+' /tmp/aiops-e2e-project-snapshot-empty.json /tmp/aiops-e2e-project-dashboard-empty.json
 grep -q 'Status: BLOCKED' /tmp/aiops-e2e-project-dashboard-empty.out || {
   printf '%s\n' "empty dashboard should be blocked" >&2
   exit 1
@@ -689,6 +714,18 @@ grep -q 'core_missing' /tmp/aiops-e2e-project-dashboard-empty.out || {
   printf '%s\n' "empty dashboard core blocker missing" >&2
   exit 1
 }
+grep -q 'AI Ops 코어가 연결되지 않았습니다. seed 설치가 필요합니다.' /tmp/aiops-e2e-project-dashboard-empty.out || {
+  printf '%s\n' "empty terminal dashboard next step was not localized for display" >&2
+  exit 1
+}
+grep -q 'AI Ops 코어가 연결되지 않았습니다. seed 설치가 필요합니다.' /tmp/aiops-e2e-project-dashboard-empty.html || {
+  printf '%s\n' "empty HTML dashboard next step was not localized for display" >&2
+  exit 1
+}
+if grep -q 'AI Ops core가' /tmp/aiops-e2e-project-dashboard-empty.out /tmp/aiops-e2e-project-dashboard-empty.html; then
+  printf '%s\n' "empty terminal or HTML dashboard leaked machine wording" >&2
+  exit 1
+fi
 "$repo_root/bin/aiops" status --target "$empty_project" --color never >/tmp/aiops-e2e-user-status-empty.out
 "$repo_root/bin/aiops" risks --target "$empty_project" --color never >/tmp/aiops-e2e-user-risks-empty.out
 "$repo_root/bin/aiops" release --target "$empty_project" --color never >/tmp/aiops-e2e-user-release-empty.out
@@ -719,6 +756,18 @@ grep -q '필수 디렉터리 없음' /tmp/aiops-e2e-user-empty-combined.out || {
 }
 grep -q 'Workflow catalog 파일 없음' /tmp/aiops-e2e-user-empty-combined.out || {
   printf '%s\n' "empty user output workflow catalog check label missing" >&2
+  exit 1
+}
+grep -q '필수 파일 없음: .ai_project/operating_model.md 파일이 없습니다' /tmp/aiops-e2e-user-empty-combined.out || {
+  printf '%s\n' "empty user output required file message is not natural" >&2
+  exit 1
+}
+grep -q '필수 디렉터리 없음: .ai_project/tasks 디렉터리가 없습니다' /tmp/aiops-e2e-user-empty-combined.out || {
+  printf '%s\n' "empty user output required directory message is not natural" >&2
+  exit 1
+}
+grep -q 'Workflow catalog 파일 없음: .ai/runtime/workflows.json 파일을 읽을 수 없습니다' /tmp/aiops-e2e-user-empty-combined.out || {
+  printf '%s\n' "empty user output workflow catalog message is not natural" >&2
   exit 1
 }
 grep -q 'AI Ops 코어가 없습니다. aiops seed를 먼저 실행하세요' /tmp/aiops-e2e-user-empty-combined.out || {
