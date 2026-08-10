@@ -27,6 +27,9 @@ v0.13.0의 목표는 dashboard/work map을 사용할 수 있는 형태로 완성
 
 현재 한계:
 
+- 사용자용 명령과 Agent/자동화용 명령이 같은 `project dashboard` 하위 옵션에 섞여 있다.
+- 사용자 입장에서는 `--view`, `--format`, `--map`, `--group-by`, `--focus` 조합이 길고 어렵다.
+- CLI 기본 화면은 기계 판독 상태어를 일부 그대로 노출하며, HTML만큼 사용자용 언어/시각화가 충분하지 않다.
 - HTML은 정적 스냅샷이라 운영 데이터가 바뀌면 다시 생성해야 한다.
 - 큰 dependency graph는 여전히 한 화면에서 복잡하다.
 - 자주 쓰는 dashboard 조합을 매번 긴 명령으로 입력해야 한다.
@@ -39,13 +42,15 @@ v0.13.0의 목표는 dashboard/work map을 사용할 수 있는 형태로 완성
 
 | 순위 | 후보 | 이유 |
 |---|---|---|
-| 1 | 큰 graph 탐색 개선 | CookLog 같은 실제 프로젝트에서 가장 즉시 체감되는 사용성 문제 |
-| 2 | 로컬 서버 / 새로고침 | 운영 중 HTML을 계속 다시 생성해야 하는 불편 제거 |
-| 3 | Dashboard preset | 반복 명령을 줄이고 프로젝트별 운영 화면을 표준화 |
-| 4 | GitHub PR/CI release view | 배포 판단에 필요한 외부 상태 연결 |
-| 5 | Locale 확장 | 사용자 표시명 체계화와 다국어 확장 기반 |
-| 6 | HTML visual regression | 브라우저 렌더링 안정성 강화 |
-| 7 | SVG/PNG export | 보고/공유용 산출물 생성 |
+| 1 | 사용자용 명령 계층 | 긴 옵션 조합을 숨기고 사람이 바로 쓰는 entrypoint 제공 |
+| 2 | 사용자용 CLI 시각화 | HTML 없이도 터미널에서 가볍게 상태를 이해 |
+| 3 | 큰 graph 탐색 개선 | CookLog 같은 실제 프로젝트에서 가장 즉시 체감되는 사용성 문제 |
+| 4 | 로컬 서버 / 새로고침 | 운영 중 HTML을 계속 다시 생성해야 하는 불편 제거 |
+| 5 | Dashboard preset | 반복 명령을 줄이고 프로젝트별 운영 화면을 표준화 |
+| 6 | GitHub PR/CI release view | 배포 판단에 필요한 외부 상태 연결 |
+| 7 | Locale 확장 | 사용자 표시명 체계화와 다국어 확장 기반 |
+| 8 | HTML visual regression | 브라우저 렌더링 안정성 강화 |
+| 9 | SVG/PNG export | 보고/공유용 산출물 생성 |
 
 ## 설계 원칙
 
@@ -54,9 +59,169 @@ v0.13.0의 목표는 dashboard/work map을 사용할 수 있는 형태로 완성
 - `.ai_project/.runtime/status_ref`는 로컬 cache이며 commit 대상으로 안내하지 않는다.
 - 외부 네트워크가 필요한 기능은 기본 동작에 섞지 않고 명시 옵션으로 둔다.
 - CLI terminal/json 계약은 가능한 한 안정적으로 유지한다.
+- 사용자용 명령은 사용자 언어, 짧은 명령, 색상/진행률/요약을 기본값으로 삼는다.
+- Agent/자동화용 명령은 machine contract와 raw key를 유지한다.
 - 큰 graph는 전체를 한 번에 보여주기보다 focus, filter, grouping, summary를 우선한다.
 
-## 1차. Large Graph Explorer
+## 상태 projection 동작 기준
+
+현재 CLI dashboard는 실행할 때마다 최신 상태를 읽는다.
+
+동작 흐름:
+
+```text
+aiops project dashboard 실행
+-> aiops project snapshot --json 재계산
+-> aiops project health --json 재계산
+-> dashboard projection 생성
+-> terminal/tree/mermaid/html/json 출력
+```
+
+따라서 CLI 출력은 요청 시점 기준의 동적 projection이다. 별도 snapshot 파일을 저장해 재사용하지 않는다.
+
+반면 `--format html --output dashboard.html`은 생성 시점의 정적 HTML이다. 브라우저가 파일을 새로고침해도 로컬 `.ai_project`를 다시 읽지 않는다. 동적 HTML을 원하면 로컬 서버가 필요하다.
+
+후속 계획에서는 이를 아래처럼 구분한다.
+
+- CLI: 실행할 때마다 현재 상태를 읽는 동적 화면
+- HTML file: 공유/보관용 정적 스냅샷
+- HTML serve: 브라우저가 `/dashboard.json`을 다시 읽는 동적 화면
+- JSON: Agent/자동화/테스트용 machine contract
+
+## 1차. User Command Layer
+
+목표:
+
+- 사람이 쓰는 짧은 명령과 Agent가 쓰는 기계 계약 명령을 분리한다.
+- 기존 `project dashboard` 고급 옵션은 유지하되, 사용자용 alias/entrypoint를 제공한다.
+
+후보 명령:
+
+```sh
+aiops status
+aiops work
+aiops map
+aiops dashboard
+aiops dashboard open
+aiops dashboard serve
+aiops risks
+aiops agents
+aiops release
+```
+
+명령 매핑:
+
+| 사용자용 명령 | 내부 매핑 |
+|---|---|
+| `aiops status` | `aiops project dashboard --view main --level compact` |
+| `aiops work` | `aiops project dashboard --view work --level standard` |
+| `aiops map` | `aiops project dashboard --format html --map summary --output <temp>` |
+| `aiops dashboard` | `aiops project dashboard --format html --output <temp>` |
+| `aiops dashboard open` | HTML 생성 후 기본 브라우저 열기 |
+| `aiops dashboard serve` | 로컬 serve mode |
+| `aiops risks` | `aiops project dashboard --view risk` |
+| `aiops agents` | `aiops project dashboard --view agents` |
+| `aiops release` | `aiops project dashboard --view release` |
+
+Agent/자동화용 명령:
+
+```sh
+aiops project snapshot --json
+aiops project health --json
+aiops project dashboard --json
+aiops project context --role ROLE --task TASK_ID
+aiops policy evaluate --json
+```
+
+구현 범위:
+
+- top-level command routing 추가
+- 사용자용 help section 추가
+- 내부 고급 명령 help와 사용자용 quick command help 분리
+- 사용자용 명령에서는 기본 color auto 적용
+- 사용자용 명령에서는 machine key 대신 display label 우선 표시
+- `--target DIR`는 사용자용 명령에서도 지원
+
+비범위:
+
+- 기존 `project dashboard` 옵션 제거
+- JSON 출력의 raw key 변경
+- Task 상태 변경
+
+검증:
+
+- `aiops status`, `aiops work`, `aiops risks`, `aiops agents`, `aiops release` smoke
+- 사용자용 명령과 내부 매핑 명령의 핵심 projection 값 일치
+- 사용자용 help에서 긴 옵션 조합보다 quick command가 먼저 표시
+- Agent/자동화용 JSON 출력은 byte-level 의미 회귀 없음
+
+## 2차. User CLI Visualization
+
+목표:
+
+- HTML을 열지 않아도 터미널에서 프로젝트 상태를 가볍게 이해한다.
+- 사용자용 CLI 화면은 한국어 라벨, 색상, 진행률, 요약 중심으로 보여준다.
+
+후보 명령:
+
+```sh
+aiops status
+aiops work
+aiops work --compact
+aiops work --detail
+aiops map --cli
+```
+
+구현 범위:
+
+- 진행률 bar
+- readiness/status color badge
+- warning/blocker compact list
+- 현재 일감 column 또는 section view
+- 상태별/담당자별 count bar
+- next action을 사용자용 문장으로 표시
+- 내부 용어 치환
+  - `target_role` -> 담당 역할
+  - `target_agent` -> 담당 에이전트
+  - `status_ref_sha` -> 기준 SHA
+  - `workflow_policy` -> 작업 흐름 정책
+  - `canonical_status_ref` -> 공용 기준 브랜치
+- terminal label catalog를 HTML label catalog와 공유하거나 공통 catalog로 승격
+
+예상 출력:
+
+```text
+CookLog 상태
+
+진행률    47 / 68 완료  [███████████████░░░░░]
+작업 가능  가능, 주의 3개
+협업 상태  준비됨
+마이그레이션 완료
+
+현재 일감
+승인됨  1개  iOS Audio Guide 구현
+범위정리 2개  iOS CI 기본 파이프라인, iOS 디자인 적용
+제안됨 17개  앱 정보/오프라인/장애 상태 외 16개
+
+다음 추천
+- aiops work
+- aiops dashboard open
+```
+
+비범위:
+
+- full TUI
+- ncurses/interactive terminal app
+- Mermaid terminal rendering
+
+검증:
+
+- color always/never/auto 처리
+- 좁은 터미널에서도 text overflow가 과하지 않음
+- CLI 사용자용 라벨이 HTML 라벨과 충돌하지 않음
+- terminal dashboard 기존 출력과 새 사용자용 출력이 서로 역할을 침범하지 않음
+
+## 3차. Large Graph Explorer
 
 목표:
 
@@ -97,7 +262,7 @@ aiops project dashboard --format html --filter-agent "iOS Agent" --output dashbo
 - JSON projection은 필터 때문에 의미가 바뀌지 않음
 - dashboard 실행 후 target project git status가 dirty가 아님
 
-## 2차. Local Serve / Refresh
+## 4차. Local Serve / Refresh
 
 목표:
 
@@ -138,7 +303,7 @@ aiops project dashboard --serve --open
 - 서버 실행 중 target project 파일 불변
 - port 충돌 시 명확한 오류 또는 다음 port 제안
 
-## 3차. Dashboard Presets
+## 5차. Dashboard Presets
 
 목표:
 
@@ -179,7 +344,7 @@ aiops project dashboard preset add ios-current --view work --map swimlane --grou
 - 잘못된 preset 이름은 non-zero와 추천 목록 출력
 - local preset schema 오류가 명확히 표시됨
 
-## 4차. GitHub PR / CI Release View
+## 6차. GitHub PR / CI Release View
 
 목표:
 
@@ -216,7 +381,7 @@ aiops project dashboard --format html --view release --github --output release.h
 - JSON projection에 GitHub section은 optional
 - HTML release card가 로컬 상태와 GitHub 상태를 구분 표시
 
-## 5차. Locale Extension
+## 7차. Locale Extension
 
 목표:
 
@@ -252,7 +417,7 @@ aiops project dashboard --locale-file .ai_project/dashboard_labels.ko.json
 - Mermaid internal id는 locale과 무관하게 stable
 - JSON projection 기본 machine value 보존
 
-## 6차. HTML Visual Regression
+## 8차. HTML Visual Regression
 
 목표:
 
@@ -280,7 +445,7 @@ aiops project dashboard --locale-file .ai_project/dashboard_labels.ko.json
 - screenshot artifact 생성
 - CI 비용 증가가 과하면 optional job으로 분리
 
-## 7차. SVG / PNG Export
+## 9차. SVG / PNG Export
 
 목표:
 
@@ -316,13 +481,15 @@ aiops project dashboard --format png --map dependencies --focus TASK_ID --depth 
 
 | 차수 | 브랜치 | PR 범위 |
 |---|---|---|
-| 1차 | `feature/dashboard-graph-explorer` | HTML graph 검색/필터/focus/depth |
-| 2차 | `feature/dashboard-serve-refresh` | localhost serve와 refresh |
-| 3차 | `feature/dashboard-presets` | built-in preset과 local preset 계약 |
-| 4차 | `feature/dashboard-github-release-view` | optional GitHub release/PR/CI projection |
-| 5차 | `feature/dashboard-locale-extension` | locale option과 external catalog |
-| 6차 | `feature/dashboard-visual-regression` | browser smoke/visual test |
-| 7차 | `feature/dashboard-export` | SVG/PNG export |
+| 1차 | `feature/user-command-layer` | `aiops status/work/dashboard` 같은 사용자용 명령 계층 |
+| 2차 | `feature/user-cli-visualization` | 사용자용 CLI 진행률/색상/요약 화면 |
+| 3차 | `feature/dashboard-graph-explorer` | HTML graph 검색/필터/focus/depth |
+| 4차 | `feature/dashboard-serve-refresh` | localhost serve와 refresh |
+| 5차 | `feature/dashboard-presets` | built-in preset과 local preset 계약 |
+| 6차 | `feature/dashboard-github-release-view` | optional GitHub release/PR/CI projection |
+| 7차 | `feature/dashboard-locale-extension` | locale option과 external catalog |
+| 8차 | `feature/dashboard-visual-regression` | browser smoke/visual test |
+| 9차 | `feature/dashboard-export` | SVG/PNG export |
 
 ## 공통 검증 게이트
 
@@ -342,6 +509,7 @@ Dashboard 변경 차수는 추가로 아래를 확인한다.
 - terminal dashboard 회귀 없음
 - Mermaid internal id 안정성
 - 사용자 표시 라벨이 machine key를 과도하게 노출하지 않음
+- 사용자용 명령이 machine contract 명령을 대체한다고 안내하지 않음
 
 외부 상태를 읽는 차수는 추가로 아래를 확인한다.
 
@@ -351,11 +519,11 @@ Dashboard 변경 차수는 추가로 아래를 확인한다.
 
 ## 추천 시작점
 
-바로 진행한다면 1차 `Large Graph Explorer`부터 시작한다.
+바로 진행한다면 1차 `User Command Layer`부터 시작한다.
 
 이유:
 
-- 사용자가 실제로 체감한 문제는 큰 dependency map의 복잡도다.
-- 서버/watch나 export보다 먼저 graph 자체를 읽기 쉽게 만들어야 한다.
-- HTML 정적 파일 안에서 대부분 해결 가능해 배포/보안 부담이 작다.
-- 이후 serve mode에서도 같은 filter/focus UI를 재사용할 수 있다.
+- 사용자가 실제로 반복해서 겪는 문제는 명령어가 길고 어렵다는 점이다.
+- 사용자용 entrypoint가 먼저 생겨야 graph explorer, serve, preset도 짧은 명령으로 노출할 수 있다.
+- Agent/자동화용 machine contract와 사용자용 display command를 분리하면 향후 언어 개선 범위가 명확해진다.
+- 이 단계는 기능 동작보다 routing/help/표시 계층 중심이라 회귀 위험이 상대적으로 낮다.
