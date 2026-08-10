@@ -22,6 +22,7 @@
 - Quick-help command `--help` routes now match their command-specific help topics.
 - User CLI dashboards now localize setup-blocked status, check, action, and reason labels instead of leaking machine fallback text.
 - Dashboard JSON risk counts now preserve the snapshot projection contract while user CLI risk summaries can still fall back to health counts for display.
+- User CLI setup guidance now avoids broken fallback sentences while preserving technical names such as Adapter and Workflow catalog where useful.
 
 ## 0.13.0 - 2026-08-10
 
