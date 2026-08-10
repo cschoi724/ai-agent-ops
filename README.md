@@ -75,6 +75,11 @@ YourProject/
 
 | Command | Purpose |
 |---|---|
+| `aiops status` | 사용자용 프로젝트 상태 요약 |
+| `aiops work` | 사용자용 현재 일감과 담당 요약 |
+| `aiops risks` | 사용자용 blocker/warning 요약 |
+| `aiops agents` | 사용자용 Agent/Role 배정 요약 |
+| `aiops release` | 사용자용 release readiness 요약 |
 | `aiops seed --adapter both` | 프로젝트에 AI Ops core와 Agent adapter 연결 |
 | `aiops doctor --strict` | 설치와 운영 구성을 엄격 점검 |
 | `aiops project snapshot --json` | Agent가 먼저 읽는 프로젝트 상태 계약과 통제 신호 출력 |

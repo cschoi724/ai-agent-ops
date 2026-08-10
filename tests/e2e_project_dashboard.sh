@@ -278,6 +278,11 @@ if grep -q '^Settings$' /tmp/aiops-e2e-project-dashboard-compact.out; then
   printf '%s\n' "compact dashboard should omit settings section" >&2
   exit 1
 fi
+"$repo_root/bin/aiops" status --target "$project" >/tmp/aiops-e2e-user-status.out
+cmp -s /tmp/aiops-e2e-user-status.out /tmp/aiops-e2e-project-dashboard-compact.out || {
+  printf '%s\n' "user status command diverges from compact main dashboard" >&2
+  exit 1
+}
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --color always >/tmp/aiops-e2e-project-dashboard-color.out
 ruby -e '
@@ -328,6 +333,11 @@ grep -q 'start verification' /tmp/aiops-e2e-project-dashboard-work.out || {
 }
 grep -q 'start completion' /tmp/aiops-e2e-project-dashboard-work.out || {
   printf '%s\n' "work dashboard completion next action missing" >&2
+  exit 1
+}
+"$repo_root/bin/aiops" work --target "$project" >/tmp/aiops-e2e-user-work.out
+cmp -s /tmp/aiops-e2e-user-work.out /tmp/aiops-e2e-project-dashboard-work.out || {
+  printf '%s\n' "user work command diverges from work dashboard" >&2
   exit 1
 }
 
@@ -412,6 +422,11 @@ grep -q 'Task Status Ref Missing:' /tmp/aiops-e2e-project-dashboard-risk.out || 
   printf '%s\n' "risk dashboard status ref signal missing" >&2
   exit 1
 }
+"$repo_root/bin/aiops" risks --target "$project" >/tmp/aiops-e2e-user-risks.out
+cmp -s /tmp/aiops-e2e-user-risks.out /tmp/aiops-e2e-project-dashboard-risk.out || {
+  printf '%s\n' "user risks command diverges from risk dashboard" >&2
+  exit 1
+}
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --view risk --level detail >/tmp/aiops-e2e-project-dashboard-risk-detail.out
 grep -q '^Policy Rules$' /tmp/aiops-e2e-project-dashboard-risk-detail.out || {
@@ -440,6 +455,11 @@ grep -q '^Role Load$' /tmp/aiops-e2e-project-dashboard-agents.out || {
   printf '%s\n' "agents dashboard role load missing" >&2
   exit 1
 }
+"$repo_root/bin/aiops" agents --target "$project" >/tmp/aiops-e2e-user-agents.out
+cmp -s /tmp/aiops-e2e-user-agents.out /tmp/aiops-e2e-project-dashboard-agents.out || {
+  printf '%s\n' "user agents command diverges from agents dashboard" >&2
+  exit 1
+}
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --view agents --level detail >/tmp/aiops-e2e-project-dashboard-agents-detail.out
 grep -q 'Capabilities: implementation' /tmp/aiops-e2e-project-dashboard-agents-detail.out || {
@@ -466,6 +486,11 @@ grep -q 'Canonical Sync: recorded_current' /tmp/aiops-e2e-project-dashboard-rele
 }
 grep -q 'Release Check: aiops release-check --strict --allow-pending-release' /tmp/aiops-e2e-project-dashboard-release.out || {
   printf '%s\n' "release dashboard release-check command missing" >&2
+  exit 1
+}
+"$repo_root/bin/aiops" release --target "$project" >/tmp/aiops-e2e-user-release.out
+cmp -s /tmp/aiops-e2e-user-release.out /tmp/aiops-e2e-project-dashboard-release.out || {
+  printf '%s\n' "user release command diverges from release dashboard" >&2
   exit 1
 }
 
