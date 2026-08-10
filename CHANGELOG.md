@@ -12,6 +12,8 @@
 
 ### Added
 
+- HTML Large Graph Explorer with task search, semantic filters, status toggles, focus/depth controls, and client-side dependency map regeneration.
+- HTML-only `--filter-status`, `--filter-agent`, `--filter-role`, and `--filter-workflow` initial filter options.
 - User-facing dashboard shortcuts: `aiops status`, `aiops work`, `aiops risks`, `aiops agents`, and `aiops release`.
 - User-focused help UX with `aiops help ai`, `aiops help all`, command-specific help topics, and Korean/English help text selection.
 - Localized user CLI dashboards with Korean labels, semantic color, progress bars, compact work summaries, risk signals, agent load, and release readiness.

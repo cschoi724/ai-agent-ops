@@ -72,6 +72,7 @@ aiops project dashboard --view release
 aiops project dashboard --format html --map summary --output dashboard.html
 aiops project dashboard --format html --map swimlane --group-by agent --output dashboard.html
 aiops project dashboard --format html --map dependencies --focus T-20260805-007 --depth 2 --output dashboard.html
+aiops project dashboard --format html --filter-status approved,scoped --filter-agent "iOS Agent" --output dashboard.html
 aiops project dashboard --view work --format tree
 aiops project dashboard --view work --format mermaid --map summary
 aiops project dashboard --view work --format mermaid --map dependencies
@@ -121,6 +122,10 @@ Release Dashboard 표시 항목은 release 전 readiness, canonical status, bloc
 - `--focus TASK_ID`
 - `--depth N`
 - `--group-by area|agent|role|status|workflow`
+- `--filter-status STATUS,...` (HTML 초기 필터)
+- `--filter-agent AGENT` (HTML 초기 필터)
+- `--filter-role ROLE` (HTML 초기 필터)
+- `--filter-workflow WORKFLOW` (HTML 초기 필터)
 - `--output FILE`
 - `--json`
 - `--color auto|always|never`
@@ -130,12 +135,15 @@ Release Dashboard 표시 항목은 release 전 readiness, canonical status, bloc
 
 `--format html --output dashboard.html`은 같은 dashboard projection과 Mermaid source를 정적 HTML로 감싸 브라우저에서 시각적으로 볼 수 있게 만든다. HTML은 Mermaid CDN module을 사용해 diagram을 렌더링하며, 각 diagram 아래에는 원본 Mermaid source도 함께 접어 둔다. HTML dashboard에는 한국어 안내, 상태 색상 범례, Agent 상태 색상, map별 접기/펼치기, diagram 확대/축소 버튼이 포함된다. 상태, Role, Team, Agent 표시명, workflow, capability 같은 기계 판독 값은 HTML 표시에서 locale label catalog를 거쳐 사용자가 읽기 쉬운 라벨로 치환한다. 기본 catalog는 `ko`이며, 미등록 값은 원본 의미를 잃지 않도록 사람이 읽을 수 있는 fallback으로 표시한다. HTML에서 `--map`을 지정하지 않으면 큰 dependency graph 대신 `summary` map을 먼저 연다.
 
+HTML의 `일감 탐색` 패널은 브라우저 안에서 ID/제목 검색, 상태 toggle, 담당자/역할/workflow 필터, 중심 일감과 연결 깊이 1~4단계 선택을 제공한다. 필터는 작업 표와 dependency map에 함께 적용되며, 결과가 큰 경우 중심 일감으로 범위를 줄이라는 안내를 표시한다. 필터용 task/edge 데이터는 생성된 HTML 안에서만 사용하고 target project나 dashboard JSON projection을 수정하지 않는다. `--filter-*` 옵션은 HTML이 처음 열릴 때 적용할 필터를 지정하며 다른 format과 함께 사용하면 오류가 난다.
+
 큰 프로젝트에서는 전체 dependency map보다 아래 형태가 더 읽기 쉽다.
 
 ```sh
 aiops project dashboard --format html --map summary --output dashboard.html
 aiops project dashboard --format html --map swimlane --group-by agent --output dashboard.html
 aiops project dashboard --format html --map dependencies --focus TASK_ID --depth 2 --output dashboard.html
+aiops project dashboard --format html --filter-status approved,scoped --filter-role "Execution Role" --output dashboard.html
 ```
 
 `--json`은 `aiops.project_dashboard.v1` 계약을 출력한다. 이 계약은 project/health/snapshot 값을 dashboard 용도에 맞게 projection한 결과이며, terminal/tree/Mermaid와 같은 의미를 공유한다. 주요 필드는 status, progress, readiness, git, agents, tasks, risks, control, next, maps, views다.
