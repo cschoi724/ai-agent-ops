@@ -1,15 +1,16 @@
 # Project Dashboard Follow-up Implementation Plan
 
-상태: 제안 / v0.13.0 이후 후속 개선 계획
+상태: 진행 중 / 1~3차 완료, 4차 재작업 완료·독립 재검증 대기
 대상: `aiops project dashboard` HTML/CLI 사용성 확장
 기준 버전: v0.13.0
 작성일: 2026-08-10
 
 진행 현황:
 
-- 1차 User Command Layer: 구현 완료, PR #28로 main 반영 완료
-- 2차 Help UX / Localized Command Guide: 구현 완료
-- 3차 User CLI Visualization: 구현 완료
+- 1차 User Command Layer: 구현 완료, PR #28~#29로 main 반영 완료
+- 2차 Help UX / Localized Command Guide: 구현 완료, PR #30~#31로 main 반영 완료
+- 3차 User CLI Visualization: 구현 완료, PR #32~#35로 main 반영 완료
+- 4차 Large Graph Explorer: 구현 및 1차 독립 검증 재작업 완료, 독립 재검증 대기
 
 이 문서는 v0.13.0에서 완료된 Project Dashboard의 후속 개선 후보를 실제 구현 가능한 차수로 정리한다.
 
@@ -40,7 +41,7 @@ v0.13.0의 목표는 dashboard/work map을 사용할 수 있는 형태로 완성
 - help 설명 문구가 지역화된 사용자 언어 catalog로 관리되지 않는다.
 - CLI 기본 화면은 기계 판독 상태어를 일부 그대로 노출하며, HTML만큼 사용자용 언어/시각화가 충분하지 않다.
 - HTML은 정적 스냅샷이라 운영 데이터가 바뀌면 다시 생성해야 한다.
-- 큰 dependency graph는 여전히 한 화면에서 복잡하다.
+- HTML 운영 데이터는 정적 스냅샷이며, 브라우저를 열어 둔 상태에서 자동 갱신되지 않는다.
 - 자주 쓰는 dashboard 조합을 매번 긴 명령으로 입력해야 한다.
 - release view는 로컬 상태 중심이며 GitHub PR/CI 상태를 직접 읽지 않는다.
 - locale catalog는 내부 기본값 중심이고 외부 확장 지점이 약하다.
@@ -656,13 +657,10 @@ Dashboard 변경 차수는 추가로 아래를 확인한다.
 
 ## 추천 시작점
 
-바로 진행한다면 1차 `User Command Layer`부터 시작한다.
-
-1차와 2차는 분리된 PR로 진행하되 설계는 함께 잡는다. 사용자용 명령을 추가해도 기본 help가 그대로 복잡하면 사용자는 새 명령을 발견하지 못하기 때문이다.
+4차 독립 검증과 main 반영이 끝나면 5차 `Local Serve / Refresh`를 진행한다.
 
 이유:
 
-- 사용자가 실제로 반복해서 겪는 문제는 명령어가 길고 어렵다는 점이다.
-- 사용자용 entrypoint가 먼저 생겨야 graph explorer, serve, preset도 짧은 명령으로 노출할 수 있다.
-- Agent/자동화용 machine contract와 사용자용 display command를 분리하면 향후 언어 개선 범위가 명확해진다.
-- 이 단계는 기능 동작보다 routing/help/표시 계층 중심이라 회귀 위험이 상대적으로 낮다.
+- 1~3차에서 사용자 명령, help, CLI 표시 계층을 분리했고 4차에서 큰 그래프 탐색 문제를 줄였다.
+- 현재 남은 핵심 사용성 문제는 운영 데이터 변경 후 HTML을 다시 생성해야 한다는 점이다.
+- 5차는 기존 JSON projection을 읽기 전용으로 재사용해 machine contract를 바꾸지 않고 최신 상태 확인 흐름을 단축할 수 있다.

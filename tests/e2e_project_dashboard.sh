@@ -867,6 +867,7 @@ before_html_hash="$(find "$project" -type f -not -path '*/.git/*' -print | sort 
 "$repo_root/bin/aiops" project dashboard --target "$project" --format html --output /tmp/aiops-e2e-project-dashboard.html >/tmp/aiops-e2e-project-dashboard-html.out
 "$repo_root/bin/aiops" project dashboard --target "$project" --format html >/tmp/aiops-e2e-project-dashboard-html-stdout.html
 "$repo_root/bin/aiops" project dashboard --target "$project" --format html --map agents --output /tmp/aiops-e2e-project-dashboard-agents.html >/tmp/aiops-e2e-project-dashboard-html-agents.out
+"$repo_root/bin/aiops" project dashboard --target "$project" --format html --map dependencies --focus T-20260807-002 --depth 1 --filter-status approved,scoped --filter-agent "Development Agent" --filter-role "Execution Role" --filter-workflow feature --output /tmp/aiops-e2e-project-dashboard-explorer.html >/tmp/aiops-e2e-project-dashboard-explorer.out
 after_html_hash="$(find "$project" -type f -not -path '*/.git/*' -print | sort | xargs shasum -a 256 | shasum -a 256 | awk "{print \$1}")"
 [ "$before_html_hash" = "$after_html_hash" ] || {
   printf '%s\n' "html dashboard modified project files" >&2
@@ -904,6 +905,81 @@ grep -q 'data-zoom="in"' /tmp/aiops-e2e-project-dashboard.html || {
   printf '%s\n' "html dashboard zoom controls missing" >&2
   exit 1
 }
+grep -q 'id="graph-explorer"' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard graph explorer missing" >&2
+  exit 1
+}
+grep -q 'id="explorer-search"' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard task search missing" >&2
+  exit 1
+}
+grep -q 'id="explorer-agent"' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard agent filter missing" >&2
+  exit 1
+}
+grep -q 'id="explorer-role"' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard role filter missing" >&2
+  exit 1
+}
+grep -q 'id="explorer-workflow"' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard workflow filter missing" >&2
+  exit 1
+}
+grep -q 'id="explorer-focus"' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard focus selector missing" >&2
+  exit 1
+}
+grep -q 'id="explorer-depth"' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard depth selector missing" >&2
+  exit 1
+}
+grep -q 'name="explorer-status"' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard status toggles missing" >&2
+  exit 1
+}
+grep -q '의존성 맵에.*중심 일감과 연결 깊이' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard large graph guidance missing" >&2
+  exit 1
+}
+ruby -rjson -e '
+  html = File.read(ARGV[0])
+  payload = html[/<script type="application\/json" id="dashboard-explorer-data">(.*?)<\/script>/m, 1]
+  abort("explorer data payload missing") unless payload
+  data = JSON.parse(payload)
+  abort("explorer task data missing") unless data["tasks"].length == 5
+  abort("explorer dependency data missing") unless data["edges"].include?(["T-20260807-001", "T-20260807-002"])
+  abort("explorer leaked raw agent name") if payload.include?("Development Agent")
+  row_ids = html.scan(/class="task-row" data-task-id="([^"]+)"/).flatten.sort
+  task_ids = data["tasks"].map { |task| task["id"] }.sort
+  abort("explorer table and task data differ") unless row_ids == task_ids
+  abort("explorer focus bypasses filters") if html.include?("return matches || (focus && task.id === focus)")
+  abort("explorer Mermaid render queue missing") unless html.include?("let renderQueue = Promise.resolve()")
+' /tmp/aiops-e2e-project-dashboard.html
+ruby -rjson -e '
+  html = File.read(ARGV[0])
+  payload = html[/<script type="application\/json" id="dashboard-explorer-data">(.*?)<\/script>/m, 1]
+  data = JSON.parse(payload)
+  abort("explorer initial status filter missing") unless data.dig("initial", "statuses") == ["approved", "scoped"]
+  abort("explorer initial focus missing") unless data.dig("initial", "focus") == "T-20260807-002"
+  abort("explorer initial depth missing") unless data.dig("initial", "depth") == 1
+  abort("explorer agent filter token missing") if data.dig("initial", "agent").to_s.empty?
+  abort("explorer role filter token missing") if data.dig("initial", "role").to_s.empty?
+  abort("explorer workflow filter token missing") if data.dig("initial", "workflow").to_s.empty?
+  abort("explorer agent name was not preserved") unless html.match?(/<option value="agent-[0-9]+" selected>Development Agent<\/option>/)
+  abort("explorer localized role option missing") unless html.match?(/<option value="role-[0-9]+" selected>구현\/실행<\/option>/)
+  abort("explorer localized workflow option missing") unless html.match?(/<option value="workflow-[0-9]+" selected>기능 개발<\/option>/)
+' /tmp/aiops-e2e-project-dashboard-explorer.html
+
+for invalid_filter in agent role workflow; do
+  if "$repo_root/bin/aiops" project dashboard --target "$project" --format html "--filter-$invalid_filter" DOES_NOT_EXIST --output "/tmp/aiops-e2e-project-dashboard-invalid-$invalid_filter.html" >/tmp/aiops-e2e-project-dashboard-invalid-filter.out 2>&1; then
+    printf '%s\n' "unknown HTML $invalid_filter filter should fail" >&2
+    exit 1
+  fi
+  grep -q "unknown --filter-$invalid_filter value: DOES_NOT_EXIST" /tmp/aiops-e2e-project-dashboard-invalid-filter.out || {
+    printf '%s\n' "unknown HTML $invalid_filter filter error missing" >&2
+    exit 1
+  }
+done
 grep -q 'class="panel map-panel" data-map="summary" open' /tmp/aiops-e2e-project-dashboard.html || {
   printf '%s\n' "html dashboard open summary panel missing" >&2
   exit 1
@@ -948,8 +1024,8 @@ if grep -q 'future_work' /tmp/aiops-e2e-project-dashboard.html; then
   printf '%s\n' "html dashboard leaked raw capability label" >&2
   exit 1
 fi
-if grep -q 'Development Agent' /tmp/aiops-e2e-project-dashboard.html; then
-  printf '%s\n' "html dashboard leaked raw agent label" >&2
+if ! grep -Eq '<option value="agent-[0-9]+">Development Agent</option>' /tmp/aiops-e2e-project-dashboard.html; then
+  printf '%s\n' "html dashboard explorer agent name missing" >&2
   exit 1
 fi
 if grep -q 'custom_platform_team' /tmp/aiops-e2e-project-dashboard.html; then
@@ -994,6 +1070,22 @@ if "$repo_root/bin/aiops" project dashboard --target "$project" --json --output 
 fi
 grep -q 'project dashboard --json cannot be combined with --output' /tmp/aiops-e2e-project-dashboard-html-invalid.out || {
   printf '%s\n' "json output combination error missing" >&2
+  exit 1
+}
+if "$repo_root/bin/aiops" project dashboard --target "$project" --filter-status approved >/tmp/aiops-e2e-project-dashboard-filter-invalid.out 2>&1; then
+  printf '%s\n' "terminal dashboard accepted HTML-only filter option" >&2
+  exit 1
+fi
+grep -q 'project dashboard filter options require --format html' /tmp/aiops-e2e-project-dashboard-filter-invalid.out || {
+  printf '%s\n' "HTML-only filter option error missing" >&2
+  exit 1
+}
+if "$repo_root/bin/aiops" status --target "$project" --filter-status approved >/tmp/aiops-e2e-user-dashboard-filter-invalid.out 2>&1; then
+  printf '%s\n' "user dashboard shortcut accepted graph explorer filter" >&2
+  exit 1
+fi
+grep -q 'aiops status does not support --filter-status' /tmp/aiops-e2e-user-dashboard-filter-invalid.out || {
+  printf '%s\n' "user dashboard graph explorer filter guard missing" >&2
   exit 1
 }
 
