@@ -9,6 +9,7 @@
 
 - 1차 User Command Layer: 구현 완료, PR #28로 main 반영 완료
 - 2차 Help UX / Localized Command Guide: 구현 완료
+- 3차 User CLI Visualization: 구현 완료
 
 이 문서는 v0.13.0에서 완료된 Project Dashboard의 후속 개선 후보를 실제 구현 가능한 차수로 정리한다.
 
@@ -283,14 +284,15 @@ runtime/help_catalog.en.json
 - HTML을 열지 않아도 터미널에서 프로젝트 상태를 가볍게 이해한다.
 - 사용자용 CLI 화면은 한국어 라벨, 색상, 진행률, 요약 중심으로 보여준다.
 
-후보 명령:
+구현 명령:
 
 ```sh
 aiops status
 aiops work
-aiops work --compact
-aiops work --detail
-aiops map --cli
+aiops work --format tree
+aiops risks
+aiops agents
+aiops release
 ```
 
 구현 범위:
@@ -308,6 +310,17 @@ aiops map --cli
   - `workflow_policy` -> 작업 흐름 정책
   - `canonical_status_ref` -> 공용 기준 브랜치
 - terminal label catalog를 HTML label catalog와 공유하거나 공통 catalog로 승격
+
+구현 결과:
+
+- `aiops status`는 진행률, 운영 readiness, 현재 일감, 주의 항목, 다음 추천을 한국어 요약으로 표시한다.
+- `aiops work`는 상태 요약, 일감 목록, 담당 역할/에이전트, 다음 조치를 사용자용 라벨로 표시한다.
+- `aiops work --format tree`는 큰 일감 목록을 상태별 트리로 접어서 표시한다.
+- `aiops risks`는 차단/주의 항목과 공용 기준 상태, 미해결 결정, 메타데이터 누락, 기준 SHA 누락, 에이전트 drift를 표시한다.
+- `aiops agents`는 에이전트 활성 상태, 팀, 역할, 담당 일감 수를 표시한다.
+- `aiops release`는 출시 readiness, 공용 기준 상태, 차단 항목, release-check 명령을 표시한다.
+- `--color always|never|auto`를 사용자용 CLI 출력에도 적용한다.
+- 고급 `aiops project dashboard` terminal/tree 출력은 기존 진단형 출력으로 유지하고, 사용자용 top-level 명령만 별도 표시층을 사용한다.
 
 예상 출력:
 

@@ -3390,6 +3390,7 @@ cmd_project() {
       depth="2"
       group_by="area"
       map_set="no"
+      user_cli="no"
 
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -3436,6 +3437,9 @@ cmd_project() {
             ;;
           --no-color)
             color="never"
+            ;;
+          --user-cli)
+            user_cli="yes"
             ;;
           --color)
             shift
@@ -3538,6 +3542,7 @@ cmd_project() {
         focus = ARGV[7].to_s
         depth = ARGV[8].to_i
         group_by = ARGV[9].to_s.empty? ? "area" : ARGV[9].to_s
+        user_cli = ARGV[10] == "yes"
         color_enabled = color_mode == "always" || (color_mode == "auto" && STDOUT.tty? && ENV["NO_COLOR"].to_s.empty?)
 
         def colorize(enabled, text, code)
@@ -3900,8 +3905,8 @@ cmd_project() {
             "blocked_actions" => Array(snapshot.dig("control", "blocked_actions")),
             "approval_required_actions" => Array(snapshot.dig("control", "requires_user_approval")),
             "unresolved_decisions" => health_summary.dig("summary", "unresolved_decisions").to_i,
-            "task_metadata_missing" => snapshot.dig("tasks", "missing_metadata").to_i,
-            "task_status_ref_missing" => snapshot.dig("tasks", "missing_status_ref_sha").to_i,
+            "task_metadata_missing" => (snapshot.dig("tasks", "missing_metadata") || health_summary.dig("tasks", "missing_metadata")).to_i,
+            "task_status_ref_missing" => (snapshot.dig("tasks", "missing_status_ref_sha") || health_summary.dig("tasks", "missing_status_ref_sha")).to_i,
             "status_ref_state" => snapshot.dig("source_refs", "status_ref_state")
           }
         end
@@ -5111,6 +5116,8 @@ cmd_project() {
             "#{$1}개 일감에 상태, 작업 유형 또는 담당 역할 정보가 없습니다"
           when /\A(\d+) active task\(s\) missing status_ref_sha\z/
             "진행 중인 일감 #{$1}개에 기준 SHA가 없습니다"
+          when /\A\.ai_project core_version differs or is missing\z/, /\A\.ai_project core_version differs from current core\z/
+            "AI Ops 기록 버전이 현재 코어와 다릅니다"
           when /\Arecorded canonical status SHA is stale; run aiops sync-status\z/
             "공용 기준 SHA 기록이 오래됐습니다. aiops sync-status를 실행하세요"
           when /\Arecorded canonical status SHA is current\z/
@@ -5135,6 +5142,254 @@ cmd_project() {
 
         def html_map_badge_label(name)
           html_localized_label("map_badge", name)
+        end
+
+        def cli_title(enabled, text)
+          colorize(enabled, text, "1;36")
+        end
+
+        def cli_status_value(enabled, value)
+          colorize(enabled, html_status_label(value), severity_color(value))
+        end
+
+        def cli_task_status_value(enabled, value)
+          colorize(enabled, html_status_label(value), task_status_color(value))
+        end
+
+        def cli_role_value(enabled, value)
+          colorize(enabled, html_role_label(value), "34")
+        end
+
+        def cli_agent_value(enabled, value)
+          colorize(enabled, html_agent_label(value), "36")
+        end
+
+        def cli_workflow_value(enabled, value)
+          colorize(enabled, html_workflow_label(value), "36")
+        end
+
+        def cli_next_action_value(enabled, value)
+          colorize(enabled, html_next_action_label(value), next_action_color(value))
+        end
+
+        def cli_project_name(snapshot)
+          snapshot.dig("project", "name") || File.basename(snapshot["target"].to_s)
+        end
+
+        def cli_check_line(enabled, check)
+          code = check["level"] == "blocker" ? "31" : "33"
+          "#{colorize(enabled, html_check_label(check["code"]), code)}: #{html_check_message(check["message"])}"
+        end
+
+        def cli_task_groups(items)
+          items.group_by { |task| clean(task["status"], "unknown") }
+        end
+
+        def cli_status_count_lines(items, color_enabled, limit = 3)
+          grouped = cli_task_groups(items)
+          statuses = grouped.keys.sort_by { |status| [status_order(status), status] }
+          return ["  없음"] if statuses.empty?
+          statuses.map do |status|
+            tasks = grouped[status]
+            preview = tasks.first(limit).map { |task| shorten(task["title"], 28) }.join(", ")
+            preview = "#{preview} 외 #{tasks.length - limit}개" if tasks.length > limit
+            "  #{cli_task_status_value(color_enabled, status)} #{tasks.length}개  #{preview}"
+          end
+        end
+
+        def cli_next_steps(snapshot, health_summary, limit)
+          Array(snapshot["next"]).map { |step| command_or_message(step) }.compact.uniq.first(limit)
+        end
+
+        def render_user_status_dashboard(snapshot, health_summary, level, color_enabled)
+          project = snapshot.fetch("project", {})
+          tasks = snapshot.fetch("tasks", {})
+          readiness = health_summary.fetch("readiness", {})
+          health = health_summary.fetch("summary", {})
+          source_refs = snapshot.fetch("source_refs", {})
+          items = sorted_work_items(active_work_items(tasks))
+          done_tasks = count(tasks.fetch("by_status", {}), "done")
+          total_tasks = tasks["total"].to_i
+
+          puts cli_title(color_enabled, "#{cli_project_name(snapshot)} 상태")
+          puts "전체 상태  #{cli_status_value(color_enabled, health_summary["overall"])}   차단 #{health["blockers"].to_i}개 / 주의 #{health["warnings"].to_i}개"
+          puts "진행률     #{progress_bar(done_tasks, total_tasks, 30, color_enabled)}  #{done_tasks} / #{total_tasks} 완료"
+          puts ""
+
+          puts section(color_enabled, "운영 상태")
+          puts "  작업 가능     #{cli_status_value(color_enabled, readiness["task_work"])}"
+          puts "  협업 상태     #{cli_status_value(color_enabled, readiness["multi_agent"])}"
+          puts "  마이그레이션   #{cli_status_value(color_enabled, readiness["migration"])}"
+          puts "  공용 기준 상태 #{cli_status_value(color_enabled, source_refs["status_ref_state"])}"
+          puts "  작업 흐름 정책 #{html_project_setting_label(project["workflow_policy"])}" unless level == "compact"
+          puts ""
+
+          puts section(color_enabled, "현재 일감")
+          cli_status_count_lines(items, color_enabled).each { |line| puts line }
+          puts ""
+
+          checks = Array(health_summary["checks"])
+          blockers = checks.select { |check| check["level"] == "blocker" }
+          warnings = checks.select { |check| check["level"] == "warn" }
+          puts section(color_enabled, "주의 항목")
+          if blockers.empty? && warnings.empty?
+            puts "  없음"
+          else
+            (blockers + warnings).first(level == "detail" ? 8 : 4).each { |check| puts "  - #{cli_check_line(color_enabled, check)}" }
+            remaining = blockers.length + warnings.length - (level == "detail" ? 8 : 4)
+            puts "  ... #{remaining}개 더 있음" if remaining.positive?
+          end
+          puts ""
+
+          next_steps = cli_next_steps(snapshot, health_summary, level == "compact" ? 2 : 4)
+          unless next_steps.empty?
+            puts section(color_enabled, "다음 추천")
+            next_steps.each { |step| puts "  - #{step}" }
+          end
+        end
+
+        def render_user_work_dashboard(snapshot, level, color_enabled)
+          tasks = snapshot.fetch("tasks", {})
+          items = sorted_work_items(active_work_items(tasks))
+          puts cli_title(color_enabled, "#{cli_project_name(snapshot)} 일감")
+          puts "활성 일감  #{items.length} / #{tasks["total"].to_i}개"
+          puts ""
+
+          puts section(color_enabled, "상태 요약")
+          cli_status_count_lines(items, color_enabled).each { |line| puts line }
+          puts ""
+
+          return if level == "compact"
+
+          puts section(color_enabled, "일감 목록")
+          items.first(level == "detail" ? items.length : 12).each do |task|
+            next_action = next_action_label(task)
+            puts "  #{cli_task_status_value(color_enabled, task["status"])} #{task["id"]}  #{shorten(task["title"], 44)}"
+            puts "    담당 역할: #{cli_role_value(color_enabled, clean(task["target_role"]))} | 담당 에이전트: #{cli_agent_value(color_enabled, clean(task["target_agent"]))} | 다음: #{cli_next_action_value(color_enabled, next_action)}"
+            next unless level == "detail"
+            puts "    작업 유형: #{cli_workflow_value(color_enabled, task["workflow"])} | 잠금: #{lock_value(color_enabled, clean(task["locked_by"], "none"))}"
+            puts "    명령: #{next_role_command(task, snapshot["target"])}"
+          end
+          remaining = items.length - 12
+          puts "  ... #{remaining}개 더 있음" if level != "detail" && remaining.positive?
+        end
+
+        def render_user_work_tree(snapshot, level, color_enabled)
+          tasks = snapshot.fetch("tasks", {})
+          items = sorted_work_items(active_work_items(tasks))
+          grouped = cli_task_groups(items)
+          statuses = grouped.keys.sort_by { |status| [status_order(status), status] }
+          puts cli_title(color_enabled, "#{cli_project_name(snapshot)} 일감 트리")
+          puts "현재 일감"
+          if statuses.empty?
+            puts "`-- 없음"
+            return
+          end
+          statuses.each_with_index do |status, status_index|
+            status_last = status_index == statuses.length - 1
+            status_prefix = status_last ? "`--" : "|--"
+            child_prefix = status_last ? "   " : "|  "
+            puts "#{status_prefix} #{cli_task_status_value(color_enabled, status)} #{grouped[status].length}개"
+            grouped[status].each_with_index do |task, task_index|
+              task_last = task_index == grouped[status].length - 1
+              task_prefix = task_last ? "`--" : "|--"
+              detail_prefix = task_last ? "   " : "|  "
+              puts "#{child_prefix}#{task_prefix} #{task["id"]} #{shorten(task["title"], 52)}"
+              next if level == "compact"
+              puts "#{child_prefix}#{detail_prefix}`-- 담당: #{cli_agent_value(color_enabled, clean(task["target_agent"]))} / #{cli_role_value(color_enabled, clean(task["target_role"]))}"
+            end
+          end
+        end
+
+        def render_user_risk_dashboard(snapshot, health_summary, level, color_enabled)
+          data = risk_dashboard_data(snapshot, health_summary)
+          puts cli_title(color_enabled, "#{cli_project_name(snapshot)} 위험")
+          puts "전체 상태  #{cli_status_value(color_enabled, data["overall"])}   차단 #{data["blockers"].length}개 / 주의 #{data["warnings"].length}개"
+          puts ""
+
+          puts section(color_enabled, "차단 항목")
+          data["blockers"].empty? ? puts("  없음") : data["blockers"].each { |check| puts "  - #{cli_check_line(color_enabled, check)}" }
+          puts ""
+
+          puts section(color_enabled, "주의 항목")
+          if data["warnings"].empty?
+            puts "  없음"
+          else
+            data["warnings"].first(level == "detail" ? data["warnings"].length : 6).each { |check| puts "  - #{cli_check_line(color_enabled, check)}" }
+          end
+          puts ""
+
+          puts section(color_enabled, "위험 신호")
+          puts "  공용 기준 상태: #{cli_status_value(color_enabled, data["status_ref_state"])}"
+          puts "  미해결 결정: #{data["unresolved_decisions"]}개"
+          puts "  일감 메타데이터 누락: #{data["task_metadata_missing"]}개"
+          puts "  일감 기준 SHA 누락: #{data["task_status_ref_missing"]}개"
+          puts "  에이전트 drift: #{data["agent_drift"].length}개"
+        end
+
+        def render_user_agents_dashboard(snapshot, level, color_enabled)
+          data = agent_dashboard_data(snapshot)
+          puts cli_title(color_enabled, "#{cli_project_name(snapshot)} 에이전트")
+          puts "활성 #{data["enabled"]}명 / 보류 #{data["deferred"]}명 / 전체 #{data["total"]}명"
+          puts ""
+
+          puts section(color_enabled, "에이전트")
+          data["items"].each do |agent|
+            roles = Array(agent["declared_roles"]).map { |role| html_role_label(role) }.join(", ")
+            roles = "역할 미지정" if roles.empty?
+            task_count = Array(agent["assigned_active_tasks"]).length
+            puts "  #{cli_agent_value(color_enabled, agent["name"] || agent["id"])}  #{cli_status_value(color_enabled, agent["status"])}  #{html_team_label(agent["team"])}  담당 일감 #{task_count}개"
+            puts "    역할: #{roles}" unless level == "compact"
+          end
+          puts ""
+
+          puts section(color_enabled, "역할별 일감")
+          data["role_task_counts"].empty? ? puts("  없음") : data["role_task_counts"].each { |role, count_value| puts "  #{cli_role_value(color_enabled, role)} #{count_value}개" }
+        end
+
+        def render_user_release_dashboard(snapshot, health_summary, level, color_enabled)
+          data = release_dashboard_data(snapshot, health_summary)
+          puts cli_title(color_enabled, "#{cli_project_name(snapshot)} 출시 준비")
+          puts "출시 상태  #{cli_status_value(color_enabled, data["gate_status"])}"
+          puts ""
+
+          puts section(color_enabled, "준비 상태")
+          data["readiness"].each do |key, state|
+            label = {
+              "bootstrap" => "운영 설정",
+              "task_work" => "작업 가능",
+              "multi_agent" => "협업 상태",
+              "migration" => "마이그레이션"
+            }.fetch(key, html_humanize_identifier(key))
+            puts "  #{label}: #{cli_status_value(color_enabled, state)}"
+          end
+          puts "  공용 기준 상태: #{cli_status_value(color_enabled, data.dig("canonical_status", "state"))}"
+          puts ""
+
+          puts section(color_enabled, "출시 전 확인")
+          blockers = Array(data["blockers"]) + Array(data["blocked_actions"])
+          if blockers.empty?
+            puts "  차단 항목 없음"
+          else
+            Array(data["blockers"]).each { |check| puts "  - #{cli_check_line(color_enabled, check)}" }
+            Array(data["blocked_actions"]).each { |action| puts "  - #{colorize(color_enabled, html_approval_label(action["action"]), "31")}: #{action["reason"]}" }
+          end
+          puts "  점검 명령: #{data["release_check_command"]}" unless level == "compact"
+        end
+
+        def render_user_cli_dashboard(snapshot, health_summary, view, level, format, color_enabled)
+          case view
+          when "work"
+            format == "tree" ? render_user_work_tree(snapshot, level, color_enabled) : render_user_work_dashboard(snapshot, level, color_enabled)
+          when "risk"
+            render_user_risk_dashboard(snapshot, health_summary, level, color_enabled)
+          when "agents"
+            render_user_agents_dashboard(snapshot, level, color_enabled)
+          when "release"
+            render_user_release_dashboard(snapshot, health_summary, level, color_enabled)
+          else
+            render_user_status_dashboard(snapshot, health_summary, level, color_enabled)
+          end
         end
 
         def render_html_dashboard(snapshot, health_summary, view, level, selected_map, focus = "", depth = 2, group_by = "area")
@@ -5301,6 +5556,11 @@ cmd_project() {
           exit 0
         end
 
+        if user_cli
+          render_user_cli_dashboard(snapshot, health_summary, view, level, format, color_enabled)
+          exit 0
+        end
+
         if view == "work"
           if format == "mermaid"
             render_work_mermaid(snapshot, health_summary, map, focus, depth, group_by)
@@ -5400,7 +5660,7 @@ cmd_project() {
           puts section(color_enabled, "Next")
           next_steps.first(level == "compact" ? 3 : next_steps.length).each { |step| puts "  - #{step}" }
         end
-      ' "$view" "$format" "$level" "$color" "$map" "$json" "$output" "$focus" "$depth" "$group_by"
+      ' "$view" "$format" "$level" "$color" "$map" "$json" "$output" "$focus" "$depth" "$group_by" "$user_cli"
       ;;
     snapshot)
       target="$(pwd)"
@@ -10812,15 +11072,15 @@ cmd_user_dashboard_view() {
 
   if [ "$target_set" = "yes" ]; then
     if [ "$allow_format" = "yes" ]; then
-      cmd_project dashboard --target "$target" --view "$view" --level "$level" --format "$format" --color "$color"
+      cmd_project dashboard --target "$target" --view "$view" --level "$level" --format "$format" --color "$color" --user-cli
     else
-      cmd_project dashboard --target "$target" --view "$view" --level "$level" --color "$color"
+      cmd_project dashboard --target "$target" --view "$view" --level "$level" --color "$color" --user-cli
     fi
   else
     if [ "$allow_format" = "yes" ]; then
-      cmd_project dashboard --view "$view" --level "$level" --format "$format" --color "$color"
+      cmd_project dashboard --view "$view" --level "$level" --format "$format" --color "$color" --user-cli
     else
-      cmd_project dashboard --view "$view" --level "$level" --color "$color"
+      cmd_project dashboard --view "$view" --level "$level" --color "$color" --user-cli
     fi
   fi
 }

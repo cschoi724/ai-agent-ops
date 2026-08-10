@@ -47,15 +47,15 @@ aiops agents
 aiops release
 ```
 
-이 명령들은 기존 dashboard projection을 그대로 읽는 사용자용 entrypoint다.
+이 명령들은 기존 dashboard projection을 다시 계산하되, 터미널에서는 한국어 라벨, 색상, 진행률, 요약 section을 적용한 사용자용 화면으로 표시한다.
 
-| 사용자용 명령 | 내부 동작 |
+| 사용자용 명령 | 표시 목적 |
 |---|---|
-| `aiops status` | `aiops project dashboard --view main --level compact` |
-| `aiops work` | `aiops project dashboard --view work --level standard` |
-| `aiops risks` | `aiops project dashboard --view risk` |
-| `aiops agents` | `aiops project dashboard --view agents` |
-| `aiops release` | `aiops project dashboard --view release` |
+| `aiops status` | 프로젝트 상태, 진행률, 운영 readiness, 주의 항목 |
+| `aiops work` | 현재 일감, 상태별 요약, 담당 역할/에이전트, 다음 조치 |
+| `aiops risks` | 차단/주의 항목, 공용 기준 상태, 메타데이터 누락, 에이전트 drift |
+| `aiops agents` | 에이전트 활성 상태, 팀, 역할, 담당 일감 수 |
+| `aiops release` | 출시 전 readiness, 공용 기준 상태, 차단 항목, release-check 명령 |
 
 세부 view, JSON, Mermaid, HTML 출력이 필요하면 아래 고급 명령을 사용한다.
 
@@ -86,9 +86,9 @@ aiops project dashboard --json
 aiops project dashboard --color always
 ```
 
-현재 dashboard 구현은 Main Dashboard, Work Dashboard terminal/tree, Work Mermaid map, static HTML dashboard, Dashboard JSON contract, Risk/Agent/Release 전문 view를 제공한다.
+현재 dashboard 구현은 사용자용 CLI 화면, Main Dashboard, Work Dashboard terminal/tree, Work Mermaid map, static HTML dashboard, Dashboard JSON contract, Risk/Agent/Release 전문 view를 제공한다.
 
-사용자용 top-level 명령은 파일을 수정하지 않으며, 실행할 때마다 `project snapshot --json`과 `project health --json`을 다시 계산한 현재 projection을 표시한다. Agent와 자동화가 읽어야 하는 기계 계약은 여전히 `aiops project snapshot --json`, `aiops project health --json`, `aiops project dashboard --json`이다.
+사용자용 top-level 명령은 파일을 수정하지 않으며, 실행할 때마다 `project snapshot --json`과 `project health --json`을 다시 계산한 현재 projection을 표시한다. 사용자용 terminal 출력은 사람이 읽기 쉬운 표시층이므로 자동화 입력으로 쓰지 않는다. Agent와 자동화가 읽어야 하는 기계 계약은 여전히 `aiops project snapshot --json`, `aiops project health --json`, `aiops project dashboard --json`이다.
 
 사용자용 help는 자주 쓰는 명령을 먼저 보여준다.
 
