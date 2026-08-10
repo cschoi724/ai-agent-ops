@@ -32,6 +32,10 @@ aiops project dashboard --view work
 aiops project dashboard --view work --level detail
 aiops project dashboard --view work --format tree
 aiops project dashboard --view work --format mermaid --map dependencies
+aiops project dashboard --view work --format mermaid --map dependencies --focus TASK_ID --depth 2
+aiops project dashboard --view work --format mermaid --map summary
+aiops project dashboard --view work --format mermaid --map swimlane --group-by agent
+aiops project dashboard --view work --format mermaid --map critical-path
 aiops project dashboard --view work --format mermaid --map workflow
 aiops project dashboard --view work --format mermaid --map agents
 aiops project dashboard --json
@@ -651,9 +655,16 @@ aiops project dashboard --format html --output dashboard.html
 
 - `--format html` 지원
 - `--output FILE` 지원
+- `--map summary` 지원
+- `--map dependencies --focus TASK_ID --depth N` 지원
+- `--map swimlane --group-by agent|role|status|workflow|area` 지원
+- `--map critical-path` 지원
 - project setting, readiness, progress, active work, risk, agent, release 요약 표시
-- dependencies / workflow / agents / blockers Mermaid map 렌더링 영역 제공
+- summary / focused dependencies / swimlane / critical-path / workflow / agents / blockers Mermaid map 렌더링 영역 제공
 - Mermaid source detail 제공
+- 한국어 사용 안내와 색상 범례 제공
+- Agent enabled/deferred/disabled 상태 색상 구분
+- 복잡한 Mermaid map을 접기/펼치기와 확대/축소로 탐색
 - dashboard 실행 시 target project 파일을 수정하지 않음
 
 검증:
@@ -662,6 +673,8 @@ aiops project dashboard --format html --output dashboard.html
 - HTML file 출력
 - Mermaid container와 source 포함
 - selected `--map` 우선 표시
+- 한국어 안내, zoom control, Agent 상태 색상 class 포함
+- summary/focus/swimlane/critical-path Mermaid 출력 확인
 - `--json --output` 조합 차단
 - e2e fixture에서 target project file hash 불변 확인
 
