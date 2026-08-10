@@ -210,8 +210,11 @@ git -C "$project" push -u origin develop >/dev/null 2>&1
 before_hash="$(find "$project" -type f -not -path '*/.git/*' -print | sort | xargs shasum -a 256 | shasum -a 256 | awk "{print \$1}")"
 "$repo_root/bin/aiops" project dashboard --target "$project" >/tmp/aiops-e2e-project-dashboard.out
 "$repo_root/bin/aiops" project health --target "$project" --json >/tmp/aiops-e2e-project-dashboard-health.json
+"$repo_root/bin/aiops" project snapshot --target "$project" --json >/tmp/aiops-e2e-project-dashboard-snapshot.json
 "$repo_root/bin/aiops" project dashboard --target "$project" --json >/tmp/aiops-e2e-project-dashboard.json
+"$repo_root/bin/aiops" project dashboard --target "$project" --json --user-cli >/tmp/aiops-e2e-project-dashboard-user-cli-json.json
 "$repo_root/bin/aiops" validate project-dashboard /tmp/aiops-e2e-project-dashboard.json >/tmp/aiops-e2e-project-dashboard-validate.out
+"$repo_root/bin/aiops" validate project-dashboard /tmp/aiops-e2e-project-dashboard-user-cli-json.json >/tmp/aiops-e2e-project-dashboard-user-cli-json-validate.out
 after_hash="$(find "$project" -type f -not -path '*/.git/*' -print | sort | xargs shasum -a 256 | shasum -a 256 | awk "{print \$1}")"
 [ "$before_hash" = "$after_hash" ] || {
   printf '%s\n' "project dashboard modified project files" >&2
@@ -252,7 +255,8 @@ ruby -rjson -e '
 ' /tmp/aiops-e2e-project-dashboard-health.json /tmp/aiops-e2e-project-dashboard.out
 ruby -rjson -e '
   health = JSON.parse(File.read(ARGV[0]))
-  dashboard = JSON.parse(File.read(ARGV[1]))
+  snapshot = JSON.parse(File.read(ARGV[1]))
+  dashboard = JSON.parse(File.read(ARGV[2]))
   abort("dashboard json schema mismatch") unless dashboard["schema"] == "aiops.project_dashboard.v1"
   abort("dashboard json project mismatch") unless dashboard.dig("project", "name") == "DashboardProject"
   abort("dashboard json status diverges") unless dashboard.dig("status", "overall") == health["overall"]
@@ -267,7 +271,16 @@ ruby -rjson -e '
   abort("dashboard json next action missing") unless approved.dig("next", "action") == "start execution"
   abort("dashboard json dependency missing") unless approved["depends_on"].include?("T-20260807-001")
   abort("dashboard json maps missing") unless dashboard.dig("maps", "dependencies", "edges").any? { |edge| edge["from"] == "T-20260807-001" && edge["to"] == "T-20260807-002" }
-' /tmp/aiops-e2e-project-dashboard-health.json /tmp/aiops-e2e-project-dashboard.json
+  abort("dashboard risk metadata count changed machine projection") unless dashboard.dig("views", "risk", "task_metadata_missing") == snapshot.dig("tasks", "missing_metadata").to_i
+  abort("dashboard risk status ref count changed machine projection") unless dashboard.dig("views", "risk", "task_status_ref_missing") == snapshot.dig("tasks", "missing_status_ref_sha").to_i
+' /tmp/aiops-e2e-project-dashboard-health.json /tmp/aiops-e2e-project-dashboard-snapshot.json /tmp/aiops-e2e-project-dashboard.json
+ruby -rjson -e '
+  standard = JSON.parse(File.read(ARGV[0]))
+  user_cli = JSON.parse(File.read(ARGV[1]))
+  standard.delete("generated_at")
+  user_cli.delete("generated_at")
+  abort("project dashboard --json --user-cli changed json projection") unless standard == user_cli
+' /tmp/aiops-e2e-project-dashboard.json /tmp/aiops-e2e-project-dashboard-user-cli-json.json
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --level compact >/tmp/aiops-e2e-project-dashboard-compact.out
 grep -q 'Project: DashboardProject' /tmp/aiops-e2e-project-dashboard-compact.out || {
@@ -655,6 +668,15 @@ grep -q 'aiops sync-status --target' /tmp/aiops-e2e-project-dashboard-stale.out 
   printf '%s\n' "dashboard stale sync next step missing" >&2
   exit 1
 }
+"$repo_root/bin/aiops" release --target "$project" --color never >/tmp/aiops-e2e-user-release-stale.out
+grep -q '일감 상태 전환: 공용 기준 상태가 최신이 아닙니다' /tmp/aiops-e2e-user-release-stale.out || {
+  printf '%s\n' "user release stale transition message missing" >&2
+  exit 1
+}
+if grep -Eq 'Task Transition|canonical status ref is not current' /tmp/aiops-e2e-user-release-stale.out; then
+  printf '%s\n' "user release stale output leaked machine action/reason" >&2
+  exit 1
+fi
 
 empty_project="$tmpdir/empty"
 mkdir -p "$empty_project"
@@ -667,6 +689,54 @@ grep -q 'core_missing' /tmp/aiops-e2e-project-dashboard-empty.out || {
   printf '%s\n' "empty dashboard core blocker missing" >&2
   exit 1
 }
+"$repo_root/bin/aiops" status --target "$empty_project" --color never >/tmp/aiops-e2e-user-status-empty.out
+"$repo_root/bin/aiops" risks --target "$empty_project" --color never >/tmp/aiops-e2e-user-risks-empty.out
+"$repo_root/bin/aiops" release --target "$empty_project" --color never >/tmp/aiops-e2e-user-release-empty.out
+cat /tmp/aiops-e2e-user-status-empty.out /tmp/aiops-e2e-user-risks-empty.out /tmp/aiops-e2e-user-release-empty.out >/tmp/aiops-e2e-user-empty-combined.out
+grep -q '공용 기준 설정 필요' /tmp/aiops-e2e-user-empty-combined.out || {
+  printf '%s\n' "empty user output canonical status label missing" >&2
+  exit 1
+}
+grep -q '설정 필요' /tmp/aiops-e2e-user-empty-combined.out || {
+  printf '%s\n' "empty user output not configured label missing" >&2
+  exit 1
+}
+grep -q '확인 필요' /tmp/aiops-e2e-user-empty-combined.out || {
+  printf '%s\n' "empty user output unresolved label missing" >&2
+  exit 1
+}
+grep -q '프로젝트 설정 없음' /tmp/aiops-e2e-user-empty-combined.out || {
+  printf '%s\n' "empty user output project config check label missing" >&2
+  exit 1
+}
+grep -q '필수 파일 없음' /tmp/aiops-e2e-user-empty-combined.out || {
+  printf '%s\n' "empty user output required file check label missing" >&2
+  exit 1
+}
+grep -q '필수 디렉터리 없음' /tmp/aiops-e2e-user-empty-combined.out || {
+  printf '%s\n' "empty user output required dir check label missing" >&2
+  exit 1
+}
+grep -q 'Workflow catalog 없음' /tmp/aiops-e2e-user-empty-combined.out || {
+  printf '%s\n' "empty user output workflow catalog check label missing" >&2
+  exit 1
+}
+grep -q 'AI Ops 코어가 없습니다. aiops seed를 먼저 실행하세요' /tmp/aiops-e2e-user-empty-combined.out || {
+  printf '%s\n' "empty user output core missing message missing" >&2
+  exit 1
+}
+grep -q '.ai_project가 없습니다. bootstrap을 먼저 실행하세요' /tmp/aiops-e2e-user-empty-combined.out || {
+  printf '%s\n' "empty user output project missing message missing" >&2
+  exit 1
+}
+grep -q '일감 시작: 프로젝트 설정에 차단 항목이 있습니다' /tmp/aiops-e2e-user-release-empty.out || {
+  printf '%s\n' "empty user output task start message missing" >&2
+  exit 1
+}
+if grep -Eq 'Needs Canonical Status Ref|Not Configured|Unresolved|Project Config Missing|Required File Missing|Required Dir Missing|Workflow Catalog Missing|Adapter Missing|Task Start|Task Transition|project setup has blockers|workflow catalog missing or unreadable|canonical status ref is not current' /tmp/aiops-e2e-user-empty-combined.out; then
+  printf '%s\n' "empty user output leaked machine labels or messages" >&2
+  exit 1
+fi
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map dependencies >/tmp/aiops-e2e-project-dashboard-mermaid-dependencies.out
 grep -q '^flowchart LR$' /tmp/aiops-e2e-project-dashboard-mermaid-dependencies.out || {
