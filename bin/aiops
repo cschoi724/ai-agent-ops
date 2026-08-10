@@ -431,6 +431,10 @@ Examples:
   aiops doctor
   aiops doctor --strict
   aiops doctor --target ./CookLog --strict
+
+Related:
+  aiops status       Project status summary
+  aiops risks        Warnings and blockers
 EOF
       ;;
     doctor:*)
@@ -443,6 +447,10 @@ AI Ops 설치, adapter 파일, 프로젝트 metadata, strict mode 경고를 점�
   aiops doctor
   aiops doctor --strict
   aiops doctor --target ./CookLog --strict
+
+비슷한 명령:
+  aiops status       프로젝트 상태 요약
+  aiops risks        경고와 차단 항목 확인
 EOF
       ;;
     sync-status:en|sync:en)
@@ -457,6 +465,10 @@ Examples:
 
 Note:
   `.ai_project/.runtime/status_ref` is a local runtime cache and should not be committed.
+
+Related:
+  aiops status        Project status summary
+  aiops session-guide Role session guidance
 EOF
       ;;
     sync-status:*|sync:*)
@@ -471,6 +483,10 @@ aiops sync-status
 
 주의:
   `.ai_project/.runtime/status_ref`는 로컬 runtime cache이며 커밋하지 않습니다.
+
+비슷한 명령:
+  aiops status        프로젝트 상태 요약
+  aiops session-guide Role Session 선택 안내
 EOF
       ;;
     session-guide:en|guide:en)
@@ -482,6 +498,10 @@ Shows which role session to open next and how to start it.
 Examples:
   aiops session-guide
   aiops session-guide --target ./CookLog
+
+Related:
+  aiops agents      Agent and role assignments
+  aiops work        Active work and owners
 EOF
       ;;
     session-guide:*|guide:*)
@@ -493,6 +513,10 @@ aiops session-guide
 사용 예:
   aiops session-guide
   aiops session-guide --target ./CookLog
+
+비슷한 명령:
+  aiops agents      에이전트와 역할 배정 확인
+  aiops work        현재 일감과 담당 확인
 EOF
       ;;
     *)
@@ -2082,7 +2106,7 @@ cmd_sync_status() {
         target="$1"
         ;;
       -h|--help)
-        usage_command_help "$user_cmd" "${AIOPS_LOCALE:-ko}"
+        usage_command_help "sync-status" "${AIOPS_LOCALE:-ko}"
         exit 0
         ;;
       *)
@@ -3165,7 +3189,7 @@ cmd_doctor() {
         strict="yes"
         ;;
       -h|--help)
-        usage
+        usage_command_help "doctor" "${AIOPS_LOCALE:-ko}"
         exit 0
         ;;
       *)
@@ -9179,7 +9203,7 @@ cmd_session_guide() {
         target="$1"
         ;;
       -h|--help)
-        usage
+        usage_command_help "session-guide" "${AIOPS_LOCALE:-ko}"
         exit 0
         ;;
       *)

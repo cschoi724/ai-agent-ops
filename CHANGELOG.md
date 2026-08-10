@@ -18,6 +18,7 @@
 ### Fixed
 
 - User-facing dashboard shortcuts now reject advanced dashboard options that would change the shortcut meaning.
+- Quick-help command `--help` routes now match their command-specific help topics.
 
 ## 0.13.0 - 2026-08-10
 

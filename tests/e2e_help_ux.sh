@@ -64,6 +64,23 @@ cmp -s /tmp/aiops-e2e-work-help-option.out /tmp/aiops-e2e-help-work.out || {
   exit 1
 }
 
+for topic in status work risks agents release doctor sync-status session-guide; do
+  "$repo_root/bin/aiops" help "$topic" >/tmp/aiops-e2e-help-topic.out
+  "$repo_root/bin/aiops" "$topic" --help >/tmp/aiops-e2e-help-command.out
+  cmp -s /tmp/aiops-e2e-help-command.out /tmp/aiops-e2e-help-topic.out || {
+    printf '%s\n' "$topic --help diverges from help $topic" >&2
+    exit 1
+  }
+  grep -q '사용 예:' /tmp/aiops-e2e-help-topic.out || {
+    printf '%s\n' "$topic help example section missing" >&2
+    exit 1
+  }
+  grep -q '비슷한 명령:' /tmp/aiops-e2e-help-topic.out || {
+    printf '%s\n' "$topic help related command section missing" >&2
+    exit 1
+  }
+done
+
 "$repo_root/bin/aiops" help dashboard >/tmp/aiops-e2e-help-dashboard.out
 grep -q '^aiops project dashboard$' /tmp/aiops-e2e-help-dashboard.out || {
   printf '%s\n' "dashboard help title missing" >&2
