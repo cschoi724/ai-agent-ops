@@ -717,7 +717,7 @@ grep -q '필수 디렉터리 없음' /tmp/aiops-e2e-user-empty-combined.out || {
   printf '%s\n' "empty user output required dir check label missing" >&2
   exit 1
 }
-grep -q 'Workflow catalog 없음' /tmp/aiops-e2e-user-empty-combined.out || {
+grep -q 'Workflow catalog 파일 없음' /tmp/aiops-e2e-user-empty-combined.out || {
   printf '%s\n' "empty user output workflow catalog check label missing" >&2
   exit 1
 }
@@ -729,11 +729,15 @@ grep -q '.ai_project가 없습니다. bootstrap을 먼저 실행하세요' /tmp/
   printf '%s\n' "empty user output project missing message missing" >&2
   exit 1
 }
+grep -q 'AGENTS.md 또는 CLAUDE.md 안내 파일이 없습니다' /tmp/aiops-e2e-user-empty-combined.out || {
+  printf '%s\n' "empty user output adapter missing message missing" >&2
+  exit 1
+}
 grep -q '일감 시작: 프로젝트 설정에 차단 항목이 있습니다' /tmp/aiops-e2e-user-release-empty.out || {
   printf '%s\n' "empty user output task start message missing" >&2
   exit 1
 }
-if grep -Eq 'Needs Canonical Status Ref|Not Configured|Unresolved|Project Config Missing|Required File Missing|Required Dir Missing|Workflow Catalog Missing|Adapter Missing|Task Start|Task Transition|project setup has blockers|workflow catalog missing or unreadable|canonical status ref is not current' /tmp/aiops-e2e-user-empty-combined.out; then
+if grep -Eq 'Needs Canonical Status Ref|Not Configured|Unresolved|Project Config Missing|Required File Missing|Required Dir Missing|Workflow Catalog Missing|Adapter Missing|Task Start|Task Transition|project setup has blockers|workflow catalog missing or unreadable|canonical status ref is not current|adapter is 항목이 없습니다|AI Ops core가' /tmp/aiops-e2e-user-empty-combined.out; then
   printf '%s\n' "empty user output leaked machine labels or messages" >&2
   exit 1
 fi
