@@ -90,7 +90,7 @@ Release Dashboard 표시 항목은 release 전 readiness, canonical status, bloc
 
 `--format mermaid`는 현재 `--view work`에서만 지원하며, 터미널에는 렌더링된 그림이 아니라 Mermaid source text를 출력한다. summary map은 Task를 영역 단위로 접은 요약, dependency map은 `depends_on`/`blocks`, swimlane map은 `--group-by` 기준 활성 일감 보드, critical-path map은 출시/목표 Task 중심 선행 경로, workflow map은 표준 상태 흐름, agents map은 target_agent/target_role, blockers map은 health warning/blocker를 Mermaid `flowchart`로 출력한다.
 
-`--format html --output dashboard.html`은 같은 dashboard projection과 Mermaid source를 정적 HTML로 감싸 브라우저에서 시각적으로 볼 수 있게 만든다. HTML은 Mermaid CDN module을 사용해 diagram을 렌더링하며, 각 diagram 아래에는 원본 Mermaid source도 함께 접어 둔다. HTML dashboard에는 한국어 안내, 상태 색상 범례, Agent 상태 색상, map별 접기/펼치기, diagram 확대/축소 버튼이 포함된다. 상태, Role, Team, Agent 표시명, workflow, capability 같은 기계 판독 값은 HTML 표시에서 사용자가 읽기 쉬운 한국어 라벨로 치환한다. HTML에서 `--map`을 지정하지 않으면 큰 dependency graph 대신 `summary` map을 먼저 연다.
+`--format html --output dashboard.html`은 같은 dashboard projection과 Mermaid source를 정적 HTML로 감싸 브라우저에서 시각적으로 볼 수 있게 만든다. HTML은 Mermaid CDN module을 사용해 diagram을 렌더링하며, 각 diagram 아래에는 원본 Mermaid source도 함께 접어 둔다. HTML dashboard에는 한국어 안내, 상태 색상 범례, Agent 상태 색상, map별 접기/펼치기, diagram 확대/축소 버튼이 포함된다. 상태, Role, Team, Agent 표시명, workflow, capability 같은 기계 판독 값은 HTML 표시에서 locale label catalog를 거쳐 사용자가 읽기 쉬운 라벨로 치환한다. 기본 catalog는 `ko`이며, 미등록 값은 원본 의미를 잃지 않도록 사람이 읽을 수 있는 fallback으로 표시한다. HTML에서 `--map`을 지정하지 않으면 큰 dependency graph 대신 `summary` map을 먼저 연다.
 
 큰 프로젝트에서는 전체 dependency map보다 아래 형태가 더 읽기 쉽다.
 

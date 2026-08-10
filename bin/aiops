@@ -4355,245 +4355,283 @@ cmd_project() {
           clean(value, "없음").tr("_", " ").gsub(/\b\w/) { |char| char.upcase }
         end
 
-        def html_status_label(value)
-          labels = {
-            "ok" => "정상",
-            "warning" => "주의 필요",
-            "blocked" => "차단됨",
-            "complete" => "완료",
-            "allowed" => "허용",
-            "ready" => "준비됨",
-            "recorded_current" => "최신 동기화",
-            "recorded_stale" => "동기화 필요",
-            "not_recorded" => "기록 필요",
-            "not_required" => "필요 없음",
-            "done" => "완료",
-            "true" => "가능",
-            "false" => "불가",
-            "ready_for_release_check" => "출시 검증 가능",
-            "review_required" => "검토 필요",
-            "review_needed" => "검토 필요",
-            "enabled" => "사용 가능",
-            "deferred" => "보류",
-            "disabled" => "비활성",
-            "allowed_with_warnings" => "경고 있음",
-            "sync_required" => "동기화 필요",
-            "migration_needed" => "마이그레이션 필요",
-            "proposed" => "후보",
-            "scoped" => "범위 확정",
-            "approved" => "승인됨",
-            "in_progress" => "진행 중",
-            "verification_ready" => "검증 대기",
-            "verification_passed" => "검증 통과",
-            "completion_review" => "완료 검토",
-            "rework_requested" => "재작업 필요",
-            "cancelled" => "취소"
+        def html_dashboard_locale
+          locale = ENV.fetch("AIOPS_DASHBOARD_LOCALE", "ko").to_s
+          locale.split(/[_.-]/).first
+        end
+
+        def html_label_catalog(locale = html_dashboard_locale)
+          catalogs = {
+            "ko" => {
+              "fallback" => {
+                "empty" => "없음",
+                "role" => "담당 미지정",
+                "team" => "팀 미지정",
+                "agent" => "담당자 미지정"
+              },
+              "status" => {
+                "ok" => "정상",
+                "warning" => "주의 필요",
+                "blocked" => "차단됨",
+                "complete" => "완료",
+                "allowed" => "허용",
+                "ready" => "준비됨",
+                "recorded_current" => "최신 동기화",
+                "recorded_stale" => "동기화 필요",
+                "not_recorded" => "기록 필요",
+                "not_required" => "필요 없음",
+                "done" => "완료",
+                "true" => "가능",
+                "false" => "불가",
+                "ready_for_release_check" => "출시 검증 가능",
+                "review_required" => "검토 필요",
+                "review_needed" => "검토 필요",
+                "enabled" => "사용 가능",
+                "deferred" => "보류",
+                "disabled" => "비활성",
+                "allowed_with_warnings" => "경고 있음",
+                "sync_required" => "동기화 필요",
+                "migration_needed" => "마이그레이션 필요",
+                "proposed" => "후보",
+                "scoped" => "범위 확정",
+                "approved" => "승인됨",
+                "in_progress" => "진행 중",
+                "verification_ready" => "검증 대기",
+                "verification_passed" => "검증 통과",
+                "completion_review" => "완료 검토",
+                "rework_requested" => "재작업 필요",
+                "cancelled" => "취소"
+              },
+              "role" => {
+                "Direction Role" => "제품 방향 결정",
+                "Lead Role" => "계획/조율",
+                "Execution Role" => "구현/실행",
+                "Verification Role" => "검증",
+                "Completion Role" => "완료 판정",
+                "Ops Governance Role" => "운영 관리"
+              },
+              "team" => {
+                "Product Team" => "제품팀",
+                "Design Team" => "디자인팀",
+                "Core Development Team" => "개발팀",
+                "Quality Team" => "품질팀",
+                "AI Ops Team" => "운영팀",
+                "Future Team" => "보류 영역"
+              },
+              "agent" => {
+                "Product Lead Agent" => "제품 리드",
+                "Product Planning Agent" => "제품 기획 담당",
+                "Design Lead Agent" => "디자인 리드",
+                "UI/UX Design Agent" => "UI/UX 디자인 담당",
+                "Development Lead Agent" => "개발 리드",
+                "iOS Agent" => "iOS 구현 담당",
+                "Backend Agent" => "백엔드 구현 담당",
+                "Android Agent" => "Android 구현 담당",
+                "Design QA Agent" => "디자인 검증 담당",
+                "iOS QA Agent" => "iOS 검증 담당",
+                "Backend QA Agent" => "백엔드 검증 담당",
+                "Product QA Agent" => "제품 검증 담당",
+                "AI Ops Agent" => "운영 관리 담당",
+                "Lead Agent" => "리드 담당",
+                "Deferred Agent" => "보류 담당",
+                "PM Agent" => "프로젝트 관리 담당",
+                "QA Agent" => "품질 검증 담당",
+                "Development Agent" => "개발 담당"
+              },
+              "project_setting" => {
+                "multi_team" => "여러 팀 협업",
+                "single_team" => "단일 팀",
+                "standard_vnext" => "표준 워크플로우",
+                "standard" => "표준 워크플로우",
+                "context_packs" => "컨텍스트 팩",
+                "guided_full" => "전체 안내형 설정",
+                "implementation_ready" => "구현 가능",
+                "path_plus_domain" => "경로와 도메인 기준",
+                "project_plus_team_board" => "프로젝트/팀 보드 병행",
+                "pr_required" => "PR 필수"
+              },
+              "workflow" => {
+                "feature" => "기능 개발",
+                "docs" => "문서 정리",
+                "bugfix" => "버그 수정",
+                "qa" => "품질 검증",
+                "ops" => "운영 작업",
+                "ops_migration" => "운영 전환"
+              },
+              "capability" => {
+                "product_direction" => "제품 방향 결정",
+                "priority_management" => "우선순위 관리",
+                "product_scoping" => "제품 범위 정리",
+                "product_dependency_management" => "제품 의존성 조율",
+                "approval_preparation" => "승인 준비",
+                "parent_task_completion" => "상위 일감 완료 처리",
+                "product_documentation" => "제품 문서 정리",
+                "roadmap_management" => "로드맵 관리",
+                "task_reporting" => "작업 보고",
+                "design_scoping" => "디자인 범위 정리",
+                "design_dependency_management" => "디자인 의존성 조율",
+                "design_child_completion" => "디자인 하위 일감 완료",
+                "ux_flow" => "사용자 흐름 설계",
+                "ui_design" => "화면 디자인",
+                "prototyping" => "프로토타입 제작",
+                "design_handoff" => "디자인 핸드오프",
+                "technical_planning" => "기술 계획",
+                "ownership_review" => "소유권/담당 범위 검토",
+                "dependency_management" => "의존성 관리",
+                "development_child_completion" => "개발 하위 일감 완료",
+                "merge_coordination" => "병합 조율",
+                "ios_implementation" => "iOS 구현",
+                "developer_verification" => "개발자 검증",
+                "backend_architecture" => "백엔드 구조 설계",
+                "api_contract" => "API 계약 정의",
+                "backend_implementation" => "백엔드 구현",
+                "android_implementation" => "Android 구현",
+                "design_qa" => "디자인 QA",
+                "accessibility_review" => "접근성 검토",
+                "design_handoff_review" => "디자인 핸드오프 검토",
+                "ios_qa" => "iOS QA",
+                "regression_test" => "회귀 테스트",
+                "design_fidelity_review" => "디자인 반영 검토",
+                "api_qa" => "API QA",
+                "contract_test" => "계약 테스트",
+                "security_check" => "보안 점검",
+                "privacy_review" => "개인정보 검토",
+                "cross_domain_reconciliation" => "영역 간 정합성 확인",
+                "source_of_truth_governance" => "기준 문서 관리",
+                "independent_validation" => "독립 검증",
+                "ops_audit" => "운영 감사",
+                "process_governance" => "프로세스 관리",
+                "workflow_governance" => "워크플로우 관리",
+                "ops_migration" => "운영 마이그레이션",
+                "scope_definition" => "범위 정의",
+                "implementation" => "구현",
+                "future_work" => "향후 작업",
+                "completion_review" => "완료 검토",
+                "verification" => "검증"
+              },
+              "next_action" => {
+                "start execution" => "구현 시작",
+                "approve or split" => "승인 또는 분할",
+                "scope or approve" => "범위 정리 또는 승인",
+                "start verification" => "검증 시작",
+                "start completion" => "완료 검토 시작",
+                "review rework" => "재작업 검토",
+                "no action" => "다음 조치 없음"
+              },
+              "check" => {
+                "task_metadata_incomplete" => "일감 메타데이터 누락",
+                "task_status_ref_missing" => "일감 기준 SHA 누락",
+                "unresolved_decisions_present" => "미해결 결정 항목 있음",
+                "canonical_status_stale" => "공용 기준 상태 동기화 필요",
+                "canonical_status_current" => "공용 기준 상태 최신",
+                "core_version_current" => "코어 버전 최신",
+                "migration_needed" => "마이그레이션 필요",
+                "core_missing" => "AI Ops 코어 없음"
+              },
+              "approval" => {
+                "commit" => "커밋",
+                "push" => "푸시",
+                "create_pr" => "PR 생성",
+                "merge" => "병합",
+                "deploy" => "배포",
+                "external_configuration_changes" => "외부 설정 변경"
+              },
+              "group_by" => {
+                "area" => "영역",
+                "agent" => "담당자",
+                "role" => "역할",
+                "status" => "상태",
+                "workflow" => "작업 유형"
+              },
+              "map_title" => {
+                "summary" => "프로젝트 요약 맵",
+                "dependencies" => "일감 의존성 맵",
+                "swimlane" => "작업 보드 맵",
+                "critical-path" => "핵심 경로 맵",
+                "workflow" => "작업 흐름 맵",
+                "agents" => "담당자 / 역할 맵",
+                "blockers" => "차단 / 주의 맵"
+              },
+              "map_badge" => {
+                "summary" => "요약",
+                "dependencies" => "의존성",
+                "swimlane" => "작업 보드",
+                "critical-path" => "핵심 경로",
+                "workflow" => "작업 흐름",
+                "agents" => "담당자",
+                "blockers" => "차단/주의"
+              }
+            }
           }
-          labels[value.to_s.downcase] || html_humanize_key(value)
+          catalogs[locale.to_s] || catalogs["ko"]
+        end
+
+        def html_fallback_label(category)
+          catalog = html_label_catalog
+          fallback_key = {
+            "role" => "role",
+            "team" => "team",
+            "agent" => "agent"
+          }[category.to_s] || "empty"
+          catalog.fetch("fallback", {}).fetch(fallback_key, "없음")
+        end
+
+        def html_localized_label(category, value, fallback = nil)
+          text = value.to_s
+          labels = html_label_catalog.fetch(category.to_s, {})
+          labels[text] || labels[text.downcase] || (fallback || html_humanize_key(value))
+        end
+
+        def html_status_label(value)
+          html_localized_label("status", value)
         end
 
         def html_role_label(value)
-          {
-            "Direction Role" => "제품 방향 결정",
-            "Lead Role" => "계획/조율",
-            "Execution Role" => "구현/실행",
-            "Verification Role" => "검증",
-            "Completion Role" => "완료 판정",
-            "Ops Governance Role" => "운영 관리"
-          }[value.to_s] || clean(value, "담당 미지정")
+          html_localized_label("role", value, clean(value, html_fallback_label("role")))
         end
 
         def html_team_label(value)
-          {
-            "Product Team" => "제품팀",
-            "Design Team" => "디자인팀",
-            "Core Development Team" => "개발팀",
-            "Quality Team" => "품질팀",
-            "AI Ops Team" => "운영팀",
-            "Future Team" => "보류 영역"
-          }[value.to_s] || clean(value, "팀 미지정")
+          html_localized_label("team", value, clean(value, html_fallback_label("team")))
         end
 
         def html_agent_label(value)
-          {
-            "Product Lead Agent" => "제품 리드",
-            "Product Planning Agent" => "제품 기획 담당",
-            "Design Lead Agent" => "디자인 리드",
-            "UI/UX Design Agent" => "UI/UX 디자인 담당",
-            "Development Lead Agent" => "개발 리드",
-            "iOS Agent" => "iOS 구현 담당",
-            "Backend Agent" => "백엔드 구현 담당",
-            "Android Agent" => "Android 구현 담당",
-            "Design QA Agent" => "디자인 검증 담당",
-            "iOS QA Agent" => "iOS 검증 담당",
-            "Backend QA Agent" => "백엔드 검증 담당",
-            "Product QA Agent" => "제품 검증 담당",
-            "AI Ops Agent" => "운영 관리 담당",
-            "Lead Agent" => "리드 담당",
-            "Deferred Agent" => "보류 담당",
-            "PM Agent" => "프로젝트 관리 담당",
-            "QA Agent" => "품질 검증 담당",
-            "Development Agent" => "개발 담당"
-          }[value.to_s] || clean(value, "담당자 미지정")
+          html_localized_label("agent", value, clean(value, html_fallback_label("agent")))
         end
 
         def html_project_setting_label(value)
-          {
-            "multi_team" => "여러 팀 협업",
-            "single_team" => "단일 팀",
-            "standard_vnext" => "표준 워크플로우",
-            "standard" => "표준 워크플로우",
-            "context_packs" => "컨텍스트 팩",
-            "guided_full" => "전체 안내형 설정",
-            "implementation_ready" => "구현 가능",
-            "path_plus_domain" => "경로와 도메인 기준",
-            "project_plus_team_board" => "프로젝트/팀 보드 병행",
-            "pr_required" => "PR 필수"
-          }[value.to_s] || html_humanize_key(value)
+          html_localized_label("project_setting", value)
         end
 
         def html_workflow_label(value)
-          {
-            "feature" => "기능 개발",
-            "docs" => "문서 정리",
-            "bugfix" => "버그 수정",
-            "qa" => "품질 검증",
-            "ops" => "운영 작업",
-            "ops_migration" => "운영 전환"
-          }[value.to_s] || html_humanize_key(value)
+          html_localized_label("workflow", value)
         end
 
         def html_capability_label(value)
-          {
-            "product_direction" => "제품 방향 결정",
-            "priority_management" => "우선순위 관리",
-            "product_scoping" => "제품 범위 정리",
-            "product_dependency_management" => "제품 의존성 조율",
-            "approval_preparation" => "승인 준비",
-            "parent_task_completion" => "상위 일감 완료 처리",
-            "product_documentation" => "제품 문서 정리",
-            "roadmap_management" => "로드맵 관리",
-            "task_reporting" => "작업 보고",
-            "design_scoping" => "디자인 범위 정리",
-            "design_dependency_management" => "디자인 의존성 조율",
-            "design_child_completion" => "디자인 하위 일감 완료",
-            "ux_flow" => "사용자 흐름 설계",
-            "ui_design" => "화면 디자인",
-            "prototyping" => "프로토타입 제작",
-            "design_handoff" => "디자인 핸드오프",
-            "technical_planning" => "기술 계획",
-            "ownership_review" => "소유권/담당 범위 검토",
-            "dependency_management" => "의존성 관리",
-            "development_child_completion" => "개발 하위 일감 완료",
-            "merge_coordination" => "병합 조율",
-            "ios_implementation" => "iOS 구현",
-            "developer_verification" => "개발자 검증",
-            "backend_architecture" => "백엔드 구조 설계",
-            "api_contract" => "API 계약 정의",
-            "backend_implementation" => "백엔드 구현",
-            "android_implementation" => "Android 구현",
-            "design_qa" => "디자인 QA",
-            "accessibility_review" => "접근성 검토",
-            "design_handoff_review" => "디자인 핸드오프 검토",
-            "ios_qa" => "iOS QA",
-            "regression_test" => "회귀 테스트",
-            "design_fidelity_review" => "디자인 반영 검토",
-            "api_qa" => "API QA",
-            "contract_test" => "계약 테스트",
-            "security_check" => "보안 점검",
-            "privacy_review" => "개인정보 검토",
-            "cross_domain_reconciliation" => "영역 간 정합성 확인",
-            "source_of_truth_governance" => "기준 문서 관리",
-            "independent_validation" => "독립 검증",
-            "ops_audit" => "운영 감사",
-            "process_governance" => "프로세스 관리",
-            "workflow_governance" => "워크플로우 관리",
-            "ops_migration" => "운영 마이그레이션",
-            "scope_definition" => "범위 정의",
-            "implementation" => "구현",
-            "future_work" => "향후 작업",
-            "completion_review" => "완료 검토",
-            "verification" => "검증"
-          }[value.to_s] || html_humanize_key(value)
+          html_localized_label("capability", value)
         end
 
         def html_next_action_label(value)
-          {
-            "start execution" => "구현 시작",
-            "approve or split" => "승인 또는 분할",
-            "scope or approve" => "범위 정리 또는 승인",
-            "start verification" => "검증 시작",
-            "start completion" => "완료 검토 시작",
-            "review rework" => "재작업 검토",
-            "no action" => "다음 조치 없음"
-          }[value.to_s] || html_humanize_key(value)
+          html_localized_label("next_action", value)
         end
 
         def html_check_label(value)
-          {
-            "task_metadata_incomplete" => "일감 메타데이터 누락",
-            "task_status_ref_missing" => "일감 기준 SHA 누락",
-            "unresolved_decisions_present" => "미해결 결정 항목 있음",
-            "canonical_status_stale" => "공용 기준 상태 동기화 필요",
-            "canonical_status_current" => "공용 기준 상태 최신",
-            "core_version_current" => "코어 버전 최신",
-            "migration_needed" => "마이그레이션 필요",
-            "core_missing" => "AI Ops 코어 없음"
-          }[value.to_s] || html_humanize_key(value)
+          html_localized_label("check", value)
         end
 
         def html_approval_label(value)
-          {
-            "commit" => "커밋",
-            "push" => "푸시",
-            "create_pr" => "PR 생성",
-            "merge" => "병합",
-            "deploy" => "배포",
-            "external_configuration_changes" => "외부 설정 변경"
-          }[value.to_s] || html_humanize_key(value)
+          html_localized_label("approval", value)
         end
 
         def html_group_by_label(value)
-          {
-            "area" => "영역",
-            "agent" => "담당자",
-            "role" => "역할",
-            "status" => "상태",
-            "workflow" => "작업 유형"
-          }[value.to_s] || html_humanize_key(value)
+          html_localized_label("group_by", value)
         end
 
         def html_map_title(name)
-          case name
-          when "summary"
-            "프로젝트 요약 맵"
-          when "dependencies"
-            "일감 의존성 맵"
-          when "swimlane"
-            "작업 보드 맵"
-          when "critical-path"
-            "핵심 경로 맵"
-          when "workflow"
-            "작업 흐름 맵"
-          when "agents"
-            "담당자 / 역할 맵"
-          when "blockers"
-            "차단 / 주의 맵"
-          else
-            name.to_s
-          end
+          html_localized_label("map_title", name, name.to_s)
         end
 
         def html_map_badge_label(name)
-          {
-            "summary" => "요약",
-            "dependencies" => "의존성",
-            "swimlane" => "작업 보드",
-            "critical-path" => "핵심 경로",
-            "workflow" => "작업 흐름",
-            "agents" => "담당자",
-            "blockers" => "차단/주의"
-          }[name.to_s] || html_humanize_key(name)
+          html_localized_label("map_badge", name)
         end
 
         def render_html_dashboard(snapshot, health_summary, view, level, selected_map, focus = "", depth = 2, group_by = "area")
