@@ -283,6 +283,14 @@ cmp -s /tmp/aiops-e2e-user-status.out /tmp/aiops-e2e-project-dashboard-compact.o
   printf '%s\n' "user status command diverges from compact main dashboard" >&2
   exit 1
 }
+if "$repo_root/bin/aiops" status --target "$project" --view release >/tmp/aiops-e2e-user-status-view.out 2>&1; then
+  printf '%s\n' "user status accepted unsupported --view" >&2
+  exit 1
+fi
+grep -q 'aiops status does not support --view' /tmp/aiops-e2e-user-status-view.out || {
+  printf '%s\n' "user status unsupported --view message missing" >&2
+  exit 1
+}
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --color always >/tmp/aiops-e2e-project-dashboard-color.out
 ruby -e '
@@ -340,6 +348,14 @@ cmp -s /tmp/aiops-e2e-user-work.out /tmp/aiops-e2e-project-dashboard-work.out ||
   printf '%s\n' "user work command diverges from work dashboard" >&2
   exit 1
 }
+if "$repo_root/bin/aiops" work --target "$project" --format html --map workflow --output /tmp/aiops-e2e-user-work.html >/tmp/aiops-e2e-user-work-html.out 2>&1; then
+  printf '%s\n' "user work accepted unsupported html format" >&2
+  exit 1
+fi
+grep -q 'aiops work --format supports: terminal, tree' /tmp/aiops-e2e-user-work-html.out || {
+  printf '%s\n' "user work unsupported format message missing" >&2
+  exit 1
+}
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --view work --color always >/tmp/aiops-e2e-project-dashboard-work-color.out
 ruby -e '
@@ -362,6 +378,11 @@ ruby -e '
 ' /tmp/aiops-e2e-project-dashboard-work-color.out
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --view work --format tree >/tmp/aiops-e2e-project-dashboard-work-tree.out
+"$repo_root/bin/aiops" work --target "$project" --format tree >/tmp/aiops-e2e-user-work-tree.out
+cmp -s /tmp/aiops-e2e-user-work-tree.out /tmp/aiops-e2e-project-dashboard-work-tree.out || {
+  printf '%s\n' "user work tree command diverges from work tree dashboard" >&2
+  exit 1
+}
 grep -q 'AI Ops Work Tree' /tmp/aiops-e2e-project-dashboard-work-tree.out || {
   printf '%s\n' "work tree header missing" >&2
   exit 1
@@ -425,6 +446,14 @@ grep -q 'Task Status Ref Missing:' /tmp/aiops-e2e-project-dashboard-risk.out || 
 "$repo_root/bin/aiops" risks --target "$project" >/tmp/aiops-e2e-user-risks.out
 cmp -s /tmp/aiops-e2e-user-risks.out /tmp/aiops-e2e-project-dashboard-risk.out || {
   printf '%s\n' "user risks command diverges from risk dashboard" >&2
+  exit 1
+}
+if "$repo_root/bin/aiops" risks --target "$project" --view agents >/tmp/aiops-e2e-user-risks-view.out 2>&1; then
+  printf '%s\n' "user risks accepted unsupported --view" >&2
+  exit 1
+fi
+grep -q 'aiops risks does not support --view' /tmp/aiops-e2e-user-risks-view.out || {
+  printf '%s\n' "user risks unsupported --view message missing" >&2
   exit 1
 }
 

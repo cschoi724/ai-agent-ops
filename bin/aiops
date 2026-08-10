@@ -10308,10 +10308,78 @@ cmd_bootstrap_guide() {
 }
 
 cmd_user_dashboard_view() {
-  view="$1"
-  level="$2"
-  shift 2
-  cmd_project dashboard --view "$view" --level "$level" "$@"
+  user_cmd="$1"
+  view="$2"
+  level="$3"
+  allow_format="$4"
+  shift 4
+
+  target=""
+  target_set="no"
+  color="auto"
+  format="terminal"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --target)
+        shift
+        [ "$#" -gt 0 ] || die "--target requires a value"
+        target="$1"
+        target_set="yes"
+        ;;
+      --level)
+        shift
+        [ "$#" -gt 0 ] || die "--level requires a value"
+        level="$1"
+        ;;
+      --format)
+        shift
+        [ "$#" -gt 0 ] || die "--format requires a value"
+        [ "$allow_format" = "yes" ] || die "aiops $user_cmd does not support --format; use aiops project dashboard for advanced options"
+        case "$1" in
+          terminal|tree)
+            format="$1"
+            ;;
+          *)
+            die "aiops $user_cmd --format supports: terminal, tree"
+            ;;
+        esac
+        ;;
+      --color)
+        shift
+        [ "$#" -gt 0 ] || die "--color requires a value"
+        color="$1"
+        ;;
+      --no-color)
+        color="never"
+        ;;
+      --view|--map|--focus|--depth|--group-by|--json|--output)
+        die "aiops $user_cmd does not support $1; use aiops project dashboard for advanced options"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "unknown aiops $user_cmd option: $1"
+        ;;
+    esac
+    shift
+  done
+
+  if [ "$target_set" = "yes" ]; then
+    if [ "$allow_format" = "yes" ]; then
+      cmd_project dashboard --target "$target" --view "$view" --level "$level" --format "$format" --color "$color"
+    else
+      cmd_project dashboard --target "$target" --view "$view" --level "$level" --color "$color"
+    fi
+  else
+    if [ "$allow_format" = "yes" ]; then
+      cmd_project dashboard --view "$view" --level "$level" --format "$format" --color "$color"
+    else
+      cmd_project dashboard --view "$view" --level "$level" --color "$color"
+    fi
+  fi
 }
 
 main() {
@@ -10321,11 +10389,11 @@ main() {
   fi
 
   case "$cmd" in
-    status) cmd_user_dashboard_view main compact "$@" ;;
-    work) cmd_user_dashboard_view work standard "$@" ;;
-    risks) cmd_user_dashboard_view risk standard "$@" ;;
-    agents) cmd_user_dashboard_view agents standard "$@" ;;
-    release) cmd_user_dashboard_view release standard "$@" ;;
+    status) cmd_user_dashboard_view status main compact no "$@" ;;
+    work) cmd_user_dashboard_view work work standard yes "$@" ;;
+    risks) cmd_user_dashboard_view risks risk standard no "$@" ;;
+    agents) cmd_user_dashboard_view agents agents standard no "$@" ;;
+    release) cmd_user_dashboard_view release release standard no "$@" ;;
     seed) cmd_seed "$@" ;;
     doctor) cmd_doctor "$@" ;;
     migrate) cmd_migrate "$@" ;;
