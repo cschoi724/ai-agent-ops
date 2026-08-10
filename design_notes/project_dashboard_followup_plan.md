@@ -29,6 +29,9 @@ v0.13.0의 목표는 dashboard/work map을 사용할 수 있는 형태로 완성
 
 - 사용자용 명령과 Agent/자동화용 명령이 같은 `project dashboard` 하위 옵션에 섞여 있다.
 - 사용자 입장에서는 `--view`, `--format`, `--map`, `--group-by`, `--focus` 조합이 길고 어렵다.
+- `aiops help`가 너무 많은 명령을 한 번에 보여주며, 어떤 명령을 언제 써야 하는지 설명이 부족하다.
+- Agent/자동화용 명령이 기본 help에 노출되어 사용자용 명령 선택을 방해한다.
+- help 설명 문구가 지역화된 사용자 언어 catalog로 관리되지 않는다.
 - CLI 기본 화면은 기계 판독 상태어를 일부 그대로 노출하며, HTML만큼 사용자용 언어/시각화가 충분하지 않다.
 - HTML은 정적 스냅샷이라 운영 데이터가 바뀌면 다시 생성해야 한다.
 - 큰 dependency graph는 여전히 한 화면에서 복잡하다.
@@ -43,14 +46,15 @@ v0.13.0의 목표는 dashboard/work map을 사용할 수 있는 형태로 완성
 | 순위 | 후보 | 이유 |
 |---|---|---|
 | 1 | 사용자용 명령 계층 | 긴 옵션 조합을 숨기고 사람이 바로 쓰는 entrypoint 제공 |
-| 2 | 사용자용 CLI 시각화 | HTML 없이도 터미널에서 가볍게 상태를 이해 |
-| 3 | 큰 graph 탐색 개선 | CookLog 같은 실제 프로젝트에서 가장 즉시 체감되는 사용성 문제 |
-| 4 | 로컬 서버 / 새로고침 | 운영 중 HTML을 계속 다시 생성해야 하는 불편 제거 |
-| 5 | Dashboard preset | 반복 명령을 줄이고 프로젝트별 운영 화면을 표준화 |
-| 6 | GitHub PR/CI release view | 배포 판단에 필요한 외부 상태 연결 |
-| 7 | Locale 확장 | 사용자 표시명 체계화와 다국어 확장 기반 |
-| 8 | HTML visual regression | 브라우저 렌더링 안정성 강화 |
-| 9 | SVG/PNG export | 보고/공유용 산출물 생성 |
+| 2 | Help UX / 지역화 설명 | 기본 help를 사용자용으로 줄이고 AI용 명령은 명시 요청 시만 노출 |
+| 3 | 사용자용 CLI 시각화 | HTML 없이도 터미널에서 가볍게 상태를 이해 |
+| 4 | 큰 graph 탐색 개선 | CookLog 같은 실제 프로젝트에서 가장 즉시 체감되는 사용성 문제 |
+| 5 | 로컬 서버 / 새로고침 | 운영 중 HTML을 계속 다시 생성해야 하는 불편 제거 |
+| 6 | Dashboard preset | 반복 명령을 줄이고 프로젝트별 운영 화면을 표준화 |
+| 7 | GitHub PR/CI release view | 배포 판단에 필요한 외부 상태 연결 |
+| 8 | Locale 확장 | 사용자 표시명 체계화와 다국어 확장 기반 |
+| 9 | HTML visual regression | 브라우저 렌더링 안정성 강화 |
+| 10 | SVG/PNG export | 보고/공유용 산출물 생성 |
 
 ## 설계 원칙
 
@@ -61,6 +65,9 @@ v0.13.0의 목표는 dashboard/work map을 사용할 수 있는 형태로 완성
 - CLI terminal/json 계약은 가능한 한 안정적으로 유지한다.
 - 사용자용 명령은 사용자 언어, 짧은 명령, 색상/진행률/요약을 기본값으로 삼는다.
 - Agent/자동화용 명령은 machine contract와 raw key를 유지한다.
+- 기본 help는 사용자용 entrypoint만 보여준다.
+- AI/자동화용 명령은 `aiops help ai`, `aiops help machine`, `aiops help all`, `aiops --help --all`처럼 명시 요청 시 노출한다.
+- help 설명 문구는 locale catalog로 관리한다.
 - 큰 graph는 전체를 한 번에 보여주기보다 focus, filter, grouping, summary를 우선한다.
 
 ## 상태 projection 동작 기준
@@ -136,8 +143,6 @@ aiops policy evaluate --json
 구현 범위:
 
 - top-level command routing 추가
-- 사용자용 help section 추가
-- 내부 고급 명령 help와 사용자용 quick command help 분리
 - 사용자용 명령에서는 기본 color auto 적용
 - 사용자용 명령에서는 machine key 대신 display label 우선 표시
 - `--target DIR`는 사용자용 명령에서도 지원
@@ -152,10 +157,121 @@ aiops policy evaluate --json
 
 - `aiops status`, `aiops work`, `aiops risks`, `aiops agents`, `aiops release` smoke
 - 사용자용 명령과 내부 매핑 명령의 핵심 projection 값 일치
-- 사용자용 help에서 긴 옵션 조합보다 quick command가 먼저 표시
 - Agent/자동화용 JSON 출력은 byte-level 의미 회귀 없음
 
-## 2차. User CLI Visualization
+## 2차. Help UX / Localized Command Guide
+
+목표:
+
+- 기본 help에서 사용자가 바로 쓸 명령만 보여준다.
+- AI/자동화용 명령은 숨기되, 명시 옵션으로 접근 가능하게 한다.
+- 각 명령에 "언제 쓰는지", "예시", "비슷한 명령"을 지역화된 설명으로 제공한다.
+
+후보 명령:
+
+```sh
+aiops help
+aiops --help
+aiops help work
+aiops help dashboard
+aiops help ai
+aiops help machine
+aiops help all
+aiops --help --all
+aiops help --locale ko
+aiops help work --locale en
+```
+
+기본 help 노출 정책:
+
+```text
+AI Ops
+
+자주 쓰는 명령어
+
+  aiops status       프로젝트 상태와 다음 추천 작업을 봅니다
+  aiops work         현재 일감과 담당자를 봅니다
+  aiops dashboard    브라우저용 대시보드를 만듭니다
+  aiops open         대시보드를 만들고 브라우저로 엽니다
+  aiops sync         협업 기준 상태를 동기화합니다
+  aiops doctor       프로젝트 설정 문제를 점검합니다
+
+더 보기
+
+  aiops help work       work 명령 자세히 보기
+  aiops help dashboard  dashboard 명령 자세히 보기
+  aiops help ai         Agent/자동화용 명령 보기
+  aiops help all        전체 명령 보기
+```
+
+명령별 help 예시:
+
+```text
+aiops work
+
+현재 활성 일감, 상태, 담당 역할/에이전트를 보여줍니다.
+
+사용 예:
+  aiops work
+  aiops work --detail
+  aiops work --target ./CookLog
+
+비슷한 명령:
+  aiops status       전체 상태 요약
+  aiops dashboard    브라우저 대시보드 생성
+```
+
+기본 help에서 숨길 AI/자동화용 명령:
+
+```sh
+aiops project snapshot --json
+aiops project health --json
+aiops project dashboard --json
+aiops project context --role ROLE --task TASK_ID
+aiops policy evaluate --json
+aiops action plan --json
+aiops validate project-dashboard FILE
+```
+
+구현 범위:
+
+- 기본 help를 사용자용 quick help로 교체
+- `help ai` / `help machine` / `help all` 추가
+- `--help --all` 추가
+- 명령별 help 라우팅 추가
+- help 문구 locale catalog 설계
+- 기본 locale은 `ko`
+- 환경변수 `AIOPS_LOCALE` 검토
+- `--locale ko|en` 옵션 검토
+- 사용자용 help와 AI용 help의 목적 차이를 문서화
+
+locale catalog 후보:
+
+```text
+runtime/help_catalog.ko.json
+runtime/help_catalog.en.json
+```
+
+초기 구현에서는 shell 유지보수 비용을 낮추기 위해 내장 catalog helper로 시작할 수 있다. 단, 문구 key와 lookup helper를 분리해 나중에 JSON catalog로 옮길 수 있게 한다.
+
+비범위:
+
+- 모든 기존 명령의 장문 매뉴얼화
+- JSON schema 설명 전체 번역
+- AI/자동화용 명령 삭제
+- 기본 help에서 모든 고급 옵션 표시
+
+검증:
+
+- `aiops help`가 사용자용 명령만 짧게 표시
+- `aiops help ai`가 machine contract 명령을 표시
+- `aiops help all`이 전체 명령을 표시
+- `aiops help work`가 설명, 예시, 비슷한 명령을 표시
+- 기본 help에 `project snapshot --json` 같은 AI용 명령이 직접 노출되지 않음
+- locale fallback이 동작
+- 기존 `aiops help` 호출 exit code 회귀 없음
+
+## 3차. User CLI Visualization
 
 목표:
 
@@ -221,7 +337,7 @@ CookLog 상태
 - CLI 사용자용 라벨이 HTML 라벨과 충돌하지 않음
 - terminal dashboard 기존 출력과 새 사용자용 출력이 서로 역할을 침범하지 않음
 
-## 3차. Large Graph Explorer
+## 4차. Large Graph Explorer
 
 목표:
 
@@ -262,7 +378,7 @@ aiops project dashboard --format html --filter-agent "iOS Agent" --output dashbo
 - JSON projection은 필터 때문에 의미가 바뀌지 않음
 - dashboard 실행 후 target project git status가 dirty가 아님
 
-## 4차. Local Serve / Refresh
+## 5차. Local Serve / Refresh
 
 목표:
 
@@ -303,7 +419,7 @@ aiops project dashboard --serve --open
 - 서버 실행 중 target project 파일 불변
 - port 충돌 시 명확한 오류 또는 다음 port 제안
 
-## 5차. Dashboard Presets
+## 6차. Dashboard Presets
 
 목표:
 
@@ -344,7 +460,7 @@ aiops project dashboard preset add ios-current --view work --map swimlane --grou
 - 잘못된 preset 이름은 non-zero와 추천 목록 출력
 - local preset schema 오류가 명확히 표시됨
 
-## 6차. GitHub PR / CI Release View
+## 7차. GitHub PR / CI Release View
 
 목표:
 
@@ -381,7 +497,7 @@ aiops project dashboard --format html --view release --github --output release.h
 - JSON projection에 GitHub section은 optional
 - HTML release card가 로컬 상태와 GitHub 상태를 구분 표시
 
-## 7차. Locale Extension
+## 8차. Locale Extension
 
 목표:
 
@@ -417,7 +533,7 @@ aiops project dashboard --locale-file .ai_project/dashboard_labels.ko.json
 - Mermaid internal id는 locale과 무관하게 stable
 - JSON projection 기본 machine value 보존
 
-## 8차. HTML Visual Regression
+## 9차. HTML Visual Regression
 
 목표:
 
@@ -445,7 +561,7 @@ aiops project dashboard --locale-file .ai_project/dashboard_labels.ko.json
 - screenshot artifact 생성
 - CI 비용 증가가 과하면 optional job으로 분리
 
-## 9차. SVG / PNG Export
+## 10차. SVG / PNG Export
 
 목표:
 
@@ -482,14 +598,15 @@ aiops project dashboard --format png --map dependencies --focus TASK_ID --depth 
 | 차수 | 브랜치 | PR 범위 |
 |---|---|---|
 | 1차 | `feature/user-command-layer` | `aiops status/work/dashboard` 같은 사용자용 명령 계층 |
-| 2차 | `feature/user-cli-visualization` | 사용자용 CLI 진행률/색상/요약 화면 |
-| 3차 | `feature/dashboard-graph-explorer` | HTML graph 검색/필터/focus/depth |
-| 4차 | `feature/dashboard-serve-refresh` | localhost serve와 refresh |
-| 5차 | `feature/dashboard-presets` | built-in preset과 local preset 계약 |
-| 6차 | `feature/dashboard-github-release-view` | optional GitHub release/PR/CI projection |
-| 7차 | `feature/dashboard-locale-extension` | locale option과 external catalog |
-| 8차 | `feature/dashboard-visual-regression` | browser smoke/visual test |
-| 9차 | `feature/dashboard-export` | SVG/PNG export |
+| 2차 | `feature/help-ux-localized-guide` | 사용자용 기본 help, AI용 숨김 help, 명령별 지역화 설명 |
+| 3차 | `feature/user-cli-visualization` | 사용자용 CLI 진행률/색상/요약 화면 |
+| 4차 | `feature/dashboard-graph-explorer` | HTML graph 검색/필터/focus/depth |
+| 5차 | `feature/dashboard-serve-refresh` | localhost serve와 refresh |
+| 6차 | `feature/dashboard-presets` | built-in preset과 local preset 계약 |
+| 7차 | `feature/dashboard-github-release-view` | optional GitHub release/PR/CI projection |
+| 8차 | `feature/dashboard-locale-extension` | locale option과 external catalog |
+| 9차 | `feature/dashboard-visual-regression` | browser smoke/visual test |
+| 10차 | `feature/dashboard-export` | SVG/PNG export |
 
 ## 공통 검증 게이트
 
@@ -510,6 +627,8 @@ Dashboard 변경 차수는 추가로 아래를 확인한다.
 - Mermaid internal id 안정성
 - 사용자 표시 라벨이 machine key를 과도하게 노출하지 않음
 - 사용자용 명령이 machine contract 명령을 대체한다고 안내하지 않음
+- 기본 help가 AI/자동화용 명령을 과도하게 노출하지 않음
+- help 설명이 locale fallback을 가진 사용자용 문장으로 표시됨
 
 외부 상태를 읽는 차수는 추가로 아래를 확인한다.
 
@@ -520,6 +639,8 @@ Dashboard 변경 차수는 추가로 아래를 확인한다.
 ## 추천 시작점
 
 바로 진행한다면 1차 `User Command Layer`부터 시작한다.
+
+1차와 2차는 분리된 PR로 진행하되 설계는 함께 잡는다. 사용자용 명령을 추가해도 기본 help가 그대로 복잡하면 사용자는 새 명령을 발견하지 못하기 때문이다.
 
 이유:
 
