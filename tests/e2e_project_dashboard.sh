@@ -563,7 +563,7 @@ grep -q 'T_T_20260807_005\["T-20260807-005' /tmp/aiops-e2e-project-dashboard-mer
   printf '%s\n' "critical path target missing" >&2
   exit 1
 }
-grep -q 'target"\]' /tmp/aiops-e2e-project-dashboard-mermaid-critical.out || {
+grep -q '목표"\]' /tmp/aiops-e2e-project-dashboard-mermaid-critical.out || {
   printf '%s\n' "critical path target label missing" >&2
   exit 1
 }
@@ -595,7 +595,7 @@ grep -q '<!doctype html>' /tmp/aiops-e2e-project-dashboard.html || {
   printf '%s\n' "html dashboard doctype missing" >&2
   exit 1
 }
-grep -q 'AI Ops Project Dashboard' /tmp/aiops-e2e-project-dashboard.html || {
+grep -q 'AI Ops 프로젝트 대시보드' /tmp/aiops-e2e-project-dashboard.html || {
   printf '%s\n' "html dashboard title missing" >&2
   exit 1
 }
@@ -607,7 +607,7 @@ grep -q '보는 법' /tmp/aiops-e2e-project-dashboard.html || {
   printf '%s\n' "html dashboard Korean guide missing" >&2
   exit 1
 }
-grep -q '초록: ready / done / enabled' /tmp/aiops-e2e-project-dashboard.html || {
+grep -q '초록: 정상 / 완료 / 사용 가능' /tmp/aiops-e2e-project-dashboard.html || {
   printf '%s\n' "html dashboard legend missing" >&2
   exit 1
 }
@@ -631,11 +631,39 @@ grep -q 'class="agent-card neutral"' /tmp/aiops-e2e-project-dashboard.html || {
   printf '%s\n' "html dashboard deferred agent color class missing" >&2
   exit 1
 }
+grep -q '사용 가능' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard human agent status missing" >&2
+  exit 1
+}
+grep -q '개발 담당' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard human agent name missing" >&2
+  exit 1
+}
+grep -q '표준 워크플로우' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard human project setting missing" >&2
+  exit 1
+}
+grep -q '구현/실행' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard human role label missing" >&2
+  exit 1
+}
+grep -q '구현' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard human capability label missing" >&2
+  exit 1
+}
+if grep -q 'future_work' /tmp/aiops-e2e-project-dashboard.html; then
+  printf '%s\n' "html dashboard leaked raw capability label" >&2
+  exit 1
+fi
+if grep -q 'Development Agent' /tmp/aiops-e2e-project-dashboard.html; then
+  printf '%s\n' "html dashboard leaked raw agent label" >&2
+  exit 1
+fi
 grep -q 'T_T_20260807_001 --&gt; T_T_20260807_002' /tmp/aiops-e2e-project-dashboard.html || {
   printf '%s\n' "html dashboard mermaid dependency edge missing" >&2
   exit 1
 }
-grep -q 'Mermaid source' /tmp/aiops-e2e-project-dashboard.html || {
+grep -q 'Mermaid 원본 보기' /tmp/aiops-e2e-project-dashboard.html || {
   printf '%s\n' "html dashboard mermaid source missing" >&2
   exit 1
 }
@@ -643,7 +671,7 @@ grep -q '<!doctype html>' /tmp/aiops-e2e-project-dashboard-html-stdout.html || {
   printf '%s\n' "html dashboard stdout doctype missing" >&2
   exit 1
 }
-grep -q 'Agent / Role Map' /tmp/aiops-e2e-project-dashboard-agents.html || {
+grep -q '담당자 / 역할 맵' /tmp/aiops-e2e-project-dashboard-agents.html || {
   printf '%s\n' "html dashboard selected map missing" >&2
   exit 1
 }
@@ -661,7 +689,7 @@ grep -q 'S_proposed --> S_scoped' /tmp/aiops-e2e-project-dashboard-mermaid-workf
   printf '%s\n' "workflow mermaid status edge missing" >&2
   exit 1
 }
-grep -q 'S_rework_requested\["rework_requested"\]' /tmp/aiops-e2e-project-dashboard-mermaid-workflow.out || {
+grep -q 'S_rework_requested\["재작업 필요"\]' /tmp/aiops-e2e-project-dashboard-mermaid-workflow.out || {
   printf '%s\n' "workflow mermaid rework node missing" >&2
   exit 1
 }
@@ -671,11 +699,11 @@ grep -q 'T_T_20260807_004\["T-20260807-004' /tmp/aiops-e2e-project-dashboard-mer
 }
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map agents >/tmp/aiops-e2e-project-dashboard-mermaid-agents.out
-grep -q 'A_Development_Agent\["Development Agent"\]' /tmp/aiops-e2e-project-dashboard-mermaid-agents.out || {
+grep -q 'A_Development_Agent\["개발 담당"\]' /tmp/aiops-e2e-project-dashboard-mermaid-agents.out || {
   printf '%s\n' "agents mermaid agent node missing" >&2
   exit 1
 }
-grep -q 'R_Execution_Role\["Execution Role"\]' /tmp/aiops-e2e-project-dashboard-mermaid-agents.out || {
+grep -q 'R_Execution_Role\["구현/실행"\]' /tmp/aiops-e2e-project-dashboard-mermaid-agents.out || {
   printf '%s\n' "agents mermaid role node missing" >&2
   exit 1
 }
