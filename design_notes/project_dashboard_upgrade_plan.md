@@ -1,12 +1,46 @@
 # Project Dashboard Upgrade Plan
 
-상태: 7차 HTML / Static Dashboard 구현 진행
+상태: 1~7차 구현 완료 / v0.13.0 Homebrew 배포 완료
 대상: 5차 policy evaluation / project snapshot / action plan 계약 이후
 담당: AI Ops 운영자
+최종 정리일: 2026-08-10
 
 이 문서는 AI Ops의 사용자용 dashboard / work map 구현 계획이다.
 
 기존 시각화 메모는 "monitor" 중심이었지만, 실제 목표는 단순 상태 요약보다 넓다. 사용자는 프로젝트 설정, 진행률, 활성 일감, Agent/Role 담당, Task 의존성, workflow 흐름, blocker/warning을 한 화면 또는 관계도로 보고 싶다.
+
+## 완료 요약
+
+이 계획의 1~7차 범위는 v0.13.0으로 구현, 검증, 배포까지 완료됐다.
+
+완료된 사용자 기능:
+
+- Main Dashboard: 프로젝트 설정, readiness, 진행률, warning/blocker, next action 표시
+- Work Dashboard: 활성 일감, 상태, 담당 Role/Agent, workflow, lock/branch/worktree 요약 표시
+- Tree 출력: 상태별 일감 구조 확인
+- Mermaid 출력: summary, dependencies, focused dependencies, swimlane, critical-path, workflow, agents, blockers map 제공
+- HTML Dashboard: 브라우저에서 Mermaid를 렌더링하고, map 선택, 접기/펼치기, 확대/축소, 색상 범례 제공
+- Locale label catalog: status, Role, Team, Agent, workflow, capability, warning/check 표시명을 사용자용 라벨로 변환
+- JSON contract: `aiops.project_dashboard.v1` projection과 schema validation 제공
+- 전문 view: `risk`, `agents`, `release` 제공
+
+완료된 배포:
+
+- `ai-agent-ops` v0.13.0 GitHub Release 생성
+- `Formula/ai-agent-ops.rb` v0.13.0 URL/SHA 갱신
+- Homebrew tap `cschoi724/tap/ai-agent-ops` v0.13.0 반영
+- 로컬 Homebrew 설치 검증: `aiops version`이 `0.13.0` 반환
+
+최종 검증:
+
+- `sh scripts/test.sh`
+- `bin/aiops release-check --strict`
+- Homebrew tap test-bot: macos-15-intel, macos-26, ubuntu-latest
+- `brew reinstall ai-agent-ops`
+- `brew test ai-agent-ops`
+- CookLog 대상 HTML dashboard 생성
+
+남은 항목은 이 계획의 필수 범위가 아니라 후속 개선 후보로 관리한다.
 
 ## 목표
 
@@ -678,6 +712,20 @@ aiops project dashboard --format html --output dashboard.html
 - `--json --output` 조합 차단
 - e2e fixture에서 target project file hash 불변 확인
 
+구현 상태:
+
+- `--format html`과 `--output FILE` 지원
+- HTML 기본 map은 복잡한 전체 dependency graph 대신 summary map 우선 표시
+- summary / dependencies / focused dependencies / swimlane / critical-path / workflow / agents / blockers map 지원
+- Mermaid source는 HTML 내부에 보존하며 브라우저에서는 Mermaid CDN으로 렌더링
+- diagram section 접기/펼치기, 확대/축소, source detail 제공
+- 상태 색상, Agent 상태 색상, 한국어 안내, 색상 범례 제공
+- status, Role, Team, Agent, workflow, capability, check/warning field label은 locale label catalog를 거쳐 표시
+- 미등록 Role/Team/Agent/capability 값은 원본 의미를 보존한 readable fallback으로 표시
+- Mermaid 내부 node id는 raw key를 유지하고, 화면 라벨만 사용자용 표시명으로 치환
+- dashboard 실행은 target project 파일과 `.ai_project/.runtime/status_ref`를 수정하지 않음
+- CookLog 실제 프로젝트 HTML 생성 확인
+
 ## 차수별 큰 검증 게이트
 
 각 차수 완료 시 아래 공통 검증을 수행한다.
@@ -708,6 +756,19 @@ Dashboard 기능 차수에서는 추가로 아래 fixture를 반드시 확인한
 - compact/standard/detail 출력 레벨이 서로 다른 정보량을 제공함
 - `.ai_project/.runtime/status_ref`를 commit 대상으로 안내하지 않음
 
+## 후속 개선 후보
+
+아래 항목은 v0.13.0 필수 범위에서 제외했지만, 사용성 개선 여지가 있다.
+
+- HTML 자동 새로고침 또는 watch mode
+- 로컬 정적 서버 명령: `aiops project dashboard --serve`
+- dependency graph가 큰 프로젝트를 위한 client-side 검색, 필터, 노드 접기
+- `--locale` 옵션과 외부 locale catalog 파일
+- dashboard map preset 저장
+- PR/CI 상태를 GitHub에서 직접 읽는 release view 확장
+- HTML visual regression fixture
+- SVG/PNG export
+
 ## 제외 범위
 
 초기 구현에서 제외한다.
@@ -720,55 +781,44 @@ Dashboard 기능 차수에서는 추가로 아래 fixture를 반드시 확인한
 - Git commit/push/PR/merge 자동 실행
 - dashboard 결과 파일을 source of truth로 저장
 
-## 첫 구현 PR 범위
+## 구현 이력
 
-권장 브랜치:
+이 계획은 아래 PR 흐름으로 완료됐다.
+
+완료된 브랜치:
 
 ```text
 feature/project-dashboard-main
+feature/project-dashboard-work-tree
+feature/project-dashboard-mermaid
+feature/project-dashboard-json-contract
+feature/project-dashboard-html-usability
+release/v0.13.0
+release/v0.13.0-formula-sha
 ```
 
-첫 PR 범위:
+완료된 주요 PR:
+
+- `#20`: HTML project dashboard output
+- `#21`: project dashboard usability 개선
+- `#22`: 0.13.0 release 준비
+- `#23`: 0.13.0 Formula SHA 반영
+
+완료된 tap PR:
+
+```text
+#2: ai-agent-ops 0.13.0
+```
+
+초기 구현 범위는 아래 항목을 포함했다.
 
 - `aiops project dashboard`
-- `--view main`
-- `--level compact|standard`
-- terminal 출력
-- progress/readiness/git/task/risk/next section
-- E2E
-- README/QUICKSTART 최소 문서 갱신
-
-두 번째 PR 범위:
-
-```text
-feature/project-dashboard-work-tree
-```
-
-- `--view work`
-- `--format terminal|tree`
-- active work summary
-- next role prompt recommendation
-- E2E
-
-세 번째 PR 범위:
-
-```text
-feature/project-dashboard-mermaid
-```
-
-- `--format mermaid`
-- dependencies/workflow/agents/blockers maps
-- Mermaid E2E
-
-네 번째 PR 범위:
-
-```text
-feature/project-dashboard-json-contract
-```
-
+- `--view main|work|risk|agents|release`
+- `--level compact|standard|detail`
+- `--format terminal|tree|mermaid|html`
+- `--map summary|dependencies|swimlane|critical-path|workflow|agents|blockers`
 - `--json`
-- schema 검토
-- release-check 연결 여부 결정
+- schema / release-check / E2E / Homebrew 배포 검증
 
 ## 최종 성공 기준
 
