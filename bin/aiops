@@ -6,6 +6,11 @@ usage() {
 aiops - AI Agent Ops project helper
 
 Usage:
+  aiops status [--target DIR] [--level compact|standard|detail] [--color auto|always|never] [--no-color]
+  aiops work [--target DIR] [--level compact|standard|detail] [--format terminal|tree] [--color auto|always|never] [--no-color]
+  aiops risks [--target DIR] [--level compact|standard|detail] [--color auto|always|never] [--no-color]
+  aiops agents [--target DIR] [--level compact|standard|detail] [--color auto|always|never] [--no-color]
+  aiops release [--target DIR] [--level compact|standard|detail] [--color auto|always|never] [--no-color]
   aiops seed [--adapter codex|claude|both] [--mode link|copy] [--target DIR] [--core DIR] [--force]
   aiops doctor [--target DIR] [--strict]
   aiops migrate [--target DIR] [--plan|--apply]
@@ -56,6 +61,11 @@ Defaults:
   core: AIOPS_CORE_HOME, or ai-agent-ops directory that contains this bin/aiops
 
 Examples:
+  aiops status
+  aiops work
+  aiops risks
+  aiops agents
+  aiops release
   aiops seed --adapter codex
   aiops seed --adapter claude
   aiops seed --adapter both --mode copy
@@ -10297,6 +10307,13 @@ cmd_bootstrap_guide() {
   fi
 }
 
+cmd_user_dashboard_view() {
+  view="$1"
+  level="$2"
+  shift 2
+  cmd_project dashboard --view "$view" --level "$level" "$@"
+}
+
 main() {
   cmd="${1:-help}"
   if [ "$#" -gt 0 ]; then
@@ -10304,6 +10321,11 @@ main() {
   fi
 
   case "$cmd" in
+    status) cmd_user_dashboard_view main compact "$@" ;;
+    work) cmd_user_dashboard_view work standard "$@" ;;
+    risks) cmd_user_dashboard_view risk standard "$@" ;;
+    agents) cmd_user_dashboard_view agents standard "$@" ;;
+    release) cmd_user_dashboard_view release standard "$@" ;;
     seed) cmd_seed "$@" ;;
     doctor) cmd_doctor "$@" ;;
     migrate) cmd_migrate "$@" ;;

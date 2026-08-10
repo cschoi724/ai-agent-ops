@@ -10,6 +10,10 @@
 
 ## Unreleased
 
+### Added
+
+- User-facing dashboard shortcuts: `aiops status`, `aiops work`, `aiops risks`, `aiops agents`, and `aiops release`.
+
 ## 0.13.0 - 2026-08-10
 
 ### Added

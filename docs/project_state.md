@@ -37,6 +37,28 @@ aiops.project_snapshot.v1
 
 `aiops project dashboard`는 snapshot 기반 상태를 사람이 읽기 쉬운 한 화면으로 보여준다.
 
+사용자가 자주 보는 화면은 짧은 top-level 명령으로도 실행할 수 있다.
+
+```sh
+aiops status
+aiops work
+aiops risks
+aiops agents
+aiops release
+```
+
+이 명령들은 기존 dashboard projection을 그대로 읽는 사용자용 entrypoint다.
+
+| 사용자용 명령 | 내부 동작 |
+|---|---|
+| `aiops status` | `aiops project dashboard --view main --level compact` |
+| `aiops work` | `aiops project dashboard --view work --level standard` |
+| `aiops risks` | `aiops project dashboard --view risk` |
+| `aiops agents` | `aiops project dashboard --view agents` |
+| `aiops release` | `aiops project dashboard --view release` |
+
+세부 view, JSON, Mermaid, HTML 출력이 필요하면 아래 고급 명령을 사용한다.
+
 ```sh
 aiops project dashboard
 aiops project dashboard --level compact
@@ -63,6 +85,8 @@ aiops project dashboard --color always
 ```
 
 현재 dashboard 구현은 Main Dashboard, Work Dashboard terminal/tree, Work Mermaid map, static HTML dashboard, Dashboard JSON contract, Risk/Agent/Release 전문 view를 제공한다.
+
+사용자용 top-level 명령은 파일을 수정하지 않으며, 실행할 때마다 `project snapshot --json`과 `project health --json`을 다시 계산한 현재 projection을 표시한다. Agent와 자동화가 읽어야 하는 기계 계약은 여전히 `aiops project snapshot --json`, `aiops project health --json`, `aiops project dashboard --json`이다.
 
 Main Dashboard 표시 항목은 프로젝트 진행률, readiness, canonical status sync, 운영 설정, Agent/Role 요약, blocker/warning, next command다.
 
