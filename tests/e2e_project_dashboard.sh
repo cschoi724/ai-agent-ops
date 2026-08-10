@@ -279,10 +279,26 @@ if grep -q '^Settings$' /tmp/aiops-e2e-project-dashboard-compact.out; then
   exit 1
 fi
 "$repo_root/bin/aiops" status --target "$project" >/tmp/aiops-e2e-user-status.out
-cmp -s /tmp/aiops-e2e-user-status.out /tmp/aiops-e2e-project-dashboard-compact.out || {
-  printf '%s\n' "user status command diverges from compact main dashboard" >&2
+grep -q '^DashboardProject 상태$' /tmp/aiops-e2e-user-status.out || {
+  printf '%s\n' "user status localized title missing" >&2
   exit 1
 }
+grep -q '^운영 상태$' /tmp/aiops-e2e-user-status.out || {
+  printf '%s\n' "user status operations section missing" >&2
+  exit 1
+}
+grep -q '^현재 일감$' /tmp/aiops-e2e-user-status.out || {
+  printf '%s\n' "user status work section missing" >&2
+  exit 1
+}
+grep -q '진행률' /tmp/aiops-e2e-user-status.out || {
+  printf '%s\n' "user status progress missing" >&2
+  exit 1
+}
+if grep -q '^AI Ops Dashboard$' /tmp/aiops-e2e-user-status.out; then
+  printf '%s\n' "user status should not use advanced dashboard output" >&2
+  exit 1
+fi
 if "$repo_root/bin/aiops" status --target "$project" --view release >/tmp/aiops-e2e-user-status-view.out 2>&1; then
   printf '%s\n' "user status accepted unsupported --view" >&2
   exit 1
@@ -303,6 +319,18 @@ ruby -e '
   text = File.read(ARGV[0])
   abort("dashboard no-color output included ansi escape") if text.include?(27.chr + "[")
 ' /tmp/aiops-e2e-project-dashboard-no-color.out
+
+"$repo_root/bin/aiops" status --target "$project" --color always >/tmp/aiops-e2e-user-status-color.out
+ruby -e '
+  text = File.read(ARGV[0])
+  abort("user status color output missing ansi escape") unless text.include?(27.chr + "[")
+' /tmp/aiops-e2e-user-status-color.out
+
+"$repo_root/bin/aiops" status --target "$project" --color never >/tmp/aiops-e2e-user-status-no-color.out
+ruby -e '
+  text = File.read(ARGV[0])
+  abort("user status no-color output included ansi escape") if text.include?(27.chr + "[")
+' /tmp/aiops-e2e-user-status-no-color.out
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --level detail >/tmp/aiops-e2e-project-dashboard-detail.out
 grep -q '^Task Status$' /tmp/aiops-e2e-project-dashboard-detail.out || {
@@ -344,10 +372,30 @@ grep -q 'start completion' /tmp/aiops-e2e-project-dashboard-work.out || {
   exit 1
 }
 "$repo_root/bin/aiops" work --target "$project" >/tmp/aiops-e2e-user-work.out
-cmp -s /tmp/aiops-e2e-user-work.out /tmp/aiops-e2e-project-dashboard-work.out || {
-  printf '%s\n' "user work command diverges from work dashboard" >&2
+grep -q '^DashboardProject 일감$' /tmp/aiops-e2e-user-work.out || {
+  printf '%s\n' "user work localized title missing" >&2
   exit 1
 }
+grep -q '^상태 요약$' /tmp/aiops-e2e-user-work.out || {
+  printf '%s\n' "user work status summary missing" >&2
+  exit 1
+}
+grep -q '^일감 목록$' /tmp/aiops-e2e-user-work.out || {
+  printf '%s\n' "user work list missing" >&2
+  exit 1
+}
+grep -q '담당 역할:' /tmp/aiops-e2e-user-work.out || {
+  printf '%s\n' "user work role label missing" >&2
+  exit 1
+}
+grep -q '구현 시작' /tmp/aiops-e2e-user-work.out || {
+  printf '%s\n' "user work localized next action missing" >&2
+  exit 1
+}
+if grep -q '^AI Ops Work Dashboard$' /tmp/aiops-e2e-user-work.out; then
+  printf '%s\n' "user work should not use advanced work dashboard output" >&2
+  exit 1
+fi
 if "$repo_root/bin/aiops" work --target "$project" --format html --map workflow --output /tmp/aiops-e2e-user-work.html >/tmp/aiops-e2e-user-work-html.out 2>&1; then
   printf '%s\n' "user work accepted unsupported html format" >&2
   exit 1
@@ -379,10 +427,6 @@ ruby -e '
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --view work --format tree >/tmp/aiops-e2e-project-dashboard-work-tree.out
 "$repo_root/bin/aiops" work --target "$project" --format tree >/tmp/aiops-e2e-user-work-tree.out
-cmp -s /tmp/aiops-e2e-user-work-tree.out /tmp/aiops-e2e-project-dashboard-work-tree.out || {
-  printf '%s\n' "user work tree command diverges from work tree dashboard" >&2
-  exit 1
-}
 grep -q 'AI Ops Work Tree' /tmp/aiops-e2e-project-dashboard-work-tree.out || {
   printf '%s\n' "work tree header missing" >&2
   exit 1
@@ -399,6 +443,26 @@ grep -q 'verification_ready' /tmp/aiops-e2e-project-dashboard-work-tree.out || {
   printf '%s\n' "work tree verification group missing" >&2
   exit 1
 }
+grep -q '^DashboardProject 일감 트리$' /tmp/aiops-e2e-user-work-tree.out || {
+  printf '%s\n' "user work tree localized title missing" >&2
+  exit 1
+}
+grep -q '^현재 일감$' /tmp/aiops-e2e-user-work-tree.out || {
+  printf '%s\n' "user work tree root missing" >&2
+  exit 1
+}
+grep -q '승인됨' /tmp/aiops-e2e-user-work-tree.out || {
+  printf '%s\n' "user work tree localized status missing" >&2
+  exit 1
+}
+grep -q '담당:' /tmp/aiops-e2e-user-work-tree.out || {
+  printf '%s\n' "user work tree assignee label missing" >&2
+  exit 1
+}
+if grep -q '^AI Ops Work Tree$' /tmp/aiops-e2e-user-work-tree.out; then
+  printf '%s\n' "user work tree should not use advanced work tree output" >&2
+  exit 1
+fi
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --view work --format tree --color always >/tmp/aiops-e2e-project-dashboard-work-tree-color.out
 ruby -e '
@@ -444,10 +508,22 @@ grep -q 'Task Status Ref Missing:' /tmp/aiops-e2e-project-dashboard-risk.out || 
   exit 1
 }
 "$repo_root/bin/aiops" risks --target "$project" >/tmp/aiops-e2e-user-risks.out
-cmp -s /tmp/aiops-e2e-user-risks.out /tmp/aiops-e2e-project-dashboard-risk.out || {
-  printf '%s\n' "user risks command diverges from risk dashboard" >&2
+grep -q '^DashboardProject 위험$' /tmp/aiops-e2e-user-risks.out || {
+  printf '%s\n' "user risks localized title missing" >&2
   exit 1
 }
+grep -q '^위험 신호$' /tmp/aiops-e2e-user-risks.out || {
+  printf '%s\n' "user risks signals section missing" >&2
+  exit 1
+}
+grep -q '일감 기준 SHA 누락' /tmp/aiops-e2e-user-risks.out || {
+  printf '%s\n' "user risks status ref signal missing" >&2
+  exit 1
+}
+if grep -q '^AI Ops Risk Dashboard$' /tmp/aiops-e2e-user-risks.out; then
+  printf '%s\n' "user risks should not use advanced risk dashboard output" >&2
+  exit 1
+fi
 if "$repo_root/bin/aiops" risks --target "$project" --view agents >/tmp/aiops-e2e-user-risks-view.out 2>&1; then
   printf '%s\n' "user risks accepted unsupported --view" >&2
   exit 1
@@ -485,10 +561,26 @@ grep -q '^Role Load$' /tmp/aiops-e2e-project-dashboard-agents.out || {
   exit 1
 }
 "$repo_root/bin/aiops" agents --target "$project" >/tmp/aiops-e2e-user-agents.out
-cmp -s /tmp/aiops-e2e-user-agents.out /tmp/aiops-e2e-project-dashboard-agents.out || {
-  printf '%s\n' "user agents command diverges from agents dashboard" >&2
+grep -q '^DashboardProject 에이전트$' /tmp/aiops-e2e-user-agents.out || {
+  printf '%s\n' "user agents localized title missing" >&2
   exit 1
 }
+grep -q '^에이전트$' /tmp/aiops-e2e-user-agents.out || {
+  printf '%s\n' "user agents section missing" >&2
+  exit 1
+}
+grep -q '^역할별 일감$' /tmp/aiops-e2e-user-agents.out || {
+  printf '%s\n' "user agents role load section missing" >&2
+  exit 1
+}
+grep -q '개발 담당' /tmp/aiops-e2e-user-agents.out || {
+  printf '%s\n' "user agents localized agent label missing" >&2
+  exit 1
+}
+if grep -q '^AI Ops Agent Dashboard$' /tmp/aiops-e2e-user-agents.out; then
+  printf '%s\n' "user agents should not use advanced agent dashboard output" >&2
+  exit 1
+fi
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --view agents --level detail >/tmp/aiops-e2e-project-dashboard-agents-detail.out
 grep -q 'Capabilities: implementation' /tmp/aiops-e2e-project-dashboard-agents-detail.out || {
@@ -518,10 +610,26 @@ grep -q 'Release Check: aiops release-check --strict --allow-pending-release' /t
   exit 1
 }
 "$repo_root/bin/aiops" release --target "$project" >/tmp/aiops-e2e-user-release.out
-cmp -s /tmp/aiops-e2e-user-release.out /tmp/aiops-e2e-project-dashboard-release.out || {
-  printf '%s\n' "user release command diverges from release dashboard" >&2
+grep -q '^DashboardProject 출시 준비$' /tmp/aiops-e2e-user-release.out || {
+  printf '%s\n' "user release localized title missing" >&2
   exit 1
 }
+grep -q '^준비 상태$' /tmp/aiops-e2e-user-release.out || {
+  printf '%s\n' "user release readiness section missing" >&2
+  exit 1
+}
+grep -q '^출시 전 확인$' /tmp/aiops-e2e-user-release.out || {
+  printf '%s\n' "user release checklist section missing" >&2
+  exit 1
+}
+grep -q '점검 명령: aiops release-check --strict --allow-pending-release' /tmp/aiops-e2e-user-release.out || {
+  printf '%s\n' "user release release-check command missing" >&2
+  exit 1
+}
+if grep -q '^AI Ops Release Dashboard$' /tmp/aiops-e2e-user-release.out; then
+  printf '%s\n' "user release should not use advanced release dashboard output" >&2
+  exit 1
+fi
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --view release --json >/tmp/aiops-e2e-project-dashboard-release-json.json
 "$repo_root/bin/aiops" validate project-dashboard /tmp/aiops-e2e-project-dashboard-release-json.json >/tmp/aiops-e2e-project-dashboard-release-json-validate.out
