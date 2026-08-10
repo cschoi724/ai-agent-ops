@@ -23,6 +23,8 @@
 - User CLI dashboards now localize setup-blocked status, check, action, and reason labels instead of leaking machine fallback text.
 - Dashboard JSON risk counts now preserve the snapshot projection contract while user CLI risk summaries can still fall back to health counts for display.
 - User CLI setup guidance now avoids broken fallback sentences while preserving technical names such as Adapter and Workflow catalog where useful.
+- User CLI preserves Team and Agent proper names, renders missing file and directory guidance naturally, and keeps localized wording out of machine JSON projections.
+- Terminal and HTML dashboards localize user-facing next-step messages at render time while preserving their machine JSON values.
 
 ## 0.13.0 - 2026-08-10
 
