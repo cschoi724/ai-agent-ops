@@ -760,6 +760,8 @@ Dashboard 기능 차수에서는 추가로 아래 fixture를 반드시 확인한
 
 아래 항목은 v0.13.0 필수 범위에서 제외했지만, 사용성 개선 여지가 있다.
 
+상세 구현 계획은 `design_notes/project_dashboard_followup_plan.md`에서 관리한다.
+
 - HTML 자동 새로고침 또는 watch mode
 - 로컬 정적 서버 명령: `aiops project dashboard --serve`
 - dependency graph가 큰 프로젝트를 위한 client-side 검색, 필터, 노드 접기
