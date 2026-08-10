@@ -7,7 +7,7 @@
 
 진행 현황:
 
-- 1차 User Command Layer: 구현 완료, PR 진행 중
+- 1차 User Command Layer: 구현 완료, PR #28로 main 반영 완료
 
 이 문서는 v0.13.0에서 완료된 Project Dashboard의 후속 개선 후보를 실제 구현 가능한 차수로 정리한다.
 

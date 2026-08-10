@@ -59,6 +59,8 @@ aiops release
 
 세부 view, JSON, Mermaid, HTML 출력이 필요하면 아래 고급 명령을 사용한다.
 
+사용자용 명령은 각 명령의 의미를 바꾸는 `--view`, `--map`, `--output`, `--json` 같은 고급 dashboard 옵션을 받지 않는다. `aiops work`만 터미널 표시 방식 선택을 위해 `--format terminal|tree`를 허용한다.
+
 ```sh
 aiops project dashboard
 aiops project dashboard --level compact
