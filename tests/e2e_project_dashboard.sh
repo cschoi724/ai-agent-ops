@@ -80,9 +80,9 @@ agents:
       - implementation
   - agent: Deferred Agent
     status: deferred
-    team: Future Team
+    team: custom_platform_team
     roles:
-      - Execution Role
+      - custom_execution_role
     capabilities:
       - future_work
 ---
@@ -549,7 +549,7 @@ if grep -q 'T_T_20260807_004' /tmp/aiops-e2e-project-dashboard-mermaid-focus.out
 fi
 
 "$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map swimlane --group-by agent >/tmp/aiops-e2e-project-dashboard-mermaid-swimlane.out
-grep -q 'subgraph G_Development_Agent\["Development Agent"\]' /tmp/aiops-e2e-project-dashboard-mermaid-swimlane.out || {
+grep -q 'subgraph G_Development_Agent\["개발 담당"\]' /tmp/aiops-e2e-project-dashboard-mermaid-swimlane.out || {
   printf '%s\n' "swimlane mermaid agent group missing" >&2
   exit 1
 }
@@ -643,6 +643,14 @@ grep -q '표준 워크플로우' /tmp/aiops-e2e-project-dashboard.html || {
   printf '%s\n' "html dashboard human project setting missing" >&2
   exit 1
 }
+grep -q 'Custom Platform Team' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard humanized team fallback missing" >&2
+  exit 1
+}
+grep -q 'Custom Execution Role' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard humanized role fallback missing" >&2
+  exit 1
+}
 grep -q '구현/실행' /tmp/aiops-e2e-project-dashboard.html || {
   printf '%s\n' "html dashboard human role label missing" >&2
   exit 1
@@ -657,6 +665,26 @@ if grep -q 'future_work' /tmp/aiops-e2e-project-dashboard.html; then
 fi
 if grep -q 'Development Agent' /tmp/aiops-e2e-project-dashboard.html; then
   printf '%s\n' "html dashboard leaked raw agent label" >&2
+  exit 1
+fi
+if grep -q 'custom_platform_team' /tmp/aiops-e2e-project-dashboard.html; then
+  printf '%s\n' "html dashboard leaked raw team fallback" >&2
+  exit 1
+fi
+if grep -q 'custom_execution_role' /tmp/aiops-e2e-project-dashboard.html; then
+  printf '%s\n' "html dashboard leaked raw role fallback" >&2
+  exit 1
+fi
+grep -q '담당 역할' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard human check message missing" >&2
+  exit 1
+}
+if grep -q 'target_role' /tmp/aiops-e2e-project-dashboard.html; then
+  printf '%s\n' "html dashboard leaked raw check field" >&2
+  exit 1
+fi
+if grep -q 'sync-상태' /tmp/aiops-e2e-project-dashboard.html; then
+  printf '%s\n' "html dashboard corrupted command while humanizing message" >&2
   exit 1
 fi
 grep -q 'T_T_20260807_001 --&gt; T_T_20260807_002' /tmp/aiops-e2e-project-dashboard.html || {
@@ -713,6 +741,30 @@ grep -q 'A_Development_Agent --> R_Execution_Role' /tmp/aiops-e2e-project-dashbo
 }
 grep -q 'R_Execution_Role --> T_T_20260807_002' /tmp/aiops-e2e-project-dashboard-mermaid-agents.out || {
   printf '%s\n' "agents mermaid role-task edge missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --format html --map swimlane --group-by agent --output /tmp/aiops-e2e-project-dashboard-swimlane-agent.html >/tmp/aiops-e2e-project-dashboard-swimlane-agent.out
+grep -q 'subgraph G_Development_Agent\[&quot;개발 담당&quot;\]' /tmp/aiops-e2e-project-dashboard-swimlane-agent.html || {
+  printf '%s\n' "html swimlane agent group label missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --format html --map swimlane --group-by role --output /tmp/aiops-e2e-project-dashboard-swimlane-role.html >/tmp/aiops-e2e-project-dashboard-swimlane-role.out
+grep -q 'subgraph G_Execution_Role\[&quot;구현/실행&quot;\]' /tmp/aiops-e2e-project-dashboard-swimlane-role.html || {
+  printf '%s\n' "html swimlane role group label missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --format html --map swimlane --group-by status --output /tmp/aiops-e2e-project-dashboard-swimlane-status.html >/tmp/aiops-e2e-project-dashboard-swimlane-status.out
+grep -q 'subgraph G_approved\[&quot;승인됨&quot;\]' /tmp/aiops-e2e-project-dashboard-swimlane-status.html || {
+  printf '%s\n' "html swimlane status group label missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --format html --map swimlane --group-by workflow --output /tmp/aiops-e2e-project-dashboard-swimlane-workflow.html >/tmp/aiops-e2e-project-dashboard-swimlane-workflow.out
+grep -q 'subgraph G_feature\[&quot;기능 개발&quot;\]' /tmp/aiops-e2e-project-dashboard-swimlane-workflow.html || {
+  printf '%s\n' "html swimlane workflow group label missing" >&2
   exit 1
 }
 

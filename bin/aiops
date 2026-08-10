@@ -3863,7 +3863,7 @@ cmd_project() {
             puts "  class T_none done"
           else
             groups.sort.each do |group, group_items|
-              puts "  subgraph #{mermaid_id("G", group)}[\"#{mermaid_label(group)}\"]"
+              puts "  subgraph #{mermaid_id("G", group)}[\"#{mermaid_label(html_task_group_value_label(group_by, group))}\"]"
               group_items.each do |task|
                 puts "    #{mermaid_id("T", task["id"])}[\"#{mermaid_label(task["id"], shorten(task["title"], 30), html_status_label(task["status"]))}\"]"
               end
@@ -3994,7 +3994,7 @@ cmd_project() {
             checks.each do |check|
               check_node = mermaid_id("C", check["code"])
               level = check["level"].to_s == "blocker" ? "blocked" : "warning"
-              puts "  #{check_node}[\"#{mermaid_label(html_check_label(check["code"]), shorten(check["message"], 48))}\"]"
+              puts "  #{check_node}[\"#{mermaid_label(html_check_label(check["code"]), shorten(html_check_message(check["message"]), 48))}\"]"
               puts "  #{project_node} --> #{check_node}"
               puts "  class #{check_node} #{level}"
               Array(check.dig("evidence", "tasks")).each do |task_id|
@@ -4355,6 +4355,11 @@ cmd_project() {
           clean(value, "없음").tr("_", " ").gsub(/\b\w/) { |char| char.upcase }
         end
 
+        def html_humanize_identifier(value)
+          return "" if value.to_s.strip.empty?
+          value.to_s.tr("_", " ").gsub(/\b\w/) { |char| char.upcase }
+        end
+
         def html_dashboard_locale
           locale = ENV.fetch("AIOPS_DASHBOARD_LOCALE", "ko").to_s
           locale.split(/[_.-]/).first
@@ -4582,20 +4587,25 @@ cmd_project() {
           labels[text] || labels[text.downcase] || (fallback || html_humanize_key(value))
         end
 
+        def html_entity_fallback(category, value)
+          text = value.to_s.strip
+          text.empty? ? html_fallback_label(category) : html_humanize_identifier(text)
+        end
+
         def html_status_label(value)
           html_localized_label("status", value)
         end
 
         def html_role_label(value)
-          html_localized_label("role", value, clean(value, html_fallback_label("role")))
+          html_localized_label("role", value, html_entity_fallback("role", value))
         end
 
         def html_team_label(value)
-          html_localized_label("team", value, clean(value, html_fallback_label("team")))
+          html_localized_label("team", value, html_entity_fallback("team", value))
         end
 
         def html_agent_label(value)
-          html_localized_label("agent", value, clean(value, html_fallback_label("agent")))
+          html_localized_label("agent", value, html_entity_fallback("agent", value))
         end
 
         def html_project_setting_label(value)
@@ -4624,6 +4634,46 @@ cmd_project() {
 
         def html_group_by_label(value)
           html_localized_label("group_by", value)
+        end
+
+        def html_task_group_value_label(group_by, value)
+          case group_by
+          when "agent"
+            html_agent_label(value)
+          when "role"
+            html_role_label(value)
+          when "status"
+            html_status_label(value)
+          when "workflow"
+            html_workflow_label(value)
+          else
+            clean(value, "General")
+          end
+        end
+
+        def html_check_message(message)
+          text = message.to_s
+          case text
+          when /\A(\d+) task\(s\) missing status, workflow, or target_role\z/
+            "#{$1}개 일감에 상태, 작업 유형 또는 담당 역할 정보가 없습니다"
+          when /\A(\d+) active task\(s\) missing status_ref_sha\z/
+            "진행 중인 일감 #{$1}개에 기준 SHA가 없습니다"
+          when /\Arecorded canonical status SHA is stale; run aiops sync-status\z/
+            "공용 기준 SHA 기록이 오래됐습니다. aiops sync-status를 실행하세요"
+          when /\Arecorded canonical status SHA is current\z/
+            "공용 기준 SHA 기록이 최신입니다"
+          when /\A(\d+) unresolved decision marker\(s\) found\z/
+            "미해결 결정 표시 #{$1}개가 있습니다"
+          else
+            field_labels = {
+              "status_ref_sha" => "기준 SHA",
+              "target_role" => "담당 역할",
+              "target_agent" => "담당자",
+              "workflow" => "작업 유형",
+              "status" => "상태"
+            }
+            field_labels.reduce(text) { |out, (field, label)| out.gsub(/(?<![-\w])#{Regexp.escape(field)}(?![-\w])/, label) }
+          end
         end
 
         def html_map_title(name)
@@ -4661,12 +4711,12 @@ cmd_project() {
           rows << %Q(<tr><td colspan="6" class="empty">현재 진행할 일감 없음</td></tr>) if rows.empty?
 
           warning_items = Array(risks["warnings"]).first(8).map do |check|
-            %Q(<li><strong>#{html_escape(html_check_label(check["code"]))}</strong><span>#{html_escape(check["message"])}</span></li>)
+            %Q(<li><strong>#{html_escape(html_check_label(check["code"]))}</strong><span>#{html_escape(html_check_message(check["message"]))}</span></li>)
           end
           warning_items << %Q(<li><strong>없음</strong><span>주의 항목 없음</span></li>) if warning_items.empty?
 
           blocker_items = Array(risks["blockers"]).first(8).map do |check|
-            %Q(<li><strong>#{html_escape(html_check_label(check["code"]))}</strong><span>#{html_escape(check["message"])}</span></li>)
+            %Q(<li><strong>#{html_escape(html_check_label(check["code"]))}</strong><span>#{html_escape(html_check_message(check["message"]))}</span></li>)
           end
           blocker_items << %Q(<li><strong>없음</strong><span>차단 항목 없음</span></li>) if blocker_items.empty?
 
