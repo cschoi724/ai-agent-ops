@@ -13,7 +13,7 @@ Usage:
   aiops project snapshot [--target DIR] --json
   aiops project context --role ROLE [--target DIR] [--task TASK_ID] [--json]
   aiops project health [--target DIR] [--json]
-  aiops project dashboard [--target DIR] [--view main|work|risk|agents|release] [--level compact|standard|detail] [--format terminal|tree|mermaid|html] [--map dependencies|workflow|agents|blockers] [--json] [--output FILE] [--color auto|always|never] [--no-color]
+  aiops project dashboard [--target DIR] [--view main|work|risk|agents|release] [--level compact|standard|detail] [--format terminal|tree|mermaid|html] [--map summary|dependencies|swimlane|critical-path|workflow|agents|blockers] [--focus TASK_ID] [--depth N] [--group-by area|agent|role|status|workflow] [--json] [--output FILE] [--color auto|always|never] [--no-color]
   aiops policy evaluate [--target DIR|--snapshot FILE] [--strict-level LEVEL] --json
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
@@ -73,6 +73,9 @@ Examples:
   aiops project dashboard --view risk
   aiops project dashboard --view agents
   aiops project dashboard --view release
+  aiops project dashboard --format html --map summary
+  aiops project dashboard --format html --map dependencies --focus T-20260805-007 --depth 2
+  aiops project dashboard --format html --map swimlane --group-by agent
   aiops project dashboard --view work --format mermaid --map dependencies
   aiops project dashboard --format html --output dashboard.html
   aiops project dashboard --json
@@ -2930,6 +2933,10 @@ cmd_project() {
       color="auto"
       json="no"
       output=""
+      focus=""
+      depth="2"
+      group_by="area"
+      map_set="no"
 
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -2957,6 +2964,22 @@ cmd_project() {
             shift
             [ "$#" -gt 0 ] || die "--map requires a value"
             map="$1"
+            map_set="yes"
+            ;;
+          --focus)
+            shift
+            [ "$#" -gt 0 ] || die "--focus requires a value"
+            focus="$1"
+            ;;
+          --depth)
+            shift
+            [ "$#" -gt 0 ] || die "--depth requires a value"
+            depth="$1"
+            ;;
+          --group-by)
+            shift
+            [ "$#" -gt 0 ] || die "--group-by requires a value"
+            group_by="$1"
             ;;
           --no-color)
             color="never"
@@ -3004,13 +3027,27 @@ cmd_project() {
           ;;
       esac
       case "$map" in
-        dependencies|workflow|agents|blockers) ;;
+        summary|dependencies|swimlane|critical-path|workflow|agents|blockers) ;;
         *)
           die "unknown project dashboard map: $map"
           ;;
       esac
+      case "$group_by" in
+        area|agent|role|status|workflow) ;;
+        *)
+          die "unknown project dashboard group-by: $group_by"
+          ;;
+      esac
+      case "$depth" in
+        ''|*[!0-9]*)
+          die "project dashboard --depth requires a non-negative integer"
+          ;;
+      esac
+      if [ "$format" = "html" ] && [ "$map_set" = "no" ]; then
+        map="summary"
+      fi
       if [ "$json" != "yes" ] && [ "$format" != "mermaid" ] && [ "$format" != "html" ] && [ "$map" != "dependencies" ]; then
-        die "project dashboard --map requires --format mermaid"
+        die "project dashboard --map requires --format mermaid or --format html"
       fi
       if [ "$json" != "yes" ] && [ "$format" = "mermaid" ] && [ "$view" != "work" ]; then
         die "project dashboard --format mermaid currently requires --view work"
@@ -3045,6 +3082,9 @@ cmd_project() {
         map = ARGV[4]
         as_json = ARGV[5] == "yes"
         output = ARGV[6].to_s
+        focus = ARGV[7].to_s
+        depth = ARGV[8].to_i
+        group_by = ARGV[9].to_s.empty? ? "area" : ARGV[9].to_s
         color_enabled = color_mode == "always" || (color_mode == "auto" && STDOUT.tty? && ENV["NO_COLOR"].to_s.empty?)
 
         def colorize(enabled, text, code)
@@ -3670,42 +3710,188 @@ cmd_project() {
             "  classDef agent fill:#cffafe,stroke:#0891b2,color:#164e63",
             "  classDef role fill:#dbeafe,stroke:#2563eb,color:#1e3a8a",
             "  classDef workflow fill:#ede9fe,stroke:#7c3aed,color:#4c1d95",
+            "  classDef area fill:#ecfeff,stroke:#0891b2,color:#164e63",
             "  classDef unknown fill:#f3f4f6,stroke:#6b7280,color:#374151"
           ]
         end
 
-        def render_mermaid_dependencies(snapshot)
+        def dashboard_dependency_edges(items)
+          items.flat_map do |task|
+            task_id = task["id"].to_s
+            Array(task["depends_on"]).map { |dependency| [dependency.to_s, task_id] } +
+              Array(task["blocks"]).map { |blocked| [task_id, blocked.to_s] }
+          end.reject { |from, to| from.empty? || to.empty? }.uniq
+        end
+
+        def dependency_graph_selection(snapshot, focus = "", depth = 2, direction = "both")
           tasks = snapshot.fetch("tasks", {})
           all_items = Array(tasks["items"])
           active_items = active_work_items(tasks)
           by_id = all_items.each_with_object({}) { |task, out| out[task["id"].to_s] = task }
-          selected = {}
-          edges = []
+          edges = dashboard_dependency_edges(all_items)
 
-          active_items.each do |task|
-            selected[task["id"].to_s] = task
-            Array(task["depends_on"]).each do |dependency|
-              dep_id = dependency.to_s
-              selected[dep_id] = by_id[dep_id] || { "id" => dep_id, "title" => "external dependency", "status" => "unknown" }
-              edges << [dep_id, task["id"].to_s]
+          if focus.to_s.empty?
+            selected_ids = active_items.map { |task| task["id"].to_s }
+            edges.each do |from, to|
+              selected_ids << from if selected_ids.include?(to)
+              selected_ids << to if selected_ids.include?(from)
             end
-            Array(task["blocks"]).each do |blocked|
-              blocked_id = blocked.to_s
-              selected[blocked_id] = by_id[blocked_id] || { "id" => blocked_id, "title" => "external blocked task", "status" => "unknown" }
-              edges << [task["id"].to_s, blocked_id]
+          else
+            outgoing = Hash.new { |hash, key| hash[key] = [] }
+            incoming = Hash.new { |hash, key| hash[key] = [] }
+            edges.each do |from, to|
+              outgoing[from] << to
+              incoming[to] << from
+            end
+            selected_ids = [focus.to_s]
+            frontier = [focus.to_s]
+            depth.to_i.times do
+              next_frontier = []
+              frontier.each do |task_id|
+                neighbors = []
+                neighbors += incoming[task_id] if %w[both ancestors].include?(direction)
+                neighbors += outgoing[task_id] if %w[both descendants].include?(direction)
+                neighbors.each do |neighbor|
+                  next if selected_ids.include?(neighbor)
+                  selected_ids << neighbor
+                  next_frontier << neighbor
+                end
+              end
+              frontier = next_frontier
+              break if frontier.empty?
             end
           end
 
+          selected = selected_ids.each_with_object({}) do |task_id, out|
+            out[task_id] = by_id[task_id] || { "id" => task_id, "title" => "external task", "status" => "unknown" }
+          end
+          selected_edges = edges.select { |from, to| selected.key?(from) && selected.key?(to) }
+          { "selected" => selected, "edges" => selected_edges }
+        end
+
+        def task_area(task)
+          text = ([task["title"], task["path"], task["workflow"], task["target_agent"], task["target_role"]] + Array(task["allowed_paths"])).compact.join(" ")
+          return "Monetization" if text =~ /수익화|구독|paywall|storekit|quota|entitlement|monetization|subscription/i
+          return "Release" if text =~ /release|출시|testflight|app store|sandbox/i
+          return "Design" if text =~ /design|figma|ui\/ux|wireframe|prototype|디자인/i
+          return "Backend" if text =~ /backend|api|gateway|server|remote stt|adapter/i
+          return "iOS" if text =~ /ios|swift|xctest|swiftdata|audio|stt|recipe|home|앱|권한/i
+          return "Ops" if text =~ /ops|git|ci|workflow|governance|migration|운영/i
+          return "Product" if text =~ /product|prd|roadmap|제품|정책/i
+          "General"
+        end
+
+        def task_group_value(task, group_by)
+          case group_by
+          when "agent"
+            clean(task["target_agent"])
+          when "role"
+            clean(task["target_role"])
+          when "status"
+            clean(task["status"], "unknown")
+          when "workflow"
+            clean(task["workflow"], "unknown")
+          else
+            task_area(task)
+          end
+        end
+
+        def critical_focus_task(snapshot, focus)
+          return focus unless focus.to_s.empty?
+          active_items = sorted_work_items(active_work_items(snapshot.fetch("tasks", {})))
+          release_like = active_items.find { |task| [task["id"], task["title"], task["path"]].compact.join(" ") =~ /release|출시|testflight|app store|launch/i }
+          return release_like["id"].to_s if release_like
+          approved = active_items.find { |task| task["status"].to_s == "approved" }
+          return approved["id"].to_s if approved
+          active_items.first && active_items.first["id"].to_s
+        end
+
+        def render_mermaid_dependencies(snapshot, focus = "", depth = 2)
+          graph = dependency_graph_selection(snapshot, focus, depth, "both")
+          selected = graph["selected"]
+          edges = graph["edges"]
           puts "flowchart LR"
           selected.values.sort_by { |task| task["id"].to_s }.each do |task|
             node = mermaid_id("T", task["id"])
             puts "  #{node}[\"#{mermaid_label(task["id"], shorten(task["title"], 36), task["status"])}\"]"
           end
-          edges.uniq.each do |from, to|
+          edges.each do |from, to|
             puts "  #{mermaid_id("T", from)} --> #{mermaid_id("T", to)}"
           end
           selected.values.each do |task|
             puts "  class #{mermaid_id("T", task["id"])} #{mermaid_task_class(task)}"
+          end
+          puts ""
+          puts mermaid_class_defs
+        end
+
+        def render_mermaid_summary(snapshot)
+          tasks = snapshot.fetch("tasks", {})
+          items = Array(tasks["items"])
+          active_items = active_work_items(tasks)
+          groups = items.group_by { |task| task_area(task) }
+          active_groups = active_items.group_by { |task| task_area(task) }
+          by_id = items.each_with_object({}) { |task, out| out[task["id"].to_s] = task }
+          edges = dashboard_dependency_edges(items).filter_map do |from, to|
+            from_area = task_area(by_id[from] || { "id" => from })
+            to_area = task_area(by_id[to] || { "id" => to })
+            [from_area, to_area] unless from_area == to_area
+          end.uniq
+
+          puts "flowchart LR"
+          groups.keys.sort.each do |area|
+            total = groups[area].length
+            active = Array(active_groups[area]).length
+            done = groups[area].count { |task| task["status"].to_s == "done" }
+            puts "  #{mermaid_id("A", area)}[\"#{mermaid_label(area, "#{active} active / #{total} total", "#{done} done")}\"]"
+          end
+          edges.each { |from, to| puts "  #{mermaid_id("A", from)} --> #{mermaid_id("A", to)}" }
+          groups.keys.each { |area| puts "  class #{mermaid_id("A", area)} area" }
+          puts ""
+          puts mermaid_class_defs
+        end
+
+        def render_mermaid_swimlane(snapshot, group_by)
+          tasks = snapshot.fetch("tasks", {})
+          items = sorted_work_items(active_work_items(tasks))
+          item_ids = items.map { |task| task["id"].to_s }
+          edges = dashboard_dependency_edges(items).select { |from, to| item_ids.include?(from) && item_ids.include?(to) }
+          groups = items.group_by { |task| task_group_value(task, group_by) }
+          puts "flowchart TB"
+          if groups.empty?
+            puts "  T_none[\"no active work\"]"
+            puts "  class T_none done"
+          else
+            groups.sort.each do |group, group_items|
+              puts "  subgraph #{mermaid_id("G", group)}[\"#{mermaid_label(group)}\"]"
+              group_items.each do |task|
+                puts "    #{mermaid_id("T", task["id"])}[\"#{mermaid_label(task["id"], shorten(task["title"], 30), task["status"])}\"]"
+              end
+              puts "  end"
+            end
+            edges.each { |from, to| puts "  #{mermaid_id("T", from)} --> #{mermaid_id("T", to)}" }
+            items.each { |task| puts "  class #{mermaid_id("T", task["id"])} #{mermaid_task_class(task)}" }
+          end
+          puts ""
+          puts mermaid_class_defs
+        end
+
+        def render_mermaid_critical_path(snapshot, focus, depth)
+          target = critical_focus_task(snapshot, focus)
+          return render_mermaid_dependencies(snapshot, "", depth) if target.to_s.empty?
+          graph = dependency_graph_selection(snapshot, target, [depth.to_i, 1].max, "ancestors")
+          selected = graph["selected"]
+          edges = graph["edges"]
+          puts "flowchart LR"
+          selected.values.sort_by { |task| task["id"].to_s }.each do |task|
+            node = mermaid_id("T", task["id"])
+            label = task["id"].to_s == target ? mermaid_label(task["id"], shorten(task["title"], 34), "target") : mermaid_label(task["id"], shorten(task["title"], 34), task["status"])
+            puts "  #{node}[\"#{label}\"]"
+          end
+          edges.each { |from, to| puts "  #{mermaid_id("T", from)} --> #{mermaid_id("T", to)}" }
+          selected.values.each do |task|
+            node_class = task["id"].to_s == target ? "active" : mermaid_task_class(task)
+            puts "  class #{mermaid_id("T", task["id"])} #{node_class}"
           end
           puts ""
           puts mermaid_class_defs
@@ -3823,10 +4009,16 @@ cmd_project() {
           puts mermaid_class_defs
         end
 
-        def render_work_mermaid(snapshot, health_summary, map)
+        def render_work_mermaid(snapshot, health_summary, map, focus = "", depth = 2, group_by = "area")
           case map
+          when "summary"
+            render_mermaid_summary(snapshot)
           when "dependencies"
-            render_mermaid_dependencies(snapshot)
+            render_mermaid_dependencies(snapshot, focus, depth)
+          when "swimlane"
+            render_mermaid_swimlane(snapshot, group_by)
+          when "critical-path"
+            render_mermaid_critical_path(snapshot, focus, depth)
           when "workflow"
             render_mermaid_workflow(snapshot)
           when "agents"
@@ -3877,35 +4069,83 @@ cmd_project() {
           }
         end
 
-        def dependency_map_data(snapshot)
-          tasks = snapshot.fetch("tasks", {})
-          all_items = Array(tasks["items"])
-          active_items = active_work_items(tasks)
-          by_id = all_items.each_with_object({}) { |task, out| out[task["id"].to_s] = task }
-          selected = {}
-          edges = []
-
-          active_items.each do |task|
-            selected[task["id"].to_s] = task
-            Array(task["depends_on"]).each do |dependency|
-              dep_id = dependency.to_s
-              selected[dep_id] = by_id[dep_id] || { "id" => dep_id, "title" => "external dependency", "status" => "unknown" }
-              edges << { "from" => dep_id, "to" => task["id"].to_s, "type" => "depends_on" }
-            end
-            Array(task["blocks"]).each do |blocked|
-              blocked_id = blocked.to_s
-              selected[blocked_id] = by_id[blocked_id] || { "id" => blocked_id, "title" => "external blocked task", "status" => "unknown" }
-              edges << { "from" => task["id"].to_s, "to" => blocked_id, "type" => "blocks" }
-            end
-          end
+        def dependency_map_data(snapshot, focus = "", depth = 2)
+          graph = dependency_graph_selection(snapshot, focus, depth, "both")
+          selected = graph["selected"]
+          edges = graph["edges"].map { |from, to| { "from" => from, "to" => to, "type" => "dependency" } }
 
           {
             "type" => "dependencies",
             "direction" => "LR",
+            "focus" => focus.to_s.empty? ? nil : focus.to_s,
+            "depth" => depth.to_i,
             "nodes" => selected.values.sort_by { |task| task["id"].to_s }.map do |task|
               { "id" => mermaid_id("T", task["id"]), "task_id" => task["id"].to_s, "label" => mermaid_label(task["id"], shorten(task["title"], 36), task["status"]), "class" => mermaid_task_class(task) }
             end,
             "edges" => edges.uniq
+          }
+        end
+
+        def summary_map_data(snapshot)
+          tasks = snapshot.fetch("tasks", {})
+          items = Array(tasks["items"])
+          active_items = active_work_items(tasks)
+          groups = items.group_by { |task| task_area(task) }
+          active_groups = active_items.group_by { |task| task_area(task) }
+          by_id = items.each_with_object({}) { |task, out| out[task["id"].to_s] = task }
+          edges = dashboard_dependency_edges(items).filter_map do |from, to|
+            from_area = task_area(by_id[from] || { "id" => from })
+            to_area = task_area(by_id[to] || { "id" => to })
+            { "from" => from_area, "to" => to_area, "type" => "area_dependency" } unless from_area == to_area
+          end.uniq
+
+          {
+            "type" => "summary",
+            "direction" => "LR",
+            "nodes" => groups.keys.sort.map do |area|
+              group_items = groups[area]
+              {
+                "id" => mermaid_id("A", area),
+                "area" => area,
+                "total_tasks" => group_items.length,
+                "active_tasks" => Array(active_groups[area]).length,
+                "done_tasks" => group_items.count { |task| task["status"].to_s == "done" },
+                "class" => "area"
+              }
+            end,
+            "edges" => edges
+          }
+        end
+
+        def swimlane_map_data(snapshot, group_by)
+          tasks = snapshot.fetch("tasks", {})
+          items = sorted_work_items(active_work_items(tasks))
+          item_ids = items.map { |task| task["id"].to_s }
+          groups = items.group_by { |task| task_group_value(task, group_by) }
+          {
+            "type" => "swimlane",
+            "direction" => "TB",
+            "group_by" => group_by,
+            "nodes" => items.map do |task|
+              { "id" => mermaid_id("T", task["id"]), "task_id" => task["id"].to_s, "group" => task_group_value(task, group_by), "label" => mermaid_label(task["id"], shorten(task["title"], 30), task["status"]), "class" => mermaid_task_class(task) }
+            end,
+            "groups" => groups.keys.sort.map { |group| { "id" => mermaid_id("G", group), "label" => group, "task_count" => groups[group].length } },
+            "edges" => dashboard_dependency_edges(items).select { |from, to| item_ids.include?(from) && item_ids.include?(to) }.map { |from, to| { "from" => from, "to" => to, "type" => "dependency" } }
+          }
+        end
+
+        def critical_path_map_data(snapshot, focus, depth)
+          target = critical_focus_task(snapshot, focus)
+          graph = dependency_graph_selection(snapshot, target, [depth.to_i, 1].max, "ancestors")
+          {
+            "type" => "critical_path",
+            "direction" => "LR",
+            "focus" => target,
+            "depth" => depth.to_i,
+            "nodes" => graph["selected"].values.sort_by { |task| task["id"].to_s }.map do |task|
+              { "id" => mermaid_id("T", task["id"]), "task_id" => task["id"].to_s, "label" => mermaid_label(task["id"], shorten(task["title"], 34), task["id"].to_s == target ? "target" : task["status"]), "class" => task["id"].to_s == target ? "active" : mermaid_task_class(task) }
+            end,
+            "edges" => graph["edges"].map { |from, to| { "from" => from, "to" => to, "type" => "dependency" } }
           }
         end
 
@@ -3994,7 +4234,7 @@ cmd_project() {
           }
         end
 
-        def dashboard_projection(snapshot, health_summary, view, level, format, map)
+        def dashboard_projection(snapshot, health_summary, view, level, format, map, focus = "", depth = 2, group_by = "area")
           project = snapshot.fetch("project", {})
           tasks = snapshot.fetch("tasks", {})
           task_status = tasks.fetch("by_status", {})
@@ -4018,6 +4258,9 @@ cmd_project() {
             "level" => level,
             "format" => format,
             "map" => map,
+            "focus" => focus.to_s.empty? ? nil : focus.to_s,
+            "depth" => depth.to_i,
+            "group_by" => group_by,
             "project" => {
               "name" => project["name"] || File.basename(snapshot["target"].to_s),
               "core_version" => snapshot["core_version"],
@@ -4072,7 +4315,10 @@ cmd_project() {
             "control" => snapshot["control"],
             "next" => Array(snapshot["next"]),
             "maps" => {
-              "dependencies" => dependency_map_data(snapshot),
+              "summary" => summary_map_data(snapshot),
+              "dependencies" => dependency_map_data(snapshot, focus, depth),
+              "swimlane" => swimlane_map_data(snapshot, group_by),
+              "critical_path" => critical_path_map_data(snapshot, focus, depth),
               "workflow" => workflow_map_data(snapshot),
               "agents" => agent_map_data(snapshot),
               "blockers" => blocker_map_data(snapshot, health_summary)
@@ -4107,8 +4353,14 @@ cmd_project() {
 
         def html_map_title(name)
           case name
+          when "summary"
+            "Project Summary Map"
           when "dependencies"
             "Task Dependency Map"
+          when "swimlane"
+            "Work Swimlane Map"
+          when "critical-path"
+            "Critical Path Map"
           when "workflow"
             "Workflow State Map"
           when "agents"
@@ -4120,8 +4372,8 @@ cmd_project() {
           end
         end
 
-        def render_html_dashboard(snapshot, health_summary, view, level, selected_map)
-          projection = dashboard_projection(snapshot, health_summary, view, level, "html", selected_map)
+        def render_html_dashboard(snapshot, health_summary, view, level, selected_map, focus = "", depth = 2, group_by = "area")
+          projection = dashboard_projection(snapshot, health_summary, view, level, "html", selected_map, focus, depth, group_by)
           project = projection["project"]
           status = projection["status"]
           progress = projection["progress"]
@@ -4136,9 +4388,9 @@ cmd_project() {
           done_ratio = progress["done_ratio"].to_f
           progress_pct = (done_ratio * 100).round
 
-          map_names = ([selected_map] + %w[dependencies workflow agents blockers]).compact.uniq
+          map_names = ([selected_map] + %w[summary swimlane critical-path dependencies workflow agents blockers]).compact.uniq
           mermaid_sources = map_names.each_with_object({}) do |name, out|
-            out[name] = capture_output { render_work_mermaid(snapshot, health_summary, name) }
+            out[name] = capture_output { render_work_mermaid(snapshot, health_summary, name, focus, depth, group_by) }
           end
 
           rows = active_items.map do |task|
@@ -4172,7 +4424,13 @@ cmd_project() {
             description =
               case name
               when "dependencies"
-                "일감 간 선후관계입니다. 복잡하면 축소하거나 패널을 접고 필요한 맵만 펼쳐 보세요."
+                focus.to_s.empty? ? "일감 간 선후관계입니다. 복잡하면 --focus와 --depth로 좁혀 보세요." : "#{focus} 기준 앞뒤 #{depth}단계 의존성입니다."
+              when "summary"
+                "Task를 영역 단위로 접은 요약 맵입니다. 큰 프로젝트는 여기서 전체 흐름을 먼저 봅니다."
+              when "swimlane"
+                "#{group_by} 기준으로 활성 일감을 나눈 작업 보드형 맵입니다."
+              when "critical-path"
+                "출시/목표 Task까지 필요한 선행 경로를 휴리스틱으로 좁혀 보여줍니다."
               when "workflow"
                 "상태 전이 흐름과 현재 일감이 놓인 위치입니다."
               when "agents"
@@ -4263,12 +4521,12 @@ cmd_project() {
         next_steps = Array(snapshot["next"]).map { |step| command_or_message(step) }.compact.uniq
 
         if as_json
-          puts JSON.pretty_generate(dashboard_projection(snapshot, health_summary, view, level, format, map))
+          puts JSON.pretty_generate(dashboard_projection(snapshot, health_summary, view, level, format, map, focus, depth, group_by))
           exit 0
         end
 
         if format == "html"
-          html = render_html_dashboard(snapshot, health_summary, view, level, map)
+          html = render_html_dashboard(snapshot, health_summary, view, level, map, focus, depth, group_by)
           if output.empty?
             puts html
           else
@@ -4280,7 +4538,7 @@ cmd_project() {
 
         if view == "work"
           if format == "mermaid"
-            render_work_mermaid(snapshot, health_summary, map)
+            render_work_mermaid(snapshot, health_summary, map, focus, depth, group_by)
           elsif format == "tree"
             render_work_tree(snapshot, level, color_enabled)
           else
@@ -4377,7 +4635,7 @@ cmd_project() {
           puts section(color_enabled, "Next")
           next_steps.first(level == "compact" ? 3 : next_steps.length).each { |step| puts "  - #{step}" }
         end
-      ' "$view" "$format" "$level" "$color" "$map" "$json" "$output"
+      ' "$view" "$format" "$level" "$color" "$map" "$json" "$output" "$focus" "$depth" "$group_by"
       ;;
     snapshot)
       target="$(pwd)"

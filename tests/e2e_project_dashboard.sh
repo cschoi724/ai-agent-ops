@@ -524,6 +524,50 @@ grep -q 'classDef proposed' /tmp/aiops-e2e-project-dashboard-mermaid-dependencie
   exit 1
 }
 
+"$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map summary >/tmp/aiops-e2e-project-dashboard-mermaid-summary.out
+grep -q 'A_General\["General' /tmp/aiops-e2e-project-dashboard-mermaid-summary.out || {
+  printf '%s\n' "summary mermaid area node missing" >&2
+  exit 1
+}
+grep -q 'class A_General area' /tmp/aiops-e2e-project-dashboard-mermaid-summary.out || {
+  printf '%s\n' "summary mermaid area class missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map dependencies --focus T-20260807-002 --depth 1 >/tmp/aiops-e2e-project-dashboard-mermaid-focus.out
+grep -q 'T_T_20260807_001 --> T_T_20260807_002' /tmp/aiops-e2e-project-dashboard-mermaid-focus.out || {
+  printf '%s\n' "focus mermaid predecessor missing" >&2
+  exit 1
+}
+grep -q 'T_T_20260807_002 --> T_T_20260807_003' /tmp/aiops-e2e-project-dashboard-mermaid-focus.out || {
+  printf '%s\n' "focus mermaid successor missing" >&2
+  exit 1
+}
+if grep -q 'T_T_20260807_004' /tmp/aiops-e2e-project-dashboard-mermaid-focus.out; then
+  printf '%s\n' "focus mermaid included task outside depth" >&2
+  exit 1
+fi
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map swimlane --group-by agent >/tmp/aiops-e2e-project-dashboard-mermaid-swimlane.out
+grep -q 'subgraph G_Development_Agent\["Development Agent"\]' /tmp/aiops-e2e-project-dashboard-mermaid-swimlane.out || {
+  printf '%s\n' "swimlane mermaid agent group missing" >&2
+  exit 1
+}
+grep -q 'T_T_20260807_002\["T-20260807-002' /tmp/aiops-e2e-project-dashboard-mermaid-swimlane.out || {
+  printf '%s\n' "swimlane mermaid task missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map critical-path --focus T-20260807-005 --depth 4 >/tmp/aiops-e2e-project-dashboard-mermaid-critical.out
+grep -q 'T_T_20260807_005\["T-20260807-005' /tmp/aiops-e2e-project-dashboard-mermaid-critical.out || {
+  printf '%s\n' "critical path target missing" >&2
+  exit 1
+}
+grep -q 'target"\]' /tmp/aiops-e2e-project-dashboard-mermaid-critical.out || {
+  printf '%s\n' "critical path target label missing" >&2
+  exit 1
+}
+
 "$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map dependencies --json >/tmp/aiops-e2e-project-dashboard-mermaid-json.json
 "$repo_root/bin/aiops" validate project-dashboard /tmp/aiops-e2e-project-dashboard-mermaid-json.json >/tmp/aiops-e2e-project-dashboard-mermaid-json-validate.out
 ruby -rjson -e '
@@ -531,7 +575,7 @@ ruby -rjson -e '
   abort("mermaid json format missing") unless dashboard["format"] == "mermaid"
   abort("mermaid json map missing") unless dashboard["map"] == "dependencies"
   abort("mermaid json work view missing") unless dashboard["view"] == "work"
-  abort("mermaid json map edge missing") unless dashboard.dig("maps", "dependencies", "edges").any? { |edge| edge["type"] == "depends_on" }
+  abort("mermaid json map edge missing") unless dashboard.dig("maps", "dependencies", "edges").any? { |edge| edge["from"] == "T-20260807-001" && edge["to"] == "T-20260807-002" }
 ' /tmp/aiops-e2e-project-dashboard-mermaid-json.json
 
 before_html_hash="$(find "$project" -type f -not -path '*/.git/*' -print | sort | xargs shasum -a 256 | shasum -a 256 | awk "{print \$1}")"
@@ -575,8 +619,8 @@ grep -q 'data-zoom="in"' /tmp/aiops-e2e-project-dashboard.html || {
   printf '%s\n' "html dashboard zoom controls missing" >&2
   exit 1
 }
-grep -q 'class="panel map-panel" data-map="dependencies" open' /tmp/aiops-e2e-project-dashboard.html || {
-  printf '%s\n' "html dashboard open dependency panel missing" >&2
+grep -q 'class="panel map-panel" data-map="summary" open' /tmp/aiops-e2e-project-dashboard.html || {
+  printf '%s\n' "html dashboard open summary panel missing" >&2
   exit 1
 }
 grep -q 'class="agent-card ok"' /tmp/aiops-e2e-project-dashboard.html || {

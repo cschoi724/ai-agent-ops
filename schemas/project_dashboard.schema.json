@@ -13,6 +13,9 @@
     "level",
     "format",
     "map",
+    "focus",
+    "depth",
+    "group_by",
     "project",
     "status",
     "progress",
@@ -33,7 +36,10 @@
     "view": { "type": "string", "enum": ["main", "work", "risk", "agents", "release"] },
     "level": { "type": "string", "enum": ["compact", "standard", "detail"] },
     "format": { "type": "string", "enum": ["terminal", "tree", "mermaid", "html"] },
-    "map": { "type": "string", "enum": ["dependencies", "workflow", "agents", "blockers"] },
+    "map": { "type": "string", "enum": ["summary", "dependencies", "swimlane", "critical-path", "workflow", "agents", "blockers"] },
+    "focus": { "type": ["string", "null"] },
+    "depth": { "type": "integer", "minimum": 0 },
+    "group_by": { "type": "string", "enum": ["area", "agent", "role", "status", "workflow"] },
     "project": {
       "type": "object",
       "additionalProperties": true,
@@ -133,9 +139,12 @@
     "maps": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["dependencies", "workflow", "agents", "blockers"],
+      "required": ["summary", "dependencies", "swimlane", "critical_path", "workflow", "agents", "blockers"],
       "properties": {
+        "summary": { "$ref": "#/$defs/map" },
         "dependencies": { "$ref": "#/$defs/map" },
+        "swimlane": { "$ref": "#/$defs/map" },
+        "critical_path": { "$ref": "#/$defs/map" },
         "workflow": {
           "type": "object",
           "additionalProperties": true,

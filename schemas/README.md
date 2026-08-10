@@ -78,7 +78,7 @@ Policy rules 단계 이후 `runtime/policy_rules.json`은 health, snapshot, vali
 
 Action plan 단계 이후 Agent는 작업 착수 전 `aiops action plan --json`으로 의도한 행동과 승인 필요 항목, 차단 항목을 구조화할 수 있다. 이 계약은 자동 실행 엔진이 아니라 작업 전 검토 결과다.
 
-Dashboard JSON 단계 이후 `aiops project dashboard --json`은 사람이 보는 terminal/tree/Mermaid/HTML 출력과 같은 의미를 공유하는 projection 계약을 제공한다. Dashboard JSON은 source of truth가 아니며 `project snapshot --json`과 `project health --json`에서 파생된다. `views.risk`, `views.agents`, `views.release`는 전문 dashboard view가 쓰는 파생 데이터를 담는다.
+Dashboard JSON 단계 이후 `aiops project dashboard --json`은 사람이 보는 terminal/tree/Mermaid/HTML 출력과 같은 의미를 공유하는 projection 계약을 제공한다. Dashboard JSON은 source of truth가 아니며 `project snapshot --json`과 `project health --json`에서 파생된다. `maps.summary`, `maps.dependencies`, `maps.swimlane`, `maps.critical_path`는 큰 프로젝트를 요약/필터링해 보는 renderer가 쓰는 파생 데이터를 담고, `views.risk`, `views.agents`, `views.release`는 전문 dashboard view가 쓰는 파생 데이터를 담는다.
 
 ## 호환성 원칙
 
