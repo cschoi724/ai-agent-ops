@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-usage() {
+usage_all() {
   cat <<'EOF'
 aiops - AI Agent Ops project helper
 
@@ -117,6 +117,425 @@ Examples:
   aiops update --check
   aiops release-check --strict
 EOF
+}
+
+help_locale() {
+  locale="${1:-${AIOPS_LOCALE:-ko}}"
+  case "$locale" in
+    en|en-*|en_*) printf '%s\n' "en" ;;
+    *) printf '%s\n' "ko" ;;
+  esac
+}
+
+usage_quick() {
+  locale="$(help_locale "${1:-}")"
+  if [ "$locale" = "en" ]; then
+    cat <<'EOF'
+AI Ops
+
+Common Commands
+
+  aiops status        Show project status and next recommended actions
+  aiops work          Show active work, owners, and handoff candidates
+  aiops risks         Show warnings, blockers, and stale coordination state
+  aiops agents        Show active agents, roles, teams, and assignments
+  aiops release       Show local release readiness
+  aiops doctor        Check installation and project configuration
+  aiops sync-status   Sync the shared coordination reference
+  aiops session-guide Show which role session to open next
+
+More Help
+
+  aiops help status      Details for a user command
+  aiops help work        Details for active work review
+  aiops help dashboard   Advanced dashboard and HTML/Mermaid output
+  aiops help ai          Agent and automation commands
+  aiops help all         Full command reference
+  aiops help --locale ko Korean help
+EOF
+  else
+    cat <<'EOF'
+AI Ops
+
+자주 쓰는 명령어
+
+  aiops status        프로젝트 상태와 다음 추천 작업을 봅니다
+  aiops work          현재 일감, 담당, 인계 후보를 봅니다
+  aiops risks         경고, 차단, 동기화 문제를 봅니다
+  aiops agents        활성 에이전트, 역할, 팀 배정을 봅니다
+  aiops release       로컬 릴리스 준비 상태를 봅니다
+  aiops doctor        설치와 프로젝트 운영 구성을 점검합니다
+  aiops sync-status   협업 기준 상태를 동기화합니다
+  aiops session-guide 다음에 열 Role Session을 고릅니다
+
+더 보기
+
+  aiops help status      사용자용 명령 자세히 보기
+  aiops help work        현재 일감 확인 자세히 보기
+  aiops help dashboard   고급 대시보드와 HTML/Mermaid 출력
+  aiops help ai          Agent/자동화용 명령 보기
+  aiops help all         전체 명령 보기
+  aiops help --locale en 영어 help 보기
+EOF
+  fi
+}
+
+usage() {
+  usage_quick "${AIOPS_LOCALE:-ko}"
+}
+
+usage_machine() {
+  locale="$(help_locale "${1:-}")"
+  if [ "$locale" = "en" ]; then
+    cat <<'EOF'
+Agent / Automation Commands
+
+These commands expose machine-readable contracts or low-level workflow controls.
+
+  aiops project snapshot --json
+  aiops project health --json
+  aiops project dashboard --json
+  aiops project context --role ROLE --task TASK_ID --json
+  aiops policy evaluate --json
+  aiops action plan --role ROLE --task TASK_ID --json
+  aiops validate project-dashboard FILE
+  aiops validate project-snapshot FILE
+  aiops validate policy-evaluation FILE
+
+Use `aiops help all` for the complete command reference.
+EOF
+  else
+    cat <<'EOF'
+Agent / 자동화용 명령
+
+아래 명령은 기계가 읽는 계약이나 낮은 수준의 workflow 제어를 제공합니다.
+
+  aiops project snapshot --json
+  aiops project health --json
+  aiops project dashboard --json
+  aiops project context --role ROLE --task TASK_ID --json
+  aiops policy evaluate --json
+  aiops action plan --role ROLE --task TASK_ID --json
+  aiops validate project-dashboard FILE
+  aiops validate project-snapshot FILE
+  aiops validate policy-evaluation FILE
+
+전체 명령은 `aiops help all`에서 확인합니다.
+EOF
+  fi
+}
+
+usage_command_help() {
+  topic="$1"
+  locale="$(help_locale "${2:-}")"
+  case "$topic:$locale" in
+    status:en)
+      cat <<'EOF'
+aiops status
+
+Shows a compact project status summary, readiness, warnings, and next recommended actions.
+
+Examples:
+  aiops status
+  aiops status --target ./CookLog
+  aiops status --level detail
+
+Related:
+  aiops work       Active work and owners
+  aiops risks      Warnings and blockers
+EOF
+      ;;
+    status:*)
+      cat <<'EOF'
+aiops status
+
+프로젝트 상태, 준비도, 경고, 다음 추천 작업을 짧게 보여줍니다.
+
+사용 예:
+  aiops status
+  aiops status --target ./CookLog
+  aiops status --level detail
+
+비슷한 명령:
+  aiops work       현재 일감과 담당 확인
+  aiops risks      경고와 차단 항목 확인
+EOF
+      ;;
+    work:en)
+      cat <<'EOF'
+aiops work
+
+Shows active tasks, status, workflow, target role, target agent, lock, and next action.
+
+Examples:
+  aiops work
+  aiops work --format tree
+  aiops work --target ./CookLog
+
+Related:
+  aiops status     Overall project summary
+  aiops agents     Agent and role assignments
+EOF
+      ;;
+    work:*)
+      cat <<'EOF'
+aiops work
+
+활성 일감, 상태, workflow, 담당 역할, 담당 에이전트, lock, 다음 행동을 보여줍니다.
+
+사용 예:
+  aiops work
+  aiops work --format tree
+  aiops work --target ./CookLog
+
+비슷한 명령:
+  aiops status     전체 프로젝트 요약
+  aiops agents     에이전트와 역할 배정 확인
+EOF
+      ;;
+    risks:en)
+      cat <<'EOF'
+aiops risks
+
+Shows warnings, blockers, stale status reference, incomplete task metadata, and policy signals.
+
+Examples:
+  aiops risks
+  aiops risks --target ./CookLog
+  aiops risks --level detail
+
+Related:
+  aiops status     Overall project summary
+  aiops doctor     Installation and configuration checks
+EOF
+      ;;
+    risks:*)
+      cat <<'EOF'
+aiops risks
+
+경고, 차단 항목, 오래된 기준 상태, 불완전한 Task metadata, policy 신호를 보여줍니다.
+
+사용 예:
+  aiops risks
+  aiops risks --target ./CookLog
+  aiops risks --level detail
+
+비슷한 명령:
+  aiops status     전체 프로젝트 요약
+  aiops doctor     설치와 운영 구성 점검
+EOF
+      ;;
+    agents:en)
+      cat <<'EOF'
+aiops agents
+
+Shows active agents, teams, roles, assignments, and role load.
+
+Examples:
+  aiops agents
+  aiops agents --target ./CookLog
+  aiops agents --level detail
+
+Related:
+  aiops work          Active work and owners
+  aiops session-guide Role session guidance
+EOF
+      ;;
+    agents:*)
+      cat <<'EOF'
+aiops agents
+
+활성 에이전트, 팀, 역할, 담당 상태, 역할별 부하를 보여줍니다.
+
+사용 예:
+  aiops agents
+  aiops agents --target ./CookLog
+  aiops agents --level detail
+
+비슷한 명령:
+  aiops work          현재 일감과 담당 확인
+  aiops session-guide Role Session 선택 안내
+EOF
+      ;;
+    release:en)
+      cat <<'EOF'
+aiops release
+
+Shows local release readiness. It does not replace GitHub required checks or App Store review.
+
+Examples:
+  aiops release
+  aiops release --target ./CookLog
+  aiops release --level detail
+
+Related:
+  aiops risks         Warnings and blockers
+  aiops help ai       Machine-readable release inputs
+EOF
+      ;;
+    release:*)
+      cat <<'EOF'
+aiops release
+
+로컬 릴리스 준비 상태를 보여줍니다. GitHub required check나 App Store 심사를 대체하지 않습니다.
+
+사용 예:
+  aiops release
+  aiops release --target ./CookLog
+  aiops release --level detail
+
+비슷한 명령:
+  aiops risks         경고와 차단 항목 확인
+  aiops help ai       기계 판정용 입력 확인
+EOF
+      ;;
+    dashboard:en)
+      cat <<'EOF'
+aiops project dashboard
+
+Advanced dashboard command for detailed terminal, tree, Mermaid, HTML, and JSON output.
+
+Examples:
+  aiops project dashboard
+  aiops project dashboard --format html --output dashboard.html
+  aiops project dashboard --view work --format mermaid --map dependencies
+
+Related:
+  aiops status     Short project summary
+  aiops work       Short active work view
+EOF
+      ;;
+    dashboard:*)
+      cat <<'EOF'
+aiops project dashboard
+
+terminal, tree, Mermaid, HTML, JSON 같은 상세 출력을 다루는 고급 대시보드 명령입니다.
+
+사용 예:
+  aiops project dashboard
+  aiops project dashboard --format html --output dashboard.html
+  aiops project dashboard --view work --format mermaid --map dependencies
+
+비슷한 명령:
+  aiops status     짧은 프로젝트 요약
+  aiops work       짧은 현재 일감 화면
+EOF
+      ;;
+    doctor:en)
+      cat <<'EOF'
+aiops doctor
+
+Checks AI Ops installation, adapter files, project metadata, and strict-mode warnings.
+
+Examples:
+  aiops doctor
+  aiops doctor --strict
+  aiops doctor --target ./CookLog --strict
+EOF
+      ;;
+    doctor:*)
+      cat <<'EOF'
+aiops doctor
+
+AI Ops 설치, adapter 파일, 프로젝트 metadata, strict mode 경고를 점검합니다.
+
+사용 예:
+  aiops doctor
+  aiops doctor --strict
+  aiops doctor --target ./CookLog --strict
+EOF
+      ;;
+    sync-status:en|sync:en)
+      cat <<'EOF'
+aiops sync-status
+
+Records the current canonical status reference for multi-agent coordination.
+
+Examples:
+  aiops sync-status
+  aiops sync-status --target ./CookLog
+
+Note:
+  `.ai_project/.runtime/status_ref` is a local runtime cache and should not be committed.
+EOF
+      ;;
+    sync-status:*|sync:*)
+      cat <<'EOF'
+aiops sync-status
+
+여러 에이전트가 같은 기준으로 작업하도록 현재 canonical status reference를 기록합니다.
+
+사용 예:
+  aiops sync-status
+  aiops sync-status --target ./CookLog
+
+주의:
+  `.ai_project/.runtime/status_ref`는 로컬 runtime cache이며 커밋하지 않습니다.
+EOF
+      ;;
+    session-guide:en|guide:en)
+      cat <<'EOF'
+aiops session-guide
+
+Shows which role session to open next and how to start it.
+
+Examples:
+  aiops session-guide
+  aiops session-guide --target ./CookLog
+EOF
+      ;;
+    session-guide:*|guide:*)
+      cat <<'EOF'
+aiops session-guide
+
+다음에 어떤 Role Session을 열면 되는지와 시작 문구를 보여줍니다.
+
+사용 예:
+  aiops session-guide
+  aiops session-guide --target ./CookLog
+EOF
+      ;;
+    *)
+      die "unknown help topic: $topic"
+      ;;
+  esac
+}
+
+cmd_help() {
+  locale="${AIOPS_LOCALE:-ko}"
+  topic=""
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --locale)
+        shift
+        [ "$#" -gt 0 ] || die "--locale requires a value"
+        locale="$1"
+        ;;
+      --all)
+        topic="all"
+        ;;
+      -h|--help)
+        ;;
+      *)
+        [ -z "$topic" ] || die "help accepts only one topic"
+        topic="$1"
+        ;;
+    esac
+    shift
+  done
+
+  case "${topic:-quick}" in
+    quick) usage_quick "$locale" ;;
+    all) usage_all ;;
+    ai|machine) usage_machine "$locale" ;;
+    status|work|risks|agents|release|dashboard|doctor|sync-status|sync|session-guide|guide)
+      usage_command_help "$topic" "$locale"
+      ;;
+    *)
+      die "unknown help topic: $topic"
+      ;;
+  esac
 }
 
 die() {
@@ -1663,7 +2082,7 @@ cmd_sync_status() {
         target="$1"
         ;;
       -h|--help)
-        usage
+        usage_command_help "$user_cmd" "${AIOPS_LOCALE:-ko}"
         exit 0
         ;;
       *)
@@ -10357,7 +10776,7 @@ cmd_user_dashboard_view() {
         die "aiops $user_cmd does not support $1; use aiops project dashboard for advanced options"
         ;;
       -h|--help)
-        usage
+        usage_command_help "$user_cmd" "${AIOPS_LOCALE:-ko}"
         exit 0
         ;;
       *)
@@ -10415,7 +10834,7 @@ main() {
     version) cmd_version "$@" ;;
     update) cmd_update "$@" ;;
     release-check) cmd_release_check "$@" ;;
-    help|-h|--help) usage ;;
+    help|-h|--help) cmd_help "$@" ;;
     *) die "unknown command: $cmd" ;;
   esac
 }

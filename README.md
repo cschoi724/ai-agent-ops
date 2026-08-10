@@ -105,7 +105,7 @@ YourProject/
 | `aiops ci init` | 프로젝트용 GitHub Actions 생성 |
 | `aiops export runtime` | 외부 runtime adapter용 JSON export |
 
-전체 명령은 `aiops help`를 확인한다.
+자주 쓰는 명령은 `aiops help`, 전체 명령은 `aiops help all`, Agent/자동화용 명령은 `aiops help ai`를 확인한다.
 
 ## Safety Rules
 
