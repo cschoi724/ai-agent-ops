@@ -10,6 +10,25 @@
 
 ## Unreleased
 
+## 0.13.0 - 2026-08-10
+
+### Added
+
+- HTML project dashboard output with browser-rendered Mermaid diagrams.
+- Scalable dashboard maps with map selection, collapsible sections, and zoom controls.
+- Locale catalog based user-facing labels for dashboard status, Role, Team, Agent, workflow, capability, swimlane group, and warning displays.
+
+### Changed
+
+- Work dashboard Mermaid labels now use human-readable display labels while preserving raw internal node IDs.
+- Dashboard documentation and schema notes now describe HTML output, visual maps, and localized display label behavior.
+
+### Fixed
+
+- Swimlane map group labels now route through the locale catalog for `agent`, `role`, `status`, and `workflow` grouping.
+- Unknown Role, Team, and Agent labels now fall back to readable display text instead of raw snake_case.
+- HTML warning and blocker details now avoid exposing known internal field names such as `target_role` and `status_ref_sha`.
+
 ## 0.12.0 - 2026-08-07
 
 ### Added
