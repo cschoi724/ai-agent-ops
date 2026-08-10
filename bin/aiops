@@ -5556,7 +5556,7 @@ cmd_project() {
             out[name] = capture_output { render_work_mermaid(snapshot, health_summary, name, focus, depth, group_by) }
           end
 
-          rows = active_items.map do |task|
+          rows = all_items.map do |task|
             %Q(<tr class="task-row" data-task-id="#{html_escape(task["id"])}"><td><strong>#{html_escape(task["id"])}</strong><small>#{html_escape(task["title"])}</small></td><td>#{html_badge(task["status"])}</td><td>#{html_escape(html_workflow_label(task["workflow"]))}</td><td>#{html_escape(html_role_label(task["target_role"]))}</td><td>#{html_escape(html_agent_label(task["target_agent"]))}</td><td>#{html_escape(html_next_action_label(task.dig("next", "action")))}</td></tr>)
           end
           rows << %Q(<tr id="explorer-empty-row" hidden><td colspan="6" class="empty">조건에 맞는 진행 일감이 없습니다</td></tr>)
@@ -5573,7 +5573,6 @@ cmd_project() {
               "workflow" => workflow_tokens.fetch(task["workflow"].to_s, ""),
               "workflow_label" => html_workflow_label(task["workflow"]),
               "agent" => agent_tokens.fetch(task["target_agent"].to_s, ""),
-              "agent_label" => html_agent_label(task["target_agent"]),
               "role" => role_tokens.fetch(task["target_role"].to_s, ""),
               "role_label" => html_role_label(task["target_role"]),
               "class_name" => mermaid_task_class(task)
@@ -5583,15 +5582,21 @@ cmd_project() {
           requested_statuses = html_filters.fetch("status", "").split(",").map(&:strip).reject(&:empty?)
           initial_statuses = requested_statuses.empty? ? observed_statuses.reject { |item| %w[done cancelled].include?(item) } : requested_statuses
           initial_depth = [[depth.to_i, 1].max, 4].min
+          requested_agent = html_filters.fetch("agent", "")
+          requested_role = html_filters.fetch("role", "")
+          requested_workflow = html_filters.fetch("workflow", "")
+          abort("unknown --filter-agent value: #{requested_agent}") if !requested_agent.empty? && !agent_tokens.key?(requested_agent)
+          abort("unknown --filter-role value: #{requested_role}") if !requested_role.empty? && !role_tokens.key?(requested_role)
+          abort("unknown --filter-workflow value: #{requested_workflow}") if !requested_workflow.empty? && !workflow_tokens.key?(requested_workflow)
           explorer_data = {
             "tasks" => explorer_tasks,
             "edges" => dashboard_dependency_edges(all_items),
             "class_defs" => mermaid_class_defs,
             "initial" => {
               "statuses" => initial_statuses,
-              "agent" => agent_tokens.fetch(html_filters.fetch("agent", ""), ""),
-              "role" => role_tokens.fetch(html_filters.fetch("role", ""), ""),
-              "workflow" => workflow_tokens.fetch(html_filters.fetch("workflow", ""), ""),
+              "agent" => agent_tokens.fetch(requested_agent, ""),
+              "role" => role_tokens.fetch(requested_role, ""),
+              "workflow" => workflow_tokens.fetch(requested_workflow, ""),
               "focus" => focus.to_s,
               "depth" => initial_depth
             }
@@ -5600,13 +5605,13 @@ cmd_project() {
             checked = initial_statuses.include?(status_text) ? " checked" : ""
             %Q(<label class="filter-toggle"><input type="checkbox" name="explorer-status" value="#{html_escape(status_text)}"#{checked}><span>#{html_escape(html_status_label(status_text))}</span></label>)
           end.join
-          agent_options = html_option_list(explorer_tasks.map { |task| task["agent"] }, agent_tokens.fetch(html_filters.fetch("agent", ""), "")) do |item|
-            explorer_tasks.find { |task| task["agent"] == item }.fetch("agent_label")
+          agent_options = html_option_list(explorer_tasks.map { |task| task["agent"] }, agent_tokens.fetch(requested_agent, "")) do |item|
+            agent_tokens.key(item)
           end
-          role_options = html_option_list(explorer_tasks.map { |task| task["role"] }, role_tokens.fetch(html_filters.fetch("role", ""), "")) do |item|
+          role_options = html_option_list(explorer_tasks.map { |task| task["role"] }, role_tokens.fetch(requested_role, "")) do |item|
             explorer_tasks.find { |task| task["role"] == item }.fetch("role_label")
           end
-          workflow_options = html_option_list(explorer_tasks.map { |task| task["workflow"] }, workflow_tokens.fetch(html_filters.fetch("workflow", ""), "")) do |item|
+          workflow_options = html_option_list(explorer_tasks.map { |task| task["workflow"] }, workflow_tokens.fetch(requested_workflow, "")) do |item|
             explorer_tasks.find { |task| task["workflow"] == item }.fetch("workflow_label")
           end
           focus_options = html_option_list(explorer_tasks.map { |task| task["id"] }, focus.to_s) do |item|
@@ -5685,6 +5690,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const warning = document.getElementById("explorer-warning");
   const emptyRow = document.getElementById("explorer-empty-row");
   let renderVersion = 0;
+  let renderQueue = Promise.resolve();
 
   const safeId = value => {
     const text = String(value || "unknown").replace(/[^A-Za-z0-9_]/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
@@ -5741,22 +5747,25 @@ document.addEventListener("DOMContentLoaded", () => {
     return lines.join("\n");
   };
 
-  const renderDependency = async source => {
+  const renderDependency = source => {
     if (!graph) return;
     const version = ++renderVersion;
-    graph.removeAttribute("data-processed");
-    graph.textContent = source;
-    graph.dataset.zoomLevel = "1";
-    graph.style.transform = "scale(1)";
-    graph.style.marginRight = "0";
-    graph.style.marginBottom = "0";
     if (sourcePanel) sourcePanel.textContent = source;
-    if (!window.aiopsMermaid) return;
-    try {
-      await window.aiopsMermaid.run({nodes: [graph]});
-    } catch (error) {
-      if (version === renderVersion) graph.textContent = `맵 렌더링 실패: ${error.message}`;
-    }
+    renderQueue = renderQueue.catch(() => {}).then(async () => {
+      if (version !== renderVersion) return;
+      graph.removeAttribute("data-processed");
+      graph.textContent = source;
+      graph.dataset.zoomLevel = "1";
+      graph.style.transform = "scale(1)";
+      graph.style.marginRight = "0";
+      graph.style.marginBottom = "0";
+      if (!window.aiopsMermaid) return;
+      try {
+        await window.aiopsMermaid.run({nodes: [graph]});
+      } catch (error) {
+        if (version === renderVersion) graph.textContent = `맵 렌더링 실패: ${error.message}`;
+      }
+    });
   };
 
   const applyFilters = (openDependency = false) => {
@@ -5773,7 +5782,7 @@ document.addEventListener("DOMContentLoaded", () => {
         (!controls.role.value || task.role === controls.role.value) &&
         (!controls.workflow.value || task.workflow === controls.workflow.value) &&
         nearby.has(task.id);
-      return matches || (focus && task.id === focus);
+      return matches;
     }).sort((left, right) => left.id.localeCompare(right.id));
     const visibleIds = new Set(visibleTasks.map(task => task.id));
     let visibleRows = 0;

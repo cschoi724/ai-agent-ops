@@ -20,6 +20,7 @@
 
 ### Fixed
 
+- Keep HTML Explorer result counts, task rows, and dependency nodes on the same filtered task set, serialize Mermaid rerenders, preserve Agent proper names, and reject unknown entity filters.
 - User-facing dashboard shortcuts now reject advanced dashboard options that would change the shortcut meaning.
 - Quick-help command `--help` routes now match their command-specific help topics.
 - User CLI dashboards now localize setup-blocked status, check, action, and reason labels instead of leaking machine fallback text.

@@ -137,6 +137,8 @@ Release Dashboard 표시 항목은 release 전 readiness, canonical status, bloc
 
 HTML의 `일감 탐색` 패널은 브라우저 안에서 ID/제목 검색, 상태 toggle, 담당자/역할/workflow 필터, 중심 일감과 연결 깊이 1~4단계 선택을 제공한다. 필터는 작업 표와 dependency map에 함께 적용되며, 결과가 큰 경우 중심 일감으로 범위를 줄이라는 안내를 표시한다. 필터용 task/edge 데이터는 생성된 HTML 안에서만 사용하고 target project나 dashboard JSON projection을 수정하지 않는다. `--filter-*` 옵션은 HTML이 처음 열릴 때 적용할 필터를 지정하며 다른 format과 함께 사용하면 오류가 난다.
 
+중심 일감은 dependency 연결 범위만 제한하며 상태·담당자·역할·workflow·검색 필터를 우회하지 않는다. `--filter-agent`, `--filter-role`, `--filter-workflow`에 현재 일감 데이터에 없는 값을 지정하면 전체 선택으로 조용히 전환하지 않고 오류로 종료한다. Agent 필터에는 locale 설명이 아니라 프로젝트에 등록된 고유 이름을 표시한다.
+
 큰 프로젝트에서는 전체 dependency map보다 아래 형태가 더 읽기 쉽다.
 
 ```sh

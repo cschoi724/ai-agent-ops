@@ -1,6 +1,6 @@
 # Project Dashboard Follow-up Implementation Plan
 
-상태: 진행 중 / 1~3차 완료, 4차 구현 완료·독립 검증 대기
+상태: 진행 중 / 1~3차 완료, 4차 재작업 완료·독립 재검증 대기
 대상: `aiops project dashboard` HTML/CLI 사용성 확장
 기준 버전: v0.13.0
 작성일: 2026-08-10
@@ -10,7 +10,7 @@
 - 1차 User Command Layer: 구현 완료, PR #28~#29로 main 반영 완료
 - 2차 Help UX / Localized Command Guide: 구현 완료, PR #30~#31로 main 반영 완료
 - 3차 User CLI Visualization: 구현 완료, PR #32~#35로 main 반영 완료
-- 4차 Large Graph Explorer: 구현 완료, 독립 검증 대기
+- 4차 Large Graph Explorer: 구현 및 1차 독립 검증 재작업 완료, 독립 재검증 대기
 
 이 문서는 v0.13.0에서 완료된 Project Dashboard의 후속 개선 후보를 실제 구현 가능한 차수로 정리한다.
 

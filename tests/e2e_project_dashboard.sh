@@ -949,6 +949,11 @@ ruby -rjson -e '
   abort("explorer task data missing") unless data["tasks"].length == 5
   abort("explorer dependency data missing") unless data["edges"].include?(["T-20260807-001", "T-20260807-002"])
   abort("explorer leaked raw agent name") if payload.include?("Development Agent")
+  row_ids = html.scan(/class="task-row" data-task-id="([^"]+)"/).flatten.sort
+  task_ids = data["tasks"].map { |task| task["id"] }.sort
+  abort("explorer table and task data differ") unless row_ids == task_ids
+  abort("explorer focus bypasses filters") if html.include?("return matches || (focus && task.id === focus)")
+  abort("explorer Mermaid render queue missing") unless html.include?("let renderQueue = Promise.resolve()")
 ' /tmp/aiops-e2e-project-dashboard.html
 ruby -rjson -e '
   html = File.read(ARGV[0])
@@ -960,10 +965,21 @@ ruby -rjson -e '
   abort("explorer agent filter token missing") if data.dig("initial", "agent").to_s.empty?
   abort("explorer role filter token missing") if data.dig("initial", "role").to_s.empty?
   abort("explorer workflow filter token missing") if data.dig("initial", "workflow").to_s.empty?
-  abort("explorer localized agent option missing") unless html.match?(/<option value="agent-[0-9]+" selected>개발 담당<\/option>/)
+  abort("explorer agent name was not preserved") unless html.match?(/<option value="agent-[0-9]+" selected>Development Agent<\/option>/)
   abort("explorer localized role option missing") unless html.match?(/<option value="role-[0-9]+" selected>구현\/실행<\/option>/)
   abort("explorer localized workflow option missing") unless html.match?(/<option value="workflow-[0-9]+" selected>기능 개발<\/option>/)
 ' /tmp/aiops-e2e-project-dashboard-explorer.html
+
+for invalid_filter in agent role workflow; do
+  if "$repo_root/bin/aiops" project dashboard --target "$project" --format html "--filter-$invalid_filter" DOES_NOT_EXIST --output "/tmp/aiops-e2e-project-dashboard-invalid-$invalid_filter.html" >/tmp/aiops-e2e-project-dashboard-invalid-filter.out 2>&1; then
+    printf '%s\n' "unknown HTML $invalid_filter filter should fail" >&2
+    exit 1
+  fi
+  grep -q "unknown --filter-$invalid_filter value: DOES_NOT_EXIST" /tmp/aiops-e2e-project-dashboard-invalid-filter.out || {
+    printf '%s\n' "unknown HTML $invalid_filter filter error missing" >&2
+    exit 1
+  }
+done
 grep -q 'class="panel map-panel" data-map="summary" open' /tmp/aiops-e2e-project-dashboard.html || {
   printf '%s\n' "html dashboard open summary panel missing" >&2
   exit 1
@@ -1008,8 +1024,8 @@ if grep -q 'future_work' /tmp/aiops-e2e-project-dashboard.html; then
   printf '%s\n' "html dashboard leaked raw capability label" >&2
   exit 1
 fi
-if grep -q 'Development Agent' /tmp/aiops-e2e-project-dashboard.html; then
-  printf '%s\n' "html dashboard leaked raw agent label" >&2
+if ! grep -Eq '<option value="agent-[0-9]+">Development Agent</option>' /tmp/aiops-e2e-project-dashboard.html; then
+  printf '%s\n' "html dashboard explorer agent name missing" >&2
   exit 1
 fi
 if grep -q 'custom_platform_team' /tmp/aiops-e2e-project-dashboard.html; then
