@@ -970,7 +970,7 @@ ruby -rjson -e '
   abort("explorer localized workflow option missing") unless html.match?(/<option value="workflow-[0-9]+" selected>기능 개발<\/option>/)
 ' /tmp/aiops-e2e-project-dashboard-explorer.html
 
-for invalid_filter in agent role workflow; do
+for invalid_filter in status agent role workflow; do
   if "$repo_root/bin/aiops" project dashboard --target "$project" --format html "--filter-$invalid_filter" DOES_NOT_EXIST --output "/tmp/aiops-e2e-project-dashboard-invalid-$invalid_filter.html" >/tmp/aiops-e2e-project-dashboard-invalid-filter.out 2>&1; then
     printf '%s\n' "unknown HTML $invalid_filter filter should fail" >&2
     exit 1

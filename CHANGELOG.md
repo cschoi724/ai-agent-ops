@@ -12,6 +12,7 @@
 
 ### Added
 
+- Localhost-only dashboard server with live HTML, JSON, Mermaid endpoints, optional timed refresh, browser opening, security headers, and clean signal shutdown.
 - HTML Large Graph Explorer with task search, semantic filters, status toggles, focus/depth controls, and client-side dependency map regeneration.
 - HTML-only `--filter-status`, `--filter-agent`, `--filter-role`, and `--filter-workflow` initial filter options.
 - User-facing dashboard shortcuts: `aiops status`, `aiops work`, `aiops risks`, `aiops agents`, and `aiops release`.
@@ -20,6 +21,7 @@
 
 ### Fixed
 
+- Keep the local dashboard server alive after client disconnects, bound partial requests with timeout and size limits, return complete overload responses, and reject unknown status filters.
 - Keep HTML Explorer result counts, task rows, and dependency nodes on the same filtered task set, serialize Mermaid rerenders, preserve Agent proper names, and reject unknown entity filters.
 - User-facing dashboard shortcuts now reject advanced dashboard options that would change the shortcut meaning.
 - Quick-help command `--help` routes now match their command-specific help topics.
