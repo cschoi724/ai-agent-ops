@@ -56,6 +56,7 @@ CLI는 front matter를 읽어 schema로 검증하고, 본문은 사람이 읽는
 | `bootstrap_options.schema.json` | `runtime/bootstrap_options.json` | Bootstrap 선택 후보 catalog |
 | `project_snapshot.schema.json` | `aiops project snapshot --json` JSON | Agent가 먼저 읽는 프로젝트 상태 계약과 통제 신호 |
 | `project_dashboard.schema.json` | `aiops project dashboard --json` JSON | dashboard terminal/tree/Mermaid/HTML/UI renderer가 공유하는 projection 계약 |
+| `dashboard_presets.schema.json` | `.ai_project/dashboard_presets.json` | 프로젝트별 dashboard 옵션 preset 계약 |
 | `policy_rules.schema.json` | `runtime/policy_rules.json` | 운영 판단 규칙 catalog |
 | `policy_evaluation.schema.json` | `aiops policy evaluate --json` JSON | snapshot에 policy rule을 적용한 평가 결과 |
 | `action_plan.schema.json` | `aiops action plan --json` JSON | Agent 작업 착수 전 의도/승인/차단 검토 계약 |
@@ -79,6 +80,8 @@ Policy rules 단계 이후 `runtime/policy_rules.json`은 health, snapshot, vali
 Action plan 단계 이후 Agent는 작업 착수 전 `aiops action plan --json`으로 의도한 행동과 승인 필요 항목, 차단 항목을 구조화할 수 있다. 이 계약은 자동 실행 엔진이 아니라 작업 전 검토 결과다.
 
 Dashboard JSON 단계 이후 `aiops project dashboard --json`은 사람이 보는 terminal/tree/Mermaid/HTML 출력과 같은 의미를 공유하는 projection 계약을 제공한다. Dashboard JSON은 source of truth가 아니며 `project snapshot --json`과 `project health --json`에서 파생된다. `maps.summary`, `maps.dependencies`, `maps.swimlane`, `maps.critical_path`는 큰 프로젝트를 요약/필터링해 보는 renderer가 쓰는 파생 데이터를 담고, `views.risk`, `views.agents`, `views.release`는 전문 dashboard view가 쓰는 파생 데이터를 담는다.
+
+Dashboard preset 단계 이후 `.ai_project/dashboard_presets.json`은 팀이 반복 사용하는 dashboard 옵션 조합을 저장한다. preset은 source data나 렌더링 결과를 저장하지 않고 실행 시 기존 dashboard 옵션으로 확장된다.
 
 ## 호환성 원칙
 

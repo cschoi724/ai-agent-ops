@@ -75,6 +75,11 @@ aiops project dashboard --format html --map dependencies --focus T-20260805-007 
 aiops project dashboard --format html --filter-status approved,scoped --filter-agent "iOS Agent" --output dashboard.html
 aiops project dashboard --serve
 aiops project dashboard --serve --port 8765 --refresh 10 --open
+aiops project dashboard --preset overview
+aiops project dashboard preset list
+aiops project dashboard preset show work-current
+aiops project dashboard preset add team-live --view work --format html --map dependencies --serve --port 0 --refresh 10
+aiops project dashboard --preset team-live --open
 aiops project dashboard --view work --format tree
 aiops project dashboard --view work --format mermaid --map summary
 aiops project dashboard --view work --format mermaid --map dependencies
@@ -89,7 +94,7 @@ aiops project dashboard --json
 aiops project dashboard --color always
 ```
 
-현재 dashboard 구현은 사용자용 CLI 화면, Main Dashboard, Work Dashboard terminal/tree, Work Mermaid map, static HTML dashboard, localhost dashboard server, Dashboard JSON contract, Risk/Agent/Release 전문 view를 제공한다.
+현재 dashboard 구현은 사용자용 CLI 화면, Main Dashboard, Work Dashboard terminal/tree, Work Mermaid map, static HTML dashboard, localhost dashboard server, built-in/project-local preset, Dashboard JSON contract, Risk/Agent/Release 전문 view를 제공한다.
 
 사용자용 top-level 명령은 파일을 수정하지 않으며, 실행할 때마다 `project snapshot --json`과 `project health --json`을 다시 계산한 현재 projection을 표시한다. 사용자용 terminal 출력은 사람이 읽기 쉬운 표시층이므로 자동화 입력으로 쓰지 않는다. Agent와 자동화가 읽어야 하는 기계 계약은 여전히 `aiops project snapshot --json`, `aiops project health --json`, `aiops project dashboard --json`이다.
 
@@ -132,6 +137,7 @@ Release Dashboard 표시 항목은 release 전 readiness, canonical status, bloc
 - `--port N` (기본값 `8765`, `0`은 사용 가능한 임의 포트)
 - `--refresh N` (초 단위 전체 화면 새로고침, 기본값 `0`은 수동)
 - `--open` (지원되는 로컬 브라우저 실행)
+- `--preset NAME` (built-in 또는 프로젝트 local 옵션 조합 적용)
 - `--output FILE`
 - `--json`
 - `--color auto|always|never`
@@ -150,6 +156,32 @@ HTML의 `일감 탐색` 패널은 브라우저 안에서 ID/제목 검색, 상�
 로컬 server는 브라우저의 요청 취소가 전체 프로세스를 종료하지 않도록 연결별로 처리한다. 동시에 최대 8개 연결을 처리하며, 완성되지 않은 요청은 3초 후 종료하고 요청 헤더는 64KB로 제한한다.
 
 `--serve`는 `--json`·`--output`과 함께 사용할 수 없고 HTML만 제공한다. `--port`, `--refresh`, `--open`은 `--serve` 없이 사용할 수 없다. 외부 interface 바인딩, 원격 공개, 인증, 장기 daemon 관리는 지원 범위가 아니다.
+
+Dashboard preset은 긴 옵션 조합을 이름으로 재사용한다. 모든 프로젝트에서 `overview`, `work-current`, `risk-review`, `agent-load`, `release-readiness` built-in preset을 사용할 수 있다.
+
+```sh
+aiops project dashboard preset list
+aiops project dashboard preset show release-readiness
+aiops project dashboard --preset work-current
+```
+
+프로젝트별 preset은 `.ai_project/dashboard_presets.json`에 `aiops.dashboard_presets.v1` 형식으로 저장한다. `preset add`는 이 파일만 생성하거나 갱신하며 같은 이름을 바꾸려면 `--force`가 필요하다. built-in 이름은 local preset으로 덮어쓸 수 없다.
+
+```sh
+aiops project dashboard preset add team-live \
+  --description "팀 실시간 작업 화면" \
+  --view work \
+  --format html \
+  --map dependencies \
+  --serve \
+  --port 0 \
+  --refresh 10
+
+aiops project dashboard --preset team-live --open
+aiops validate dashboard-presets .ai_project/dashboard_presets.json
+```
+
+preset은 dashboard 옵션으로만 확장되며 실행 결과를 저장하거나 Task·source of truth를 수정하지 않는다. 우선순위는 `dashboard 기본값 < preset < 명시한 CLI 옵션`이므로 `--preset team-live --refresh 30`처럼 일부 설정만 실행 시점에 바꿀 수 있다. local preset 파일에 알 수 없는 옵션, 잘못된 값, 실행할 수 없는 조합이 있으면 명확한 오류로 종료한다.
 
 큰 프로젝트에서는 전체 dependency map보다 아래 형태가 더 읽기 쉽다.
 
