@@ -59,8 +59,7 @@ class DashboardServer
       socket = @server.accept
       reap_client_threads
       if active_client_count >= MAX_CONNECTIONS
-        safe_respond(socket, 503, "text/plain; charset=utf-8", "dashboard server is busy\n", false)
-        socket.close unless socket.closed?
+        reject_busy_connection(socket)
         next
       end
 
@@ -115,6 +114,17 @@ class DashboardServer
   ensure
     socket.close unless socket.closed?
     unregister_client(socket)
+  end
+
+  def reject_busy_connection(socket)
+    read_request(socket)
+    safe_respond(socket, 503, "text/plain; charset=utf-8", "dashboard server is busy\n", false)
+  rescue ClientDisconnected, Errno::EPIPE, Errno::ECONNRESET, IOError
+    nil
+  rescue RequestError => error
+    safe_respond(socket, error.status, "text/plain; charset=utf-8", "#{error.message}\n", false)
+  ensure
+    socket.close unless socket.closed?
   end
 
   def read_request(socket)

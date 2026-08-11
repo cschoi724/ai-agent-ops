@@ -21,7 +21,7 @@
 
 ### Fixed
 
-- Keep the local dashboard server alive after client disconnects, bound partial requests with timeout and size limits, and reject unknown status filters.
+- Keep the local dashboard server alive after client disconnects, bound partial requests with timeout and size limits, return complete overload responses, and reject unknown status filters.
 - Keep HTML Explorer result counts, task rows, and dependency nodes on the same filtered task set, serialize Mermaid rerenders, preserve Agent proper names, and reject unknown entity filters.
 - User-facing dashboard shortcuts now reject advanced dashboard options that would change the shortcut meaning.
 - Quick-help command `--help` routes now match their command-specific help topics.

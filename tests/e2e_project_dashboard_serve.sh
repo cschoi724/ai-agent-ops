@@ -124,6 +124,39 @@ ruby -rsocket -e '
   abort("expected HTTP 431, got #{status}") unless status == "431"
 ' "$port"
 
+ruby -rsocket -e '
+  port, ready_file = ARGV
+  sockets = Array.new(8) do
+    socket = TCPSocket.new("127.0.0.1", Integer(port))
+    socket.write("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Partial: waiting")
+    socket
+  end
+  File.write(ready_file, "ready\n")
+  sleep 10
+' "$port" "$tmpdir/overload-ready" &
+partial_pid="$!"
+attempt=0
+while [ "$attempt" -lt 100 ]; do
+  [ -s "$tmpdir/overload-ready" ] && break
+  sleep 0.05
+  attempt=$((attempt + 1))
+done
+[ -s "$tmpdir/overload-ready" ] || {
+  printf '%s\n' "dashboard overload fixture did not start" >&2
+  exit 1
+}
+sleep 0.2
+request GET /healthz 503 "$tmpdir/busy.txt" "$tmpdir/busy.headers"
+grep -qx 'dashboard server is busy' "$tmpdir/busy.txt" || {
+  printf '%s\n' "dashboard overload response body missing" >&2
+  exit 1
+}
+kill "$partial_pid" >/dev/null 2>&1 || true
+wait "$partial_pid" >/dev/null 2>&1 || true
+partial_pid=""
+sleep 0.2
+request GET /healthz 200 "$tmpdir/health-after-overload.json" "$tmpdir/health-after-overload.headers"
+
 grep -q 'AI Ops dashboard server' "$tmpdir/server.log" || {
   printf '%s\n' "dashboard server startup title missing" >&2
   exit 1
