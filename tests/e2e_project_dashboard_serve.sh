@@ -5,8 +5,13 @@ repo_root="$(CDPATH= cd "$(dirname "$0")/.." && pwd)"
 tmpdir="$(mktemp -d /tmp/aiops-e2e-dashboard-serve.XXXXXX)"
 project="$tmpdir/project"
 server_pid=""
+partial_pid=""
 
 cleanup() {
+  if [ -n "$partial_pid" ]; then
+    kill "$partial_pid" >/dev/null 2>&1 || true
+    wait "$partial_pid" >/dev/null 2>&1 || true
+  fi
   if [ -n "$server_pid" ]; then
     kill "$server_pid" >/dev/null 2>&1 || true
     wait "$server_pid" >/dev/null 2>&1 || true
@@ -82,6 +87,43 @@ request GET /unknown 404 "$tmpdir/not-found.txt" "$tmpdir/not-found.headers"
 request POST / 405 "$tmpdir/method.txt" "$tmpdir/method.headers"
 request HEAD / 200 "$tmpdir/head.txt" "$tmpdir/head.headers"
 
+ruby -rsocket -e '
+  socket = TCPSocket.new("127.0.0.1", Integer(ARGV[0]))
+  socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_LINGER, [1, 0].pack("ii"))
+  socket.write("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+  socket.close
+' "$port"
+sleep 0.2
+kill -0 "$server_pid" || {
+  printf '%s\n' "dashboard server exited after client disconnect" >&2
+  exit 1
+}
+request GET /healthz 200 "$tmpdir/health-after-disconnect.json" "$tmpdir/health-after-disconnect.headers"
+
+ruby -rsocket -e '
+  socket = TCPSocket.new("127.0.0.1", Integer(ARGV[0]))
+  socket.write("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Partial: waiting")
+  response = socket.read
+  status = response.lines.first.to_s.split[1]
+  abort("expected HTTP 408, got #{status}") unless status == "408"
+' "$port" &
+partial_pid="$!"
+sleep 0.2
+request GET /healthz 200 "$tmpdir/health-during-partial.json" "$tmpdir/health-during-partial.headers"
+wait "$partial_pid"
+partial_pid=""
+
+ruby -rsocket -e '
+  socket = TCPSocket.new("127.0.0.1", Integer(ARGV[0]))
+  payload = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Large: "
+  payload << "a" * (65_536 - payload.bytesize)
+  socket.write(payload)
+  socket.close_write
+  response = socket.read
+  status = response.lines.first.to_s.split[1]
+  abort("expected HTTP 431, got #{status}") unless status == "431"
+' "$port"
+
 grep -q 'AI Ops dashboard server' "$tmpdir/server.log" || {
   printf '%s\n' "dashboard server startup title missing" >&2
   exit 1
@@ -147,14 +189,16 @@ if "$repo_root/bin/aiops" project dashboard --target "$project" --serve --json >
   printf '%s\n' "dashboard serve with JSON should fail" >&2
   exit 1
 fi
-if "$repo_root/bin/aiops" project dashboard --target "$project" --serve --port 0 --filter-agent DOES_NOT_EXIST >"$tmpdir/invalid-filter.log" 2>&1; then
-  printf '%s\n' "dashboard serve with unknown filter should fail" >&2
-  exit 1
-fi
-grep -q 'unknown --filter-agent value: DOES_NOT_EXIST' "$tmpdir/invalid-filter.log" || {
-  printf '%s\n' "dashboard serve unknown filter guidance missing" >&2
-  exit 1
-}
+for invalid_filter in status agent role workflow; do
+  if "$repo_root/bin/aiops" project dashboard --target "$project" --serve --port 0 "--filter-$invalid_filter" DOES_NOT_EXIST >"$tmpdir/invalid-filter.log" 2>&1; then
+    printf '%s\n' "dashboard serve with unknown $invalid_filter filter should fail" >&2
+    exit 1
+  fi
+  grep -q "unknown --filter-$invalid_filter value: DOES_NOT_EXIST" "$tmpdir/invalid-filter.log" || {
+    printf '%s\n' "dashboard serve unknown $invalid_filter filter guidance missing" >&2
+    exit 1
+  }
+done
 
 after_hash="$(find "$project" -type f -print | sort | xargs shasum -a 256 | shasum -a 256 | awk '{print $1}')"
 [ "$before_hash" = "$after_hash" ] || {

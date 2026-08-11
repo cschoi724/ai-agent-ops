@@ -147,6 +147,8 @@ HTML의 `일감 탐색` 패널은 브라우저 안에서 ID/제목 검색, 상�
 
 `--serve`는 `127.0.0.1`에만 바인딩되는 일회성 로컬 HTTP server를 실행한다. `/`는 요청할 때마다 다시 생성한 HTML dashboard, `/dashboard.json`은 최신 `aiops.project_dashboard.v1` projection, `/maps/<name>.mmd`는 최신 Mermaid source, `/healthz`는 server 상태를 반환한다. 응답은 저장하거나 cache하지 않으며 target 프로젝트 파일을 수정하지 않는다. `--refresh N`을 지정하면 브라우저가 N초마다 `/`를 다시 요청하고, `--open`은 macOS `open` 또는 사용 가능한 `xdg-open`으로 현재 URL을 연다. 서버는 daemon으로 설치되지 않으며 실행한 터미널에서 `Ctrl+C`로 종료한다.
 
+로컬 server는 브라우저의 요청 취소가 전체 프로세스를 종료하지 않도록 연결별로 처리한다. 동시에 최대 8개 연결을 처리하며, 완성되지 않은 요청은 3초 후 종료하고 요청 헤더는 64KB로 제한한다.
+
 `--serve`는 `--json`·`--output`과 함께 사용할 수 없고 HTML만 제공한다. `--port`, `--refresh`, `--open`은 `--serve` 없이 사용할 수 없다. 외부 interface 바인딩, 원격 공개, 인증, 장기 daemon 관리는 지원 범위가 아니다.
 
 큰 프로젝트에서는 전체 dependency map보다 아래 형태가 더 읽기 쉽다.

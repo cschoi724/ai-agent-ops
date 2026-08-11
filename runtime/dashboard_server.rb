@@ -10,6 +10,21 @@ require "uri"
 
 class DashboardServer
   MAPS = %w[summary dependencies swimlane critical-path workflow agents blockers].freeze
+  MAX_CONNECTIONS = 8
+  MAX_HEADER_BYTES = 65_536
+  MAX_REQUEST_LINE_BYTES = 8_192
+  REQUEST_TIMEOUT_SECONDS = 3
+
+  class RequestError < StandardError
+    attr_reader :status
+
+    def initialize(status, message)
+      @status = status
+      super(message)
+    end
+  end
+
+  class ClientDisconnected < StandardError; end
 
   def initialize(options)
     @aiops = File.expand_path(options.fetch(:aiops))
@@ -19,6 +34,9 @@ class DashboardServer
     @open_browser = options.fetch(:open_browser)
     @dashboard = options.fetch(:dashboard)
     @server = nil
+    @clients = []
+    @client_threads = []
+    @clients_mutex = Mutex.new
   end
 
   def run
@@ -39,7 +57,16 @@ class DashboardServer
 
     loop do
       socket = @server.accept
-      handle(socket)
+      reap_client_threads
+      if active_client_count >= MAX_CONNECTIONS
+        safe_respond(socket, 503, "text/plain; charset=utf-8", "dashboard server is busy\n", false)
+        socket.close unless socket.closed?
+        next
+      end
+
+      register_client(socket)
+      thread = Thread.new(socket) { |client| handle(client) }
+      @clients_mutex.synchronize { @client_threads << thread }
     rescue IOError, Errno::EBADF
       break
     end
@@ -57,6 +84,7 @@ class DashboardServer
     exit 1
   ensure
     @server&.close unless @server&.closed?
+    shutdown_clients
   end
 
   private
@@ -68,34 +96,93 @@ class DashboardServer
   end
 
   def handle(socket)
-    request_line = socket.gets
-    return unless request_line
+    request_line = read_request(socket)
 
     method, raw_target, version = request_line.split(" ", 3)
     unless %w[GET HEAD].include?(method) && version&.start_with?("HTTP/")
-      consume_headers(socket)
       return respond(socket, 405, "text/plain; charset=utf-8", "method not allowed\n", method == "HEAD")
     end
 
-    consume_headers(socket)
     path = request_path(raw_target)
     status, content_type, body = route(path)
     respond(socket, status, content_type, body, method == "HEAD")
+  rescue ClientDisconnected, Errno::EPIPE, Errno::ECONNRESET, IOError
+    nil
+  rescue RequestError => error
+    safe_respond(socket, error.status, "text/plain; charset=utf-8", "#{error.message}\n", false)
   rescue StandardError => error
-    respond(socket, 500, "text/plain; charset=utf-8", "dashboard server error: #{error.message}\n", false)
+    safe_respond(socket, 500, "text/plain; charset=utf-8", "dashboard server error: #{error.message}\n", false)
   ensure
     socket.close unless socket.closed?
+    unregister_client(socket)
   end
 
-  def consume_headers(socket)
-    total = 0
-    100.times do
-      line = socket.gets
-      break unless line
-      total += line.bytesize
-      raise "request headers too large" if total > 65_536
-      break if line == "\r\n" || line == "\n"
+  def read_request(socket)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + REQUEST_TIMEOUT_SECONDS
+    buffer = +""
+
+    loop do
+      header_end = buffer.index("\r\n\r\n") || buffer.index("\n\n")
+      return request_line(buffer) if header_end
+
+      raise RequestError.new(431, "request headers too large") if buffer.bytesize >= MAX_HEADER_BYTES
+      validate_request_line_length(buffer)
+
+      remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      raise RequestError.new(408, "request timed out") if remaining <= 0
+      raise RequestError.new(408, "request timed out") unless IO.select([socket], nil, nil, remaining)
+
+      read_limit = [4_096, MAX_HEADER_BYTES - buffer.bytesize + 1].min
+      chunk = socket.read_nonblock(read_limit, exception: false)
+      case chunk
+      when :wait_readable
+        next
+      when nil
+        raise ClientDisconnected
+      else
+        buffer << chunk
+      end
     end
+  end
+
+  def request_line(buffer)
+    line = buffer.lines.first.to_s
+    raise RequestError.new(400, "invalid request") if line.empty?
+    raise RequestError.new(414, "request line too long") if line.bytesize > MAX_REQUEST_LINE_BYTES
+
+    line
+  end
+
+  def validate_request_line_length(buffer)
+    line_end = buffer.index("\n")
+    line_size = line_end ? line_end + 1 : buffer.bytesize
+    raise RequestError.new(414, "request line too long") if line_size > MAX_REQUEST_LINE_BYTES
+  end
+
+  def register_client(socket)
+    @clients_mutex.synchronize { @clients << socket }
+  end
+
+  def unregister_client(socket)
+    @clients_mutex.synchronize { @clients.delete(socket) }
+  end
+
+  def active_client_count
+    @clients_mutex.synchronize { @clients.length }
+  end
+
+  def reap_client_threads
+    @clients_mutex.synchronize do
+      finished, active = @client_threads.partition { |thread| !thread.alive? }
+      @client_threads = active
+      finished.each(&:join)
+    end
+  end
+
+  def shutdown_clients
+    clients, threads = @clients_mutex.synchronize { [@clients.dup, @client_threads.dup] }
+    clients.each { |socket| socket.close unless socket.closed? }
+    threads.each(&:join)
   end
 
   def request_path(raw_target)
@@ -191,7 +278,17 @@ class DashboardServer
   end
 
   def respond(socket, status, content_type, body, head_only)
-    reason = {200 => "OK", 404 => "Not Found", 405 => "Method Not Allowed", 500 => "Internal Server Error"}.fetch(status, "Error")
+    reason = {
+      200 => "OK",
+      400 => "Bad Request",
+      404 => "Not Found",
+      405 => "Method Not Allowed",
+      408 => "Request Timeout",
+      414 => "URI Too Long",
+      431 => "Request Header Fields Too Large",
+      500 => "Internal Server Error",
+      503 => "Service Unavailable"
+    }.fetch(status, "Error")
     payload = body.to_s
     headers = [
       "HTTP/1.1 #{status} #{reason}",
@@ -208,6 +305,12 @@ class DashboardServer
     ].join("\r\n")
     socket.write(headers)
     socket.write(payload) unless head_only
+  end
+
+  def safe_respond(socket, status, content_type, body, head_only)
+    respond(socket, status, content_type, body, head_only)
+  rescue Errno::EPIPE, Errno::ECONNRESET, IOError
+    nil
   end
 
   def next_available_port(port)

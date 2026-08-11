@@ -5646,6 +5646,8 @@ cmd_project() {
           end
           observed_statuses = explorer_tasks.map { |task| task["status"] }.reject(&:empty?).uniq.sort_by { |item| [status_order(item), item] }
           requested_statuses = html_filters.fetch("status", "").split(",").map(&:strip).reject(&:empty?)
+          unknown_statuses = requested_statuses - observed_statuses
+          abort("unknown --filter-status value: #{unknown_statuses.join(",")}") unless unknown_statuses.empty?
           initial_statuses = requested_statuses.empty? ? observed_statuses.reject { |item| %w[done cancelled].include?(item) } : requested_statuses
           initial_depth = [[depth.to_i, 1].max, 4].min
           requested_agent = html_filters.fetch("agent", "")
