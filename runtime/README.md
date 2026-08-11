@@ -8,3 +8,5 @@
 | `task_queue.md` | Task 상태, lock, routing, metadata 기준 |
 | `role_handoff.md` | Role 전환 시 다음 Agent에게 전달할 말 기준 |
 | `bootstrap_options.json` | Bootstrap 선택 후보의 기계 판독 가능한 catalog |
+| `dashboard_server.rb` | localhost dashboard 요청·새로고침 runtime |
+| `dashboard_presets.rb` | built-in/local dashboard preset 조회·검증·확장 runtime |

@@ -12,6 +12,7 @@
 
 ### Added
 
+- Built-in and project-local dashboard presets with list, show, add, schema validation, and explicit CLI override support.
 - Localhost-only dashboard server with live HTML, JSON, Mermaid endpoints, optional timed refresh, browser opening, security headers, and clean signal shutdown.
 - HTML Large Graph Explorer with task search, semantic filters, status toggles, focus/depth controls, and client-side dependency map regeneration.
 - HTML-only `--filter-status`, `--filter-agent`, `--filter-role`, and `--filter-workflow` initial filter options.

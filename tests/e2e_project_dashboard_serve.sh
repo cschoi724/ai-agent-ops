@@ -25,17 +25,25 @@ if ! ruby -rsocket -e 'server = TCPServer.new("127.0.0.1", 0); server.close' >/d
   exit 0
 fi
 
-mkdir -p "$project"
+mkdir -p "$project/.ai_project"
 ln -s "$repo_root" "$project/.ai"
 printf '# Agent Instructions\n' > "$project/AGENTS.md"
+
+"$repo_root/bin/aiops" project dashboard preset add e2e-live \
+  --target "$project" \
+  --view main \
+  --format html \
+  --map summary \
+  --serve \
+  --port 0 \
+  --refresh 3 \
+  >/dev/null
 
 before_hash="$(find "$project" -type f -print | sort | xargs shasum -a 256 | shasum -a 256 | awk '{print $1}')"
 
 "$repo_root/bin/aiops" project dashboard \
   --target "$project" \
-  --serve \
-  --port 0 \
-  --refresh 3 \
+  --preset e2e-live \
   >"$tmpdir/server.log" 2>&1 &
 server_pid="$!"
 

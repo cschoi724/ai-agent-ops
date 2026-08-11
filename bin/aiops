@@ -19,6 +19,10 @@ Usage:
   aiops project context --role ROLE [--target DIR] [--task TASK_ID] [--json]
   aiops project health [--target DIR] [--json]
   aiops project dashboard [--target DIR] [--view main|work|risk|agents|release] [--level compact|standard|detail] [--format terminal|tree|mermaid|html] [--map summary|dependencies|swimlane|critical-path|workflow|agents|blockers] [--focus TASK_ID] [--depth N] [--group-by area|agent|role|status|workflow] [--filter-status LIST] [--filter-agent NAME] [--filter-role ROLE] [--filter-workflow NAME] [--serve] [--port N] [--refresh N] [--open] [--json] [--output FILE] [--color auto|always|never] [--no-color]
+  aiops project dashboard --preset NAME [dashboard options]
+  aiops project dashboard preset list [--target DIR]
+  aiops project dashboard preset show NAME [--target DIR]
+  aiops project dashboard preset add NAME [--target DIR] [dashboard options] [--description TEXT] [--force]
   aiops policy evaluate [--target DIR|--snapshot FILE] [--strict-level LEVEL] --json
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
@@ -32,6 +36,7 @@ Usage:
   aiops validate workflow-catalog [--target DIR|--core DIR]
   aiops validate project-snapshot FILE
   aiops validate project-dashboard FILE
+  aiops validate dashboard-presets FILE
   aiops validate policy-evaluation FILE
   aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
   aiops task status TASK_ID [--target DIR] [--source local|canonical]
@@ -88,6 +93,9 @@ Examples:
   aiops project dashboard --format html --filter-status approved,scoped --filter-agent "iOS Agent"
   aiops project dashboard --format html --map swimlane --group-by agent
   aiops project dashboard --serve --refresh 10 --open
+  aiops project dashboard --preset overview
+  aiops project dashboard preset list
+  aiops project dashboard preset add team-live --view work --format html --map dependencies --serve --port 0 --refresh 10
   aiops project dashboard --view work --format mermaid --map dependencies
   aiops project dashboard --format html --output dashboard.html
   aiops project dashboard --json
@@ -100,6 +108,7 @@ Examples:
   aiops validate workflow-catalog
   aiops validate project-snapshot /tmp/project_snapshot.json
   aiops validate project-dashboard /tmp/project_dashboard.json
+  aiops validate dashboard-presets .ai_project/dashboard_presets.json
   aiops validate policy-evaluation /tmp/policy_evaluation.json
   aiops task create --title "로그인 화면 구현" --workflow feature --role "Lead Role"
   aiops task status T-YYYYMMDD-001 --source canonical
@@ -402,6 +411,8 @@ Examples:
   aiops project dashboard --format html --output dashboard.html
   aiops project dashboard --format html --filter-status approved,scoped --filter-agent "iOS Agent" --output dashboard.html
   aiops project dashboard --serve --refresh 10 --open
+  aiops project dashboard --preset overview
+  aiops project dashboard preset list
   aiops project dashboard --view work --format mermaid --map dependencies
 
 Related:
@@ -420,6 +431,8 @@ terminal, tree, Mermaid, HTML, JSON 같은 상세 출력을 다루는 고급 대
   aiops project dashboard --format html --output dashboard.html
   aiops project dashboard --format html --filter-status approved,scoped --filter-agent "iOS Agent" --output dashboard.html
   aiops project dashboard --serve --refresh 10 --open
+  aiops project dashboard --preset overview
+  aiops project dashboard preset list
   aiops project dashboard --view work --format mermaid --map dependencies
 
 비슷한 명령:
@@ -3384,6 +3397,33 @@ cmd_project() {
 
   case "$action" in
     dashboard)
+      if [ "${1:-}" = "preset" ]; then
+        dashboard_presets="$(default_core_dir)/runtime/dashboard_presets.rb"
+        [ -f "$dashboard_presets" ] || die "dashboard preset runtime missing: $dashboard_presets"
+        command -v ruby >/dev/null 2>&1 || die "ruby is required for project dashboard presets"
+        shift
+        preset_action="${1:-list}"
+        if [ "$#" -gt 0 ]; then
+          shift
+        fi
+        exec ruby "$dashboard_presets" "$preset_action" "$@"
+      fi
+
+      preset_requested="no"
+      for dashboard_argument in "$@"; do
+        if [ "$dashboard_argument" = "--preset" ]; then
+          preset_requested="yes"
+          break
+        fi
+      done
+      if [ "$preset_requested" = "yes" ]; then
+        dashboard_presets="$(default_core_dir)/runtime/dashboard_presets.rb"
+        [ -f "$dashboard_presets" ] || die "dashboard preset runtime missing: $dashboard_presets"
+        command -v ruby >/dev/null 2>&1 || die "ruby is required for project dashboard presets"
+        aiops_executable="$(script_dir)/$(basename "$0")"
+        exec ruby "$dashboard_presets" run --aiops "$aiops_executable" -- "$@"
+      fi
+
       target="$(pwd)"
       view="main"
       level="standard"
@@ -8360,7 +8400,7 @@ cmd_validate() {
       ' "$catalog"
       info "ok: workflow catalog"
       ;;
-    project-snapshot|project-dashboard|policy-evaluation)
+    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets)
       file=""
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -8390,6 +8430,10 @@ cmd_validate() {
         project-dashboard)
           schema="$core/schemas/project_dashboard.schema.json"
           label="project dashboard"
+          ;;
+        dashboard-presets)
+          schema="$core/schemas/dashboard_presets.schema.json"
+          label="dashboard presets"
           ;;
         policy-evaluation)
           schema="$core/schemas/policy_evaluation.schema.json"
@@ -8492,6 +8536,11 @@ cmd_validate() {
         abort("schema_error:\n" + errors.join("\n")) unless errors.empty?
         puts "ok: schema"
       ' "$file" "$schema"
+      if [ "$subject" = "dashboard-presets" ]; then
+        presets_runtime="$core/runtime/dashboard_presets.rb"
+        [ -f "$presets_runtime" ] || die "dashboard preset runtime not found: $presets_runtime"
+        ruby "$presets_runtime" validate "$file"
+      fi
       info "ok: $label"
       ;;
     project)
@@ -11088,6 +11137,7 @@ cmd_release_check() {
     "$core/schemas/runtime_export.schema.json" \
     "$core/schemas/project_snapshot.schema.json" \
     "$core/schemas/project_dashboard.schema.json" \
+    "$core/schemas/dashboard_presets.schema.json" \
     "$core/schemas/policy_rules.schema.json" \
     "$core/schemas/policy_evaluation.schema.json" \
     "$core/schemas/action_plan.schema.json" \
@@ -11109,6 +11159,8 @@ cmd_release_check() {
     "$core/runtime/policy_rules.json" \
     "$core/runtime/task_queue.md" \
     "$core/runtime/bootstrap_options.json" \
+    "$core/runtime/dashboard_server.rb" \
+    "$core/runtime/dashboard_presets.rb" \
     "$core/templates/ci/github-actions/aiops.yml" \
     "$core/templates/tool_adapters/codex/AGENTS.md" \
     "$core/templates/tool_adapters/claude/CLAUDE.md"
@@ -11485,7 +11537,7 @@ cmd_user_dashboard_view() {
       --no-color)
         color="never"
         ;;
-      --view|--map|--focus|--depth|--group-by|--filter-status|--filter-agent|--filter-role|--filter-workflow|--json|--output)
+      --view|--map|--focus|--depth|--group-by|--filter-status|--filter-agent|--filter-role|--filter-workflow|--preset|--json|--output)
         die "aiops $user_cmd does not support $1; use aiops project dashboard for advanced options"
         ;;
       -h|--help)

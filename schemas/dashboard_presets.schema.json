@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/dashboard_presets.schema.json",
+  "title": "AI Ops Dashboard Presets",
+  "description": "Project-local named option sets for the AI Ops project dashboard.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "presets"],
+  "properties": {
+    "schema": { "const": "aiops.dashboard_presets.v1" },
+    "presets": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": { "type": "string", "minLength": 1 },
+          "view": { "type": "string", "enum": ["main", "work", "risk", "agents", "release"] },
+          "level": { "type": "string", "enum": ["compact", "standard", "detail"] },
+          "format": { "type": "string", "enum": ["terminal", "tree", "mermaid", "html"] },
+          "map": { "type": "string", "enum": ["summary", "dependencies", "swimlane", "critical-path", "workflow", "agents", "blockers"] },
+          "focus": { "type": "string", "minLength": 1 },
+          "depth": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+          "group_by": { "type": "string", "enum": ["area", "agent", "role", "status", "workflow"] },
+          "filter_status": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+          "filter_agent": { "type": "string", "minLength": 1 },
+          "filter_role": { "type": "string", "minLength": 1 },
+          "filter_workflow": { "type": "string", "minLength": 1 },
+          "serve": { "type": "boolean" },
+          "port": { "type": "integer", "minimum": 0, "maximum": 65535 },
+          "refresh": { "type": "integer", "minimum": 0, "maximum": 86400 },
+          "open": { "type": "boolean" },
+          "color": { "type": "string", "enum": ["auto", "always", "never"] }
+        }
+      }
+    }
+  }
+}
