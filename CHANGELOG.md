@@ -12,6 +12,7 @@
 
 ### Added
 
+- Optional GitHub PR, required-check, workflow-run, and release-version status in Release Dashboard terminal, HTML, JSON, Local Serve, and the user-facing `aiops release --github` command.
 - Built-in and project-local dashboard presets with list, show, add, schema validation, and explicit CLI override support.
 - Localhost-only dashboard server with live HTML, JSON, Mermaid endpoints, optional timed refresh, browser opening, security headers, and clean signal shutdown.
 - HTML Large Graph Explorer with task search, semantic filters, status toggles, focus/depth controls, and client-side dependency map regeneration.

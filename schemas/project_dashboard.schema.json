@@ -235,7 +235,113 @@
             "blocked_actions": { "type": "array", "items": { "type": "object" } },
             "required_approvals": { "type": "array", "items": { "type": "string" } },
             "pending_checks": { "type": "array", "items": { "type": "object" } },
-            "release_check_command": { "type": "string" }
+            "release_check_command": { "type": "string" },
+            "github": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "reason_code", "reason", "repository", "branch", "pull_request", "required_checks", "latest_run", "release"],
+              "properties": {
+                "status": { "type": "string", "enum": ["available", "partial", "unavailable"] },
+                "reason_code": { "type": ["string", "null"] },
+                "reason": { "type": ["string", "null"] },
+                "repository": {
+                  "oneOf": [
+                    { "type": "null" },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["name_with_owner", "url"],
+                      "properties": {
+                        "name_with_owner": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+                        "url": { "type": ["string", "null"] }
+                      }
+                    }
+                  ]
+                },
+                "branch": { "type": ["string", "null"] },
+                "pull_request": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["status"],
+                  "properties": {
+                    "status": { "type": "string", "enum": ["available", "not_applicable", "not_found", "unavailable"] },
+                    "reason": { "type": ["string", "null"] },
+                    "number": { "type": ["integer", "null"] },
+                    "title": { "type": ["string", "null"] },
+                    "url": { "type": ["string", "null"] },
+                    "head_branch": { "type": ["string", "null"] },
+                    "base_branch": { "type": ["string", "null"] },
+                    "draft": { "type": ["boolean", "null"] },
+                    "mergeable": { "type": ["string", "null"] }
+                  }
+                },
+                "required_checks": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["status", "total", "passing", "failing", "pending", "skipping", "items"],
+                  "properties": {
+                    "status": { "type": "string", "enum": ["success", "failure", "pending", "not_applicable", "not_found", "unavailable"] },
+                    "total": { "type": "integer", "minimum": 0 },
+                    "passing": { "type": "integer", "minimum": 0 },
+                    "failing": { "type": "integer", "minimum": 0 },
+                    "pending": { "type": "integer", "minimum": 0 },
+                    "skipping": { "type": "integer", "minimum": 0 },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["name", "state", "bucket", "url", "workflow"],
+                        "properties": {
+                          "name": { "type": ["string", "null"] },
+                          "state": { "type": ["string", "null"] },
+                          "bucket": { "type": ["string", "null"] },
+                          "url": { "type": ["string", "null"] },
+                          "workflow": { "type": ["string", "null"] }
+                        }
+                      }
+                    },
+                    "reason": { "type": ["string", "null"] }
+                  }
+                },
+                "latest_run": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["status"],
+                  "properties": {
+                    "status": { "type": "string" },
+                    "reason": { "type": ["string", "null"] },
+                    "conclusion": { "type": ["string", "null"] },
+                    "database_id": { "type": ["integer", "null"] },
+                    "workflow": { "type": ["string", "null"] },
+                    "title": { "type": ["string", "null"] },
+                    "url": { "type": ["string", "null"] },
+                    "head_sha": { "type": ["string", "null"] },
+                    "created_at": { "type": ["string", "null"] },
+                    "updated_at": { "type": ["string", "null"] },
+                    "event": { "type": ["string", "null"] }
+                  }
+                },
+                "release": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["status", "tag", "local_version", "version_state"],
+                  "properties": {
+                    "status": { "type": "string", "enum": ["available", "not_found", "unavailable"] },
+                    "tag": { "type": ["string", "null"] },
+                    "name": { "type": ["string", "null"] },
+                    "url": { "type": ["string", "null"] },
+                    "published_at": { "type": ["string", "null"] },
+                    "draft": { "type": ["boolean", "null"] },
+                    "prerelease": { "type": ["boolean", "null"] },
+                    "target_commitish": { "type": ["string", "null"] },
+                    "local_version": { "type": ["string", "null"] },
+                    "version_state": { "type": "string", "enum": ["match", "different", "local_version_missing", "release_missing"] },
+                    "reason": { "type": ["string", "null"] }
+                  }
+                }
+              }
+            }
           }
         }
       }

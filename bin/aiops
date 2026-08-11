@@ -10,7 +10,7 @@ Usage:
   aiops work [--target DIR] [--level compact|standard|detail] [--format terminal|tree] [--color auto|always|never] [--no-color]
   aiops risks [--target DIR] [--level compact|standard|detail] [--color auto|always|never] [--no-color]
   aiops agents [--target DIR] [--level compact|standard|detail] [--color auto|always|never] [--no-color]
-  aiops release [--target DIR] [--level compact|standard|detail] [--color auto|always|never] [--no-color]
+  aiops release [--target DIR] [--level compact|standard|detail] [--github] [--repo OWNER/NAME] [--color auto|always|never] [--no-color]
   aiops seed [--adapter codex|claude|both] [--mode link|copy] [--target DIR] [--core DIR] [--force]
   aiops doctor [--target DIR] [--strict]
   aiops migrate [--target DIR] [--plan|--apply]
@@ -18,7 +18,7 @@ Usage:
   aiops project snapshot [--target DIR] --json
   aiops project context --role ROLE [--target DIR] [--task TASK_ID] [--json]
   aiops project health [--target DIR] [--json]
-  aiops project dashboard [--target DIR] [--view main|work|risk|agents|release] [--level compact|standard|detail] [--format terminal|tree|mermaid|html] [--map summary|dependencies|swimlane|critical-path|workflow|agents|blockers] [--focus TASK_ID] [--depth N] [--group-by area|agent|role|status|workflow] [--filter-status LIST] [--filter-agent NAME] [--filter-role ROLE] [--filter-workflow NAME] [--serve] [--port N] [--refresh N] [--open] [--json] [--output FILE] [--color auto|always|never] [--no-color]
+  aiops project dashboard [--target DIR] [--view main|work|risk|agents|release] [--level compact|standard|detail] [--format terminal|tree|mermaid|html] [--map summary|dependencies|swimlane|critical-path|workflow|agents|blockers] [--focus TASK_ID] [--depth N] [--group-by area|agent|role|status|workflow] [--filter-status LIST] [--filter-agent NAME] [--filter-role ROLE] [--filter-workflow NAME] [--github] [--repo OWNER/NAME] [--serve] [--port N] [--refresh N] [--open] [--json] [--output FILE] [--color auto|always|never] [--no-color]
   aiops project dashboard --preset NAME [dashboard options]
   aiops project dashboard preset list [--target DIR]
   aiops project dashboard preset show NAME [--target DIR]
@@ -88,6 +88,8 @@ Examples:
   aiops project dashboard --view risk
   aiops project dashboard --view agents
   aiops project dashboard --view release
+  aiops project dashboard --view release --github
+  aiops release --github
   aiops project dashboard --format html --map summary
   aiops project dashboard --format html --map dependencies --focus T-20260805-007 --depth 2
   aiops project dashboard --format html --filter-status approved,scoped --filter-agent "iOS Agent"
@@ -150,7 +152,7 @@ Common Commands
   aiops work          Show active work, owners, and handoff candidates
   aiops risks         Show warnings, blockers, and stale coordination state
   aiops agents        Show active agents, roles, teams, and assignments
-  aiops release       Show local release readiness
+  aiops release       Show local and optional GitHub release readiness
   aiops doctor        Check installation and project configuration
   aiops sync-status   Sync the shared coordination reference
   aiops session-guide Show which role session to open next
@@ -174,7 +176,7 @@ AI Ops
   aiops work          현재 일감, 담당, 인계 후보를 봅니다
   aiops risks         경고, 차단, 동기화 문제를 봅니다
   aiops agents        활성 에이전트, 역할, 팀 배정을 봅니다
-  aiops release       로컬 릴리스 준비 상태를 봅니다
+  aiops release       로컬 및 선택적 GitHub 릴리스 상태를 봅니다
   aiops doctor        설치와 프로젝트 운영 구성을 점검합니다
   aiops sync-status   협업 기준 상태를 동기화합니다
   aiops session-guide 다음에 열 Role Session을 고릅니다
@@ -378,6 +380,8 @@ Examples:
   aiops release
   aiops release --target ./CookLog
   aiops release --level detail
+  aiops release --github
+  aiops release --github --repo owner/name
 
 Related:
   aiops risks         Warnings and blockers
@@ -394,6 +398,8 @@ aiops release
   aiops release
   aiops release --target ./CookLog
   aiops release --level detail
+  aiops release --github
+  aiops release --github --repo owner/name
 
 비슷한 명령:
   aiops risks         경고와 차단 항목 확인
@@ -411,6 +417,7 @@ Examples:
   aiops project dashboard --format html --output dashboard.html
   aiops project dashboard --format html --filter-status approved,scoped --filter-agent "iOS Agent" --output dashboard.html
   aiops project dashboard --serve --refresh 10 --open
+  aiops project dashboard --view release --github
   aiops project dashboard --preset overview
   aiops project dashboard preset list
   aiops project dashboard --view work --format mermaid --map dependencies
@@ -431,6 +438,7 @@ terminal, tree, Mermaid, HTML, JSON 같은 상세 출력을 다루는 고급 대
   aiops project dashboard --format html --output dashboard.html
   aiops project dashboard --format html --filter-status approved,scoped --filter-agent "iOS Agent" --output dashboard.html
   aiops project dashboard --serve --refresh 10 --open
+  aiops project dashboard --view release --github
   aiops project dashboard --preset overview
   aiops project dashboard preset list
   aiops project dashboard --view work --format mermaid --map dependencies
@@ -3447,6 +3455,9 @@ cmd_project() {
       format_set="no"
       map_set="no"
       user_cli="no"
+      github="no"
+      github_repo=""
+      github_repo_set="no"
 
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -3511,6 +3522,15 @@ cmd_project() {
             shift
             [ "$#" -gt 0 ] || die "--filter-workflow requires a value"
             filter_workflow="$1"
+            ;;
+          --github)
+            github="yes"
+            ;;
+          --repo)
+            shift
+            [ "$#" -gt 0 ] || die "--repo requires a value"
+            github_repo="$1"
+            github_repo_set="yes"
             ;;
           --serve)
             serve="yes"
@@ -3635,6 +3655,24 @@ cmd_project() {
       if [ "$format" != "html" ] && { [ -n "$filter_status" ] || [ -n "$filter_agent" ] || [ -n "$filter_role" ] || [ -n "$filter_workflow" ]; }; then
         die "project dashboard filter options require --format html"
       fi
+      if [ "$github_repo_set" = "yes" ] && [ "$github" != "yes" ]; then
+        die "project dashboard --repo requires --github"
+      fi
+      if [ "$github" = "yes" ] && [ "$view" != "release" ]; then
+        die "project dashboard --github currently requires --view release"
+      fi
+      if [ -n "$github_repo" ]; then
+        case "$github_repo" in
+          */*) ;;
+          *) die "project dashboard --repo requires owner/name" ;;
+        esac
+        github_owner="${github_repo%/*}"
+        github_name="${github_repo#*/}"
+        [ -n "$github_owner" ] && [ -n "$github_name" ] && [ "$github_name" = "${github_name#*/}" ] || die "project dashboard --repo requires owner/name"
+        case "$github_owner$github_name" in
+          *[!A-Za-z0-9_.-]*) die "project dashboard --repo requires owner/name" ;;
+        esac
+      fi
       case "$color" in
         auto|always|never) ;;
         *)
@@ -3654,8 +3692,18 @@ cmd_project() {
         [ -z "$filter_agent" ] || set -- "$@" --filter-agent "$filter_agent"
         [ -z "$filter_role" ] || set -- "$@" --filter-role "$filter_role"
         [ -z "$filter_workflow" ] || set -- "$@" --filter-workflow "$filter_workflow"
+        [ "$github" = "no" ] || set -- "$@" --github
+        [ -z "$github_repo" ] || set -- "$@" --repo "$github_repo"
         [ "$serve_open" = "no" ] || set -- "$@" --open
         exec ruby "$@"
+      fi
+      github_json=""
+      if [ "$github" = "yes" ]; then
+        github_runtime="$(default_core_dir)/runtime/github_release_status.rb"
+        [ -f "$github_runtime" ] || die "GitHub release status runtime missing: $github_runtime"
+        set -- "$github_runtime" --target "$target"
+        [ -z "$github_repo" ] || set -- "$@" --repo "$github_repo"
+        github_json="$(ruby "$@")"
       fi
       snapshot_json="$("$0" project snapshot --target "$target" --json)"
       health_json="$("$0" project health --target "$target" --json)"
@@ -3664,10 +3712,14 @@ cmd_project() {
         printf '%s\n' "$snapshot_json"
         printf '%s\n' "__AIOPS_DASHBOARD_HEALTH_JSON__"
         printf '%s\n' "$health_json"
+        printf '%s\n' "__AIOPS_DASHBOARD_GITHUB_JSON__"
+        printf '%s\n' "$github_json"
       } | ruby -rjson -rstringio -e '
-        snapshot_text, health_text = STDIN.read.split("__AIOPS_DASHBOARD_HEALTH_JSON__", 2)
+        snapshot_text, dashboard_text = STDIN.read.split("__AIOPS_DASHBOARD_HEALTH_JSON__", 2)
+        health_text, github_text = dashboard_text.split("__AIOPS_DASHBOARD_GITHUB_JSON__", 2)
         snapshot = JSON.parse(snapshot_text)
         health_summary = JSON.parse(health_text)
+        github_status = github_text.to_s.strip.empty? ? nil : JSON.parse(github_text)
         view = ARGV[0]
         format = ARGV[1]
         level = ARGV[2]
@@ -4091,7 +4143,7 @@ cmd_project() {
           }
         end
 
-        def release_dashboard_data(snapshot, health_summary)
+        def release_dashboard_data(snapshot, health_summary, github_status = nil)
           readiness = health_summary.fetch("readiness", {})
           blockers = Array(health_summary["checks"]).select { |check| check["level"] == "blocker" }
           warnings = Array(health_summary["checks"]).select { |check| check["level"] == "warn" }
@@ -4110,7 +4162,7 @@ cmd_project() {
               "ready_for_release_check"
             end
 
-          {
+          data = {
             "gate_status" => gate_status,
             "readiness" => {
               "bootstrap" => readiness["bootstrap"],
@@ -4133,6 +4185,8 @@ cmd_project() {
             "pending_checks" => [],
             "release_check_command" => "aiops release-check --strict --allow-pending-release"
           }
+          data["github"] = github_status if github_status
+          data
         end
 
         def render_risk_dashboard(snapshot, health_summary, level, color_enabled)
@@ -4230,8 +4284,8 @@ cmd_project() {
           end
         end
 
-        def render_release_dashboard(snapshot, health_summary, level, color_enabled)
-          data = release_dashboard_data(snapshot, health_summary)
+        def render_release_dashboard(snapshot, health_summary, level, color_enabled, github_status = nil)
+          data = release_dashboard_data(snapshot, health_summary, github_status)
           puts colorize(color_enabled, "AI Ops Release Dashboard", "1;36")
           puts "Project: #{snapshot.dig("project", "name") || File.basename(snapshot["target"].to_s)}"
           puts "Gate: #{status_value(color_enabled, data["gate_status"])}"
@@ -4261,11 +4315,41 @@ cmd_project() {
             puts "  Release Check: #{data["release_check_command"]}"
           end
 
+          render_github_release_terminal(data["github"], color_enabled) if data["github"]
+
           return unless level == "detail"
 
           puts ""
           puts section(color_enabled, "Canonical")
           data["canonical_status"].each { |key, value_text| print_key_value(key, value_text, color_enabled) }
+        end
+
+        def render_github_release_terminal(github, color_enabled)
+          puts ""
+          puts section(color_enabled, "GitHub Release Status")
+          unless %w[available partial].include?(github["status"])
+            puts "  Status: #{status_value(color_enabled, github["status"])}"
+            puts "  Reason: #{github["reason"]}" unless github["reason"].to_s.empty?
+            return
+          end
+
+          puts "  Repository: #{github.dig("repository", "name_with_owner")}"
+          puts "  Branch: #{github["branch"] || "unknown"}"
+          pull_request = github["pull_request"] || {}
+          if pull_request["status"] == "available"
+            puts "  Pull Request: ##{pull_request["number"]} #{pull_request["title"]}"
+            puts "  Mergeable: #{status_value(color_enabled, pull_request["mergeable"])}"
+          else
+            puts "  Pull Request: #{status_value(color_enabled, pull_request["status"] || "unavailable")}"
+          end
+          checks = github["required_checks"] || {}
+          puts "  Required Checks: #{status_value(color_enabled, checks["status"])} (#{checks["passing"].to_i} pass / #{checks["failing"].to_i} fail / #{checks["pending"].to_i} pending / #{checks["skipping"].to_i} skipped)"
+          latest_run = github["latest_run"] || {}
+          run_state = latest_run["conclusion"].to_s.empty? ? latest_run["status"] : latest_run["conclusion"]
+          puts "  Latest Run: #{status_value(color_enabled, run_state || "unavailable")}#{latest_run["workflow"] ? " - #{latest_run["workflow"]}" : ""}"
+          release = github["release"] || {}
+          puts "  Latest Release: #{release["tag"] || release["status"] || "unavailable"}"
+          puts "  Local VERSION: #{release["local_version"] || "missing"} (#{release["version_state"] || "unknown"})"
         end
 
         def mermaid_id(prefix, value)
@@ -4846,7 +4930,7 @@ cmd_project() {
           }
         end
 
-        def dashboard_projection(snapshot, health_summary, view, level, format, map, focus = "", depth = 2, group_by = "area")
+        def dashboard_projection(snapshot, health_summary, view, level, format, map, focus = "", depth = 2, group_by = "area", github_status = nil)
           project = snapshot.fetch("project", {})
           tasks = snapshot.fetch("tasks", {})
           task_status = tasks.fetch("by_status", {})
@@ -4938,16 +5022,16 @@ cmd_project() {
             "views" => {
               "risk" => risk_dashboard_data(snapshot, health_summary),
               "agents" => agent_dashboard_data(snapshot),
-              "release" => release_dashboard_data(snapshot, health_summary)
+              "release" => release_dashboard_data(snapshot, health_summary, github_status)
             }
           }
         end
 
         def html_status_class(value)
           text = value.to_s.downcase
-          return "ok" if %w[ok complete allowed ready recorded_current not_required done true ready_for_release_check enabled].include?(text)
-          return "warn" if %w[warning allowed_with_warnings sync_required not_recorded recorded_stale migration_needed review_needed review_required scoped proposed].include?(text)
-          return "bad" if %w[blocked missing partial needs_canonical_status_ref ref_not_found_locally false rework_requested disabled].include?(text)
+          return "ok" if %w[ok complete completed allowed ready recorded_current not_required done true ready_for_release_check enabled available success match mergeable].include?(text)
+          return "warn" if %w[warning allowed_with_warnings sync_required not_recorded recorded_stale migration_needed review_needed review_required scoped proposed partial pending queued waiting requested different action_required stale].include?(text)
+          return "bad" if %w[blocked missing needs_canonical_status_ref ref_not_found_locally false rework_requested disabled unavailable failure timed_out startup_failure conflicting].include?(text)
           return "active" if %w[approved in_progress verification_ready completion_review].include?(text)
           "neutral"
         end
@@ -5023,7 +5107,31 @@ cmd_project() {
                 "verification_passed" => "검증 통과",
                 "completion_review" => "완료 검토",
                 "rework_requested" => "재작업 필요",
-                "cancelled" => "취소"
+                "cancelled" => "취소",
+                "available" => "확인됨",
+                "unavailable" => "확인 불가",
+                "not_applicable" => "해당 없음",
+                "not_found" => "없음",
+                "success" => "통과",
+                "failure" => "실패",
+                "pending" => "진행 중",
+                "queued" => "대기열",
+                "waiting" => "대기 중",
+                "requested" => "요청됨",
+                "completed" => "완료",
+                "neutral" => "중립",
+                "skipped" => "건너뜀",
+                "timed_out" => "시간 초과",
+                "startup_failure" => "시작 실패",
+                "action_required" => "조치 필요",
+                "stale" => "오래됨",
+                "match" => "버전 일치",
+                "different" => "버전 다름",
+                "local_version_missing" => "로컬 버전 없음",
+                "release_missing" => "릴리스 없음",
+                "mergeable" => "병합 가능",
+                "conflicting" => "충돌 있음",
+                "unknown" => "확인되지 않음"
               },
               "role" => {
                 "Direction Role" => "제품 방향 결정",
@@ -5595,8 +5703,8 @@ cmd_project() {
           data["role_task_counts"].empty? ? puts("  없음") : data["role_task_counts"].each { |role, count_value| puts "  #{cli_role_value(color_enabled, role)} #{count_value}개" }
         end
 
-        def render_user_release_dashboard(snapshot, health_summary, level, color_enabled)
-          data = release_dashboard_data(snapshot, health_summary)
+        def render_user_release_dashboard(snapshot, health_summary, level, color_enabled, github_status = nil)
+          data = release_dashboard_data(snapshot, health_summary, github_status)
           puts cli_title(color_enabled, "#{cli_project_name(snapshot)} 출시 준비")
           puts "출시 상태  #{cli_status_value(color_enabled, data["gate_status"])}"
           puts ""
@@ -5623,9 +5731,51 @@ cmd_project() {
             Array(data["blocked_actions"]).each { |action| puts "  - #{colorize(color_enabled, cli_action_label(action["action"]), "31")}: #{cli_action_reason(action["reason"])}" }
           end
           puts "  점검 명령: #{data["release_check_command"]}" unless level == "compact"
+
+          render_user_github_release(data["github"], color_enabled) if data["github"]
         end
 
-        def render_user_cli_dashboard(snapshot, health_summary, view, level, format, color_enabled)
+        def render_user_github_release(github, color_enabled)
+          puts ""
+          puts section(color_enabled, "GitHub 상태")
+          unless %w[available partial].include?(github["status"])
+            puts "  연결 상태: #{cli_status_value(color_enabled, github["status"])}"
+            puts "  확인 내용: #{github_reason_label(github)}"
+            return
+          end
+
+          puts "  저장소: #{github.dig("repository", "name_with_owner")}"
+          puts "  브랜치: #{github["branch"] || "확인되지 않음"}"
+          pull_request = github["pull_request"] || {}
+          if pull_request["status"] == "available"
+            puts "  Pull Request: ##{pull_request["number"]} #{pull_request["title"]}"
+            puts "  병합 가능 상태: #{cli_status_value(color_enabled, pull_request["mergeable"])}"
+          else
+            puts "  Pull Request: #{cli_status_value(color_enabled, pull_request["status"] || "unavailable")}"
+          end
+          checks = github["required_checks"] || {}
+          puts "  필수 검사: #{cli_status_value(color_enabled, checks["status"])} (통과 #{checks["passing"].to_i} / 실패 #{checks["failing"].to_i} / 대기 #{checks["pending"].to_i} / 건너뜀 #{checks["skipping"].to_i})"
+          latest_run = github["latest_run"] || {}
+          run_state = latest_run["conclusion"].to_s.empty? ? latest_run["status"] : latest_run["conclusion"]
+          puts "  최근 CI: #{cli_status_value(color_enabled, run_state || "unavailable")}#{latest_run["workflow"] ? " - #{latest_run["workflow"]}" : ""}"
+          release = github["release"] || {}
+          puts "  최근 릴리스: #{release["tag"] || html_status_label(release["status"])}"
+          puts "  로컬 VERSION: #{release["local_version"] || "없음"} (#{html_status_label(release["version_state"] || "unknown")})"
+        end
+
+        def github_reason_label(github)
+          labels = {
+            "gh_missing" => "GitHub CLI(gh)가 설치되어 있지 않습니다.",
+            "auth_required" => "GitHub CLI 인증이 필요합니다.",
+            "repository_unavailable" => "GitHub 저장소를 확인할 수 없습니다.",
+            "invalid_repository" => "저장소 이름은 owner/name 형식이어야 합니다.",
+            "invalid_response" => "GitHub 응답을 읽을 수 없습니다.",
+            "collector_error" => "GitHub 상태를 불러오지 못했습니다."
+          }
+          labels[github["reason_code"]] || github["reason"] || "GitHub 상태를 확인할 수 없습니다."
+        end
+
+        def render_user_cli_dashboard(snapshot, health_summary, view, level, format, color_enabled, github_status = nil)
           case view
           when "work"
             format == "tree" ? render_user_work_tree(snapshot, level, color_enabled) : render_user_work_dashboard(snapshot, level, color_enabled)
@@ -5634,14 +5784,41 @@ cmd_project() {
           when "agents"
             render_user_agents_dashboard(snapshot, level, color_enabled)
           when "release"
-            render_user_release_dashboard(snapshot, health_summary, level, color_enabled)
+            render_user_release_dashboard(snapshot, health_summary, level, color_enabled, github_status)
           else
             render_user_status_dashboard(snapshot, health_summary, level, color_enabled)
           end
         end
 
-        def render_html_dashboard(snapshot, health_summary, view, level, selected_map, focus = "", depth = 2, group_by = "area", html_filters = {})
-          projection = dashboard_projection(snapshot, health_summary, view, level, "html", selected_map, focus, depth, group_by)
+        def html_github_release_panel(release)
+          github = release["github"]
+          return nil unless github
+
+          status = github["status"] || "unavailable"
+          if !%w[available partial].include?(status)
+            reason = github_reason_label(github)
+            return %Q(<section class="panel"><div class="panel-head"><h2>GitHub 출시 상태</h2>#{html_badge(status)}</div><p>#{html_escape(reason)}</p></section>)
+          end
+
+          pull_request = github["pull_request"] || {}
+          pr_value = if pull_request["status"] == "available"
+                       "##{pull_request["number"]} #{pull_request["title"]} · #{html_status_label(pull_request["mergeable"])}"
+                     else
+                       html_status_label(pull_request["status"] || "unavailable")
+                     end
+          checks = github["required_checks"] || {}
+          checks_value = "#{html_status_label(checks["status"])} · 통과 #{checks["passing"].to_i} / 실패 #{checks["failing"].to_i} / 대기 #{checks["pending"].to_i} / 건너뜀 #{checks["skipping"].to_i}"
+          latest_run = github["latest_run"] || {}
+          run_state = latest_run["conclusion"].to_s.empty? ? latest_run["status"] : latest_run["conclusion"]
+          run_value = [latest_run["workflow"], html_status_label(run_state || "unavailable")].compact.join(" · ")
+          github_release = github["release"] || {}
+          release_value = "#{github_release["tag"] || html_status_label(github_release["status"])} / 로컬 #{github_release["local_version"] || "VERSION 없음"} · #{html_status_label(github_release["version_state"] || "unknown")}"
+
+          %Q(<section class="panel"><div class="panel-head"><h2>GitHub 출시 상태</h2>#{html_badge(status)}</div><div class="kv"><div>저장소</div><div>#{html_escape(github.dig("repository", "name_with_owner"))}</div><div>브랜치</div><div>#{html_escape(github["branch"] || "확인되지 않음")}</div><div>Pull Request</div><div>#{html_escape(pr_value)}</div><div>필수 검사</div><div>#{html_escape(checks_value)}</div><div>최근 CI</div><div>#{html_escape(run_value)}</div><div>릴리스 버전</div><div>#{html_escape(release_value)}</div></div></section>)
+        end
+
+        def render_html_dashboard(snapshot, health_summary, view, level, selected_map, focus = "", depth = 2, group_by = "area", html_filters = {}, github_status = nil)
+          projection = dashboard_projection(snapshot, health_summary, view, level, "html", selected_map, focus, depth, group_by, github_status)
           project = projection["project"]
           status = projection["status"]
           progress = projection["progress"]
@@ -5651,6 +5828,7 @@ cmd_project() {
           tasks = projection["tasks"]
           risks = projection["risks"]
           release = projection.dig("views", "release") || {}
+          github_release_panel = html_github_release_panel(release)
           active_items = Array(tasks["active_items"])
           all_items = Array(tasks["items"])
           next_steps = Array(projection["next"]).map { |step| display_command_or_message(step) }.compact.uniq
@@ -5970,6 +6148,7 @@ document.addEventListener("DOMContentLoaded", () => {
             "<article class=\"panel\"><div class=\"panel-head\"><h2>출시 준비</h2><span>#{html_escape(html_status_label(release["gate_status"]))}</span></div><div class=\"kv\"><div>공용 기준 상태</div><div>#{html_badge(git["status_ref_state"])}</div><div>사용자 승인 필요</div><div>#{html_escape(Array(release["required_approvals"]).map { |item| html_approval_label(item) }.join(", "))}</div><div>출시 점검 명령</div><div><code>#{html_escape(release["release_check_command"])}</code></div></div></article>",
             "<article class=\"panel\"><div class=\"panel-head\"><h2>다음 조치</h2><span>명령</span></div><ul class=\"clean\">#{next_items.join}</ul></article>",
             "</section>",
+            github_release_panel,
             "<p class=\"footer\">맵은 브라우저에서 Mermaid로 렌더링됩니다. 각 맵 아래의 원본 보기는 다른 도구로 옮기거나 문제를 확인할 때 사용합니다.</p>",
             "</main>",
             "<script type=\"application/json\" id=\"dashboard-explorer-data\">#{html_json_payload(explorer_data)}</script>",
@@ -5978,7 +6157,7 @@ document.addEventListener("DOMContentLoaded", () => {
             "<script>document.addEventListener(\"click\",event=>{const button=event.target.closest(\"[data-zoom]\");if(!button)return;const panel=button.closest(\".map-panel\");const graph=panel&&panel.querySelector(\".mermaid\");if(!graph)return;let zoom=parseFloat(graph.dataset.zoomLevel||\"1\");if(button.dataset.zoom===\"in\")zoom=Math.min(2.5,zoom+0.15);if(button.dataset.zoom===\"out\")zoom=Math.max(0.45,zoom-0.15);if(button.dataset.zoom===\"reset\")zoom=1;graph.dataset.zoomLevel=String(zoom.toFixed(2));graph.style.transform=`scale(${zoom})`;graph.style.marginRight=`${Math.max(0,(zoom-1)*100)}%`;graph.style.marginBottom=`${Math.max(0,(zoom-1)*100)}%`;});</script>",
             "</body>",
             "</html>"
-          ].join("\n")
+          ].compact.join("\n")
         end
 
         project = snapshot.fetch("project", {})
@@ -6010,12 +6189,12 @@ document.addEventListener("DOMContentLoaded", () => {
         next_steps = Array(snapshot["next"]).map { |step| display_command_or_message(step) }.compact.uniq
 
         if as_json
-          puts JSON.pretty_generate(dashboard_projection(snapshot, health_summary, view, level, format, map, focus, depth, group_by))
+          puts JSON.pretty_generate(dashboard_projection(snapshot, health_summary, view, level, format, map, focus, depth, group_by, github_status))
           exit 0
         end
 
         if format == "html"
-          html = render_html_dashboard(snapshot, health_summary, view, level, map, focus, depth, group_by, html_filters)
+          html = render_html_dashboard(snapshot, health_summary, view, level, map, focus, depth, group_by, html_filters, github_status)
           if output.empty?
             puts html
           else
@@ -6026,7 +6205,7 @@ document.addEventListener("DOMContentLoaded", () => {
         end
 
         if user_cli
-          render_user_cli_dashboard(snapshot, health_summary, view, level, format, color_enabled)
+          render_user_cli_dashboard(snapshot, health_summary, view, level, format, color_enabled, github_status)
           exit 0
         end
 
@@ -6052,7 +6231,7 @@ document.addEventListener("DOMContentLoaded", () => {
         end
 
         if view == "release"
-          render_release_dashboard(snapshot, health_summary, level, color_enabled)
+          render_release_dashboard(snapshot, health_summary, level, color_enabled, github_status)
           exit 0
         end
 
@@ -11171,6 +11350,7 @@ cmd_release_check() {
     "$core/runtime/bootstrap_options.json" \
     "$core/runtime/dashboard_server.rb" \
     "$core/runtime/dashboard_presets.rb" \
+    "$core/runtime/github_release_status.rb" \
     "$core/templates/ci/github-actions/aiops.yml" \
     "$core/templates/tool_adapters/codex/AGENTS.md" \
     "$core/templates/tool_adapters/claude/CLAUDE.md"
@@ -11512,6 +11692,8 @@ cmd_user_dashboard_view() {
   target_set="no"
   color="auto"
   format="terminal"
+  github="no"
+  github_repo=""
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -11547,6 +11729,16 @@ cmd_user_dashboard_view() {
       --no-color)
         color="never"
         ;;
+      --github)
+        [ "$user_cmd" = "release" ] || die "aiops $user_cmd does not support --github; use aiops release --github"
+        github="yes"
+        ;;
+      --repo)
+        [ "$user_cmd" = "release" ] || die "aiops $user_cmd does not support --repo; use aiops release --github"
+        shift
+        [ "$#" -gt 0 ] || die "--repo requires a value"
+        github_repo="$1"
+        ;;
       --view|--map|--focus|--depth|--group-by|--filter-status|--filter-agent|--filter-role|--filter-workflow|--preset|--json|--output)
         die "aiops $user_cmd does not support $1; use aiops project dashboard for advanced options"
         ;;
@@ -11561,19 +11753,12 @@ cmd_user_dashboard_view() {
     shift
   done
 
-  if [ "$target_set" = "yes" ]; then
-    if [ "$allow_format" = "yes" ]; then
-      cmd_project dashboard --target "$target" --view "$view" --level "$level" --format "$format" --color "$color" --user-cli
-    else
-      cmd_project dashboard --target "$target" --view "$view" --level "$level" --color "$color" --user-cli
-    fi
-  else
-    if [ "$allow_format" = "yes" ]; then
-      cmd_project dashboard --view "$view" --level "$level" --format "$format" --color "$color" --user-cli
-    else
-      cmd_project dashboard --view "$view" --level "$level" --color "$color" --user-cli
-    fi
-  fi
+  set -- --view "$view" --level "$level" --color "$color" --user-cli
+  [ "$target_set" = "no" ] || set -- "$@" --target "$target"
+  [ "$allow_format" = "no" ] || set -- "$@" --format "$format"
+  [ "$github" = "no" ] || set -- "$@" --github
+  [ -z "$github_repo" ] || set -- "$@" --repo "$github_repo"
+  cmd_project dashboard "$@"
 }
 
 main() {

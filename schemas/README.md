@@ -55,7 +55,7 @@ CLI는 front matter를 읽어 schema로 검증하고, 본문은 사람이 읽는
 | `runtime_export.schema.json` | `aiops export runtime` JSON | 외부 runtime adapter가 읽을 Task/Role/Handoff snapshot |
 | `bootstrap_options.schema.json` | `runtime/bootstrap_options.json` | Bootstrap 선택 후보 catalog |
 | `project_snapshot.schema.json` | `aiops project snapshot --json` JSON | Agent가 먼저 읽는 프로젝트 상태 계약과 통제 신호 |
-| `project_dashboard.schema.json` | `aiops project dashboard --json` JSON | dashboard terminal/tree/Mermaid/HTML/UI renderer가 공유하는 projection 계약 |
+| `project_dashboard.schema.json` | `aiops project dashboard --json` JSON | dashboard terminal/tree/Mermaid/HTML/UI renderer가 공유하는 projection 계약. `--github` 사용 시 release view에 선택적 GitHub 상태 포함 |
 | `dashboard_presets.schema.json` | `.ai_project/dashboard_presets.json` | 프로젝트별 dashboard 옵션 preset 계약 |
 | `policy_rules.schema.json` | `runtime/policy_rules.json` | 운영 판단 규칙 catalog |
 | `policy_evaluation.schema.json` | `aiops policy evaluate --json` JSON | snapshot에 policy rule을 적용한 평가 결과 |
