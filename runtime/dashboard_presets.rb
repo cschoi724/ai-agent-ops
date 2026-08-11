@@ -98,6 +98,8 @@ class DashboardPresets
     document
   rescue JSON::ParserError => error
     raise PresetError, "invalid dashboard preset file #{@file}: #{error.message}"
+  rescue SystemCallError => error
+    raise PresetError, "cannot read dashboard preset file #{@file}: #{error.message}"
   end
 
   def validate_document!(document)
@@ -167,6 +169,9 @@ class DashboardPresets
       "view" => "main", "level" => "standard", "format" => "terminal", "map" => "dependencies",
       "group_by" => "area", "depth" => 2, "serve" => false, "port" => 8765, "refresh" => 0, "open" => false
     }.merge(options)
+    if effective["serve"] && options.key?("format") && options["format"] != "html"
+      raise PresetError, "invalid dashboard preset #{name}: serve requires format html"
+    end
     effective["format"] = "html" if effective["serve"]
     effective["map"] = "summary" if effective["serve"] && !options.key?("map")
 
@@ -198,6 +203,8 @@ class DashboardPresets
     ensure
       temp.close!
     end
+  rescue SystemCallError => error
+    raise PresetError, "cannot write dashboard preset file #{@file}: #{error.message}"
   end
 
   def self.cli_args(options)
@@ -236,10 +243,47 @@ def preset_usage
   USAGE
 end
 
+def preset_add_usage
+  <<~USAGE
+    AI Ops dashboard preset add
+
+    Usage:
+      aiops project dashboard preset add NAME [options]
+
+    Preset file options:
+      --target DIR                 Project directory
+      --description TEXT           User-facing preset description
+      --force                      Replace an existing project preset
+
+    Dashboard options:
+      --view VALUE                 main|work|risk|agents|release
+      --level VALUE                compact|standard|detail
+      --format VALUE               terminal|tree|mermaid|html
+      --map VALUE                  summary|dependencies|swimlane|critical-path|workflow|agents|blockers
+      --focus TASK_ID              Focus task for graph output
+      --depth N                    Graph traversal depth, 0..1000000
+      --group-by VALUE             area|agent|role|status|workflow
+      --filter-status LIST         Comma-separated status values
+      --filter-agent VALUE         Agent filter
+      --filter-role VALUE          Role filter
+      --filter-workflow VALUE      Workflow filter
+      --serve                      Start the localhost HTML server
+      --port N                     Server port, 0..65535; requires --serve
+      --refresh N                  Refresh interval, 0..86400; requires --serve
+      --open                       Open a browser; requires --serve
+      --color VALUE                auto|always|never
+
+    Constraints:
+      --serve requires --format html when format is specified.
+      Filter options require HTML output or --serve.
+      Explicit dashboard options override values from the selected preset.
+  USAGE
+end
+
 def preset_options_parser(target:, description: nil, force: false, options: {})
   state = {target: target, description: description, force: force, options: options}
   parser = OptionParser.new
-  parser.on("-h", "--help") { puts preset_usage; exit 0 }
+  parser.on("-h", "--help") { puts preset_add_usage; exit 0 }
   parser.on("--target DIR") { |value| state[:target] = value }
   parser.on("--description TEXT") { |value| state[:description] = value }
   parser.on("--force") { state[:force] = true }
@@ -336,7 +380,7 @@ begin
     entry.fetch("options").each { |key, value| puts "  #{key}: #{value.is_a?(Array) ? value.join(',') : value}" }
   when "add"
     if %w[-h --help].include?(ARGV.first)
-      puts preset_usage
+      puts preset_add_usage
       exit 0
     end
     name = ARGV.shift.to_s
@@ -361,5 +405,8 @@ begin
   end
 rescue DashboardPresets::PresetError, OptionParser::ParseError => error
   warn "dashboard preset error: #{error.message}"
+  exit 1
+rescue SystemCallError => error
+  warn "dashboard preset error: file operation failed: #{error.message}"
   exit 1
 end

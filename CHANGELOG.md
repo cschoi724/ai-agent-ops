@@ -22,6 +22,7 @@
 
 ### Fixed
 
+- Dashboard preset validation now rejects non-HTML serve formats, reports expected file errors without Ruby stack traces, and documents all preset add options.
 - Keep the local dashboard server alive after client disconnects, bound partial requests with timeout and size limits, return complete overload responses, and reject unknown status filters.
 - Keep HTML Explorer result counts, task rows, and dependency nodes on the same filtered task set, serialize Mermaid rerenders, preserve Agent proper names, and reject unknown entity filters.
 - User-facing dashboard shortcuts now reject advanced dashboard options that would change the shortcut meaning.

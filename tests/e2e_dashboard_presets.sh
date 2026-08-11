@@ -12,10 +12,12 @@ grep -q 'preset add NAME' "$tmpdir/preset-help.out" || {
   exit 1
 }
 "$repo_root/bin/aiops" project dashboard preset add --help > "$tmpdir/preset-add-help.out"
-grep -q 'Explicit dashboard options override' "$tmpdir/preset-add-help.out" || {
-  printf '%s\n' "dashboard preset add help is missing precedence guidance" >&2
-  exit 1
-}
+for help_pattern in '--force' '--format VALUE' '--serve' 'serve requires --format html' 'Explicit dashboard options override'; do
+  grep -q -- "$help_pattern" "$tmpdir/preset-add-help.out" || {
+    printf '%s\n' "dashboard preset add help is missing: $help_pattern" >&2
+    exit 1
+  }
+done
 
 mkdir -p "$project/.ai_project"
 ln -s "$repo_root" "$project/.ai"
@@ -177,6 +179,54 @@ grep -q 'invalid dashboard preset file' "$tmpdir/malformed.out" || {
   printf '%s\n' "malformed dashboard preset error missing" >&2
   exit 1
 }
+if "$repo_root/bin/aiops" validate dashboard-presets "$preset_file" > "$tmpdir/malformed-validate.out" 2>&1; then
+  printf '%s\n' "malformed dashboard preset validation should fail" >&2
+  exit 1
+fi
+grep -q 'schema_error: invalid JSON in input' "$tmpdir/malformed-validate.out" || {
+  printf '%s\n' "malformed dashboard preset validation guidance missing" >&2
+  exit 1
+}
+if grep -Eq 'dashboard_presets\.rb:[0-9]+:in|JSON::ParserError|from .*ruby' "$tmpdir/malformed-validate.out"; then
+  printf '%s\n' "malformed dashboard preset validation leaked a Ruby stack trace" >&2
+  exit 1
+fi
+
+cp "$tmpdir/valid-presets.json" "$preset_file"
+for invalid_format in terminal tree mermaid; do
+  if "$repo_root/bin/aiops" project dashboard preset add "bad-serve-$invalid_format" \
+    --target "$project" \
+    --serve \
+    --format "$invalid_format" > "$tmpdir/bad-serve-add.out" 2>&1
+  then
+    printf '%s\n' "serve preset with $invalid_format format should fail" >&2
+    exit 1
+  fi
+  grep -q 'serve requires format html' "$tmpdir/bad-serve-add.out" || {
+    printf '%s\n' "serve preset format guidance missing: $invalid_format" >&2
+    exit 1
+  }
+done
+
+cat > "$preset_file" <<'EOF'
+{
+  "schema": "aiops.dashboard_presets.v1",
+  "presets": {
+    "bad-serve": {
+      "serve": true,
+      "format": "terminal"
+    }
+  }
+}
+EOF
+if "$repo_root/bin/aiops" validate dashboard-presets "$preset_file" > "$tmpdir/bad-serve-validate.out" 2>&1; then
+  printf '%s\n' "invalid serve preset validation should fail" >&2
+  exit 1
+fi
+grep -q 'serve requires format html' "$tmpdir/bad-serve-validate.out" || {
+  printf '%s\n' "invalid serve preset validation guidance missing" >&2
+  exit 1
+}
 
 cat > "$preset_file" <<'EOF'
 {
@@ -229,6 +279,21 @@ grep -q 'unknown options command' "$tmpdir/unknown-key.out" || {
   printf '%s\n' "dashboard preset executed untrusted option content" >&2
   exit 1
 }
+
+file_error_project="$tmpdir/file-error-project"
+mkdir -p "$file_error_project/.ai_project/dashboard_presets.json"
+if "$repo_root/bin/aiops" project dashboard preset list --target "$file_error_project" > "$tmpdir/file-error.out" 2>&1; then
+  printf '%s\n' "unreadable dashboard preset path should fail" >&2
+  exit 1
+fi
+grep -q 'dashboard preset error: cannot read dashboard preset file' "$tmpdir/file-error.out" || {
+  printf '%s\n' "dashboard preset file error guidance missing" >&2
+  exit 1
+}
+if grep -Eq 'dashboard_presets\.rb:[0-9]+:in|Errno::' "$tmpdir/file-error.out"; then
+  printf '%s\n' "dashboard preset file error leaked a Ruby stack trace" >&2
+  exit 1
+fi
 
 cp "$tmpdir/valid-presets.json" "$preset_file"
 "$repo_root/bin/aiops" validate dashboard-presets "$preset_file" >/dev/null

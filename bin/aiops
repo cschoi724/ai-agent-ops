@@ -8446,8 +8446,18 @@ cmd_validate() {
       info "AI Ops $label validate"
       info "file: $file"
       ruby -rjson -e '
-        data = JSON.parse(File.read(ARGV[0]))
-        schema = JSON.parse(File.read(ARGV[1]))
+        def read_json(path, label)
+          JSON.parse(File.read(path))
+        rescue JSON::ParserError => error
+          warn "schema_error: invalid JSON in #{label} #{path}: #{error.message}"
+          exit 1
+        rescue SystemCallError => error
+          warn "schema_error: cannot read #{label} #{path}: #{error.message}"
+          exit 1
+        end
+
+        data = read_json(ARGV[0], "input")
+        schema = read_json(ARGV[1], "schema")
         errors = []
 
         def valid_type?(value, type)
