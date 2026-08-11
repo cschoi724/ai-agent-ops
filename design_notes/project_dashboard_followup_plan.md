@@ -1,6 +1,6 @@
 # Project Dashboard Follow-up Implementation Plan
 
-상태: 진행 중 / 1~4차 완료, 5차 구현 완료·독립 검증 대기
+상태: 진행 중 / 1~5차 완료
 대상: `aiops project dashboard` HTML/CLI 사용성 확장
 기준 버전: v0.13.0
 작성일: 2026-08-10
@@ -11,7 +11,7 @@
 - 2차 Help UX / Localized Command Guide: 구현 완료, PR #30~#31로 main 반영 완료
 - 3차 User CLI Visualization: 구현 완료, PR #32~#35로 main 반영 완료
 - 4차 Large Graph Explorer: 구현·독립 검증 완료, PR #36으로 main 반영 완료
-- 5차 Local Serve / Refresh: 구현 완료, 독립 검증 대기
+- 5차 Local Serve / Refresh: 구현·독립 검증 완료, PR #38로 main 반영 완료
 
 이 문서는 v0.13.0에서 완료된 Project Dashboard의 후속 개선 후보를 실제 구현 가능한 차수로 정리한다.
 
@@ -658,10 +658,10 @@ Dashboard 변경 차수는 추가로 아래를 확인한다.
 
 ## 추천 시작점
 
-4차 독립 검증과 main 반영이 끝나면 5차 `Local Serve / Refresh`를 진행한다.
+5차 독립 검증과 main 반영이 끝났으므로 6차 `Dashboard Presets`를 진행한다.
 
 이유:
 
 - 1~3차에서 사용자 명령, help, CLI 표시 계층을 분리했고 4차에서 큰 그래프 탐색 문제를 줄였다.
-- 현재 남은 핵심 사용성 문제는 운영 데이터 변경 후 HTML을 다시 생성해야 한다는 점이다.
-- 5차는 기존 JSON projection을 읽기 전용으로 재사용해 machine contract를 바꾸지 않고 최신 상태 확인 흐름을 단축할 수 있다.
+- 5차에서 브라우저 새로고침마다 최신 projection을 만드는 localhost serve 흐름을 추가했다.
+- 다음 사용성 문제는 반복해서 사용하는 긴 dashboard 옵션 조합이므로, 6차에서 프로젝트별 preset 저장·조회·재사용 흐름을 제공한다.
