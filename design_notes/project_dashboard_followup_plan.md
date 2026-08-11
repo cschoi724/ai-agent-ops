@@ -1,6 +1,6 @@
 # Project Dashboard Follow-up Implementation Plan
 
-상태: 진행 중 / 1~5차 완료, 6차 구현 완료·독립 검증 대기
+상태: 진행 중 / 1~6차 완료
 대상: `aiops project dashboard` HTML/CLI 사용성 확장
 기준 버전: v0.13.0
 작성일: 2026-08-10
@@ -12,7 +12,7 @@
 - 3차 User CLI Visualization: 구현 완료, PR #32~#35로 main 반영 완료
 - 4차 Large Graph Explorer: 구현·독립 검증 완료, PR #36으로 main 반영 완료
 - 5차 Local Serve / Refresh: 구현·독립 검증 완료, PR #38로 main 반영 완료
-- 6차 Dashboard Presets: 구현 완료, 독립 검증 대기
+- 6차 Dashboard Presets: 구현·독립 검증 완료, PR #40으로 main 반영 완료
 
 이 문서는 v0.13.0에서 완료된 Project Dashboard의 후속 개선 후보를 실제 구현 가능한 차수로 정리한다.
 
@@ -447,16 +447,17 @@ aiops project dashboard --serve --open
 - 긴 dashboard 명령을 프로젝트별 짧은 이름으로 저장하고 재사용한다.
 - 반복 운영 화면을 팀 표준으로 만들 수 있게 한다.
 
-후보 명령:
+구현 명령:
 
 ```sh
-aiops project dashboard --preset ios-current
+aiops project dashboard --preset overview
 aiops project dashboard preset list
-aiops project dashboard preset show ios-current
-aiops project dashboard preset add ios-current --view work --map swimlane --group-by agent --filter-area ios
+aiops project dashboard preset show work-current
+aiops project dashboard preset add team-live --view work --format html --map dependencies --serve --port 0 --refresh 10
+aiops project dashboard --preset team-live --open
 ```
 
-구현 범위:
+완료 범위:
 
 - 기본 built-in preset
   - `overview`
@@ -464,10 +465,14 @@ aiops project dashboard preset add ios-current --view work --map swimlane --grou
   - `risk-review`
   - `agent-load`
   - `release-readiness`
-- 프로젝트 local preset 파일 검토
-  - 후보: `.ai_project/dashboard_presets.json`
-- preset은 명령 옵션으로 expand만 하고 source data를 수정하지 않음
-- preset schema 추가 여부 검토
+- 프로젝트 local preset 파일: `.ai_project/dashboard_presets.json`
+- `aiops.dashboard_presets.v1` schema와 semantic validation
+- local preset list/show/add 및 `--force` 교체
+- `dashboard 기본값 < preset < 명시적 CLI 옵션` 우선순위
+- preset 기반 localhost serve, port, refresh, open 연동
+- preset은 기존 dashboard 옵션으로만 확장하며 source data를 수정하지 않음
+- 잘못된 이름·옵션·범위·실행 불가능한 조합을 저장·검증 단계에서 차단
+- 예상 가능한 JSON·파일 시스템 오류를 stack trace 없는 사용자 오류로 표시
 
 비범위:
 
@@ -476,10 +481,13 @@ aiops project dashboard preset add ios-current --view work --map swimlane --grou
 
 검증:
 
-- preset list/show 출력
-- preset 실행이 명시 옵션과 같은 projection을 생성
-- 잘못된 preset 이름은 non-zero와 추천 목록 출력
-- local preset schema 오류가 명확히 표시됨
+- built-in/local preset list/show/add/실행과 명시 옵션 override 통과
+- preset 실행과 명시 옵션 실행의 JSON projection 동일
+- 기존 terminal/tree/Mermaid/JSON 및 사용자 단축 명령 machine contract 유지
+- local serve HTTP endpoint와 종료 후 port 해제 통과
+- 잘못된 이름·schema·serve/format 조합·파일 오류 negative E2E 통과
+- 독립 검증 High/Medium/Low 이슈 없음
+- `scripts/test.sh` 및 strict release check 통과
 
 ## 7차. GitHub PR / CI Release View
 
