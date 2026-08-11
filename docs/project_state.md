@@ -73,6 +73,8 @@ aiops project dashboard --format html --map summary --output dashboard.html
 aiops project dashboard --format html --map swimlane --group-by agent --output dashboard.html
 aiops project dashboard --format html --map dependencies --focus T-20260805-007 --depth 2 --output dashboard.html
 aiops project dashboard --format html --filter-status approved,scoped --filter-agent "iOS Agent" --output dashboard.html
+aiops project dashboard --serve
+aiops project dashboard --serve --port 8765 --refresh 10 --open
 aiops project dashboard --view work --format tree
 aiops project dashboard --view work --format mermaid --map summary
 aiops project dashboard --view work --format mermaid --map dependencies
@@ -87,7 +89,7 @@ aiops project dashboard --json
 aiops project dashboard --color always
 ```
 
-현재 dashboard 구현은 사용자용 CLI 화면, Main Dashboard, Work Dashboard terminal/tree, Work Mermaid map, static HTML dashboard, Dashboard JSON contract, Risk/Agent/Release 전문 view를 제공한다.
+현재 dashboard 구현은 사용자용 CLI 화면, Main Dashboard, Work Dashboard terminal/tree, Work Mermaid map, static HTML dashboard, localhost dashboard server, Dashboard JSON contract, Risk/Agent/Release 전문 view를 제공한다.
 
 사용자용 top-level 명령은 파일을 수정하지 않으며, 실행할 때마다 `project snapshot --json`과 `project health --json`을 다시 계산한 현재 projection을 표시한다. 사용자용 terminal 출력은 사람이 읽기 쉬운 표시층이므로 자동화 입력으로 쓰지 않는다. Agent와 자동화가 읽어야 하는 기계 계약은 여전히 `aiops project snapshot --json`, `aiops project health --json`, `aiops project dashboard --json`이다.
 
@@ -126,6 +128,10 @@ Release Dashboard 표시 항목은 release 전 readiness, canonical status, bloc
 - `--filter-agent AGENT` (HTML 초기 필터)
 - `--filter-role ROLE` (HTML 초기 필터)
 - `--filter-workflow WORKFLOW` (HTML 초기 필터)
+- `--serve` (localhost dashboard server)
+- `--port N` (기본값 `8765`, `0`은 사용 가능한 임의 포트)
+- `--refresh N` (초 단위 전체 화면 새로고침, 기본값 `0`은 수동)
+- `--open` (지원되는 로컬 브라우저 실행)
 - `--output FILE`
 - `--json`
 - `--color auto|always|never`
@@ -138,6 +144,10 @@ Release Dashboard 표시 항목은 release 전 readiness, canonical status, bloc
 HTML의 `일감 탐색` 패널은 브라우저 안에서 ID/제목 검색, 상태 toggle, 담당자/역할/workflow 필터, 중심 일감과 연결 깊이 1~4단계 선택을 제공한다. 필터는 작업 표와 dependency map에 함께 적용되며, 결과가 큰 경우 중심 일감으로 범위를 줄이라는 안내를 표시한다. 필터용 task/edge 데이터는 생성된 HTML 안에서만 사용하고 target project나 dashboard JSON projection을 수정하지 않는다. `--filter-*` 옵션은 HTML이 처음 열릴 때 적용할 필터를 지정하며 다른 format과 함께 사용하면 오류가 난다.
 
 중심 일감은 dependency 연결 범위만 제한하며 상태·담당자·역할·workflow·검색 필터를 우회하지 않는다. `--filter-agent`, `--filter-role`, `--filter-workflow`에 현재 일감 데이터에 없는 값을 지정하면 전체 선택으로 조용히 전환하지 않고 오류로 종료한다. Agent 필터에는 locale 설명이 아니라 프로젝트에 등록된 고유 이름을 표시한다.
+
+`--serve`는 `127.0.0.1`에만 바인딩되는 일회성 로컬 HTTP server를 실행한다. `/`는 요청할 때마다 다시 생성한 HTML dashboard, `/dashboard.json`은 최신 `aiops.project_dashboard.v1` projection, `/maps/<name>.mmd`는 최신 Mermaid source, `/healthz`는 server 상태를 반환한다. 응답은 저장하거나 cache하지 않으며 target 프로젝트 파일을 수정하지 않는다. `--refresh N`을 지정하면 브라우저가 N초마다 `/`를 다시 요청하고, `--open`은 macOS `open` 또는 사용 가능한 `xdg-open`으로 현재 URL을 연다. 서버는 daemon으로 설치되지 않으며 실행한 터미널에서 `Ctrl+C`로 종료한다.
+
+`--serve`는 `--json`·`--output`과 함께 사용할 수 없고 HTML만 제공한다. `--port`, `--refresh`, `--open`은 `--serve` 없이 사용할 수 없다. 외부 interface 바인딩, 원격 공개, 인증, 장기 daemon 관리는 지원 범위가 아니다.
 
 큰 프로젝트에서는 전체 dependency map보다 아래 형태가 더 읽기 쉽다.
 

@@ -18,7 +18,7 @@ Usage:
   aiops project snapshot [--target DIR] --json
   aiops project context --role ROLE [--target DIR] [--task TASK_ID] [--json]
   aiops project health [--target DIR] [--json]
-  aiops project dashboard [--target DIR] [--view main|work|risk|agents|release] [--level compact|standard|detail] [--format terminal|tree|mermaid|html] [--map summary|dependencies|swimlane|critical-path|workflow|agents|blockers] [--focus TASK_ID] [--depth N] [--group-by area|agent|role|status|workflow] [--filter-status LIST] [--filter-agent NAME] [--filter-role ROLE] [--filter-workflow NAME] [--json] [--output FILE] [--color auto|always|never] [--no-color]
+  aiops project dashboard [--target DIR] [--view main|work|risk|agents|release] [--level compact|standard|detail] [--format terminal|tree|mermaid|html] [--map summary|dependencies|swimlane|critical-path|workflow|agents|blockers] [--focus TASK_ID] [--depth N] [--group-by area|agent|role|status|workflow] [--filter-status LIST] [--filter-agent NAME] [--filter-role ROLE] [--filter-workflow NAME] [--serve] [--port N] [--refresh N] [--open] [--json] [--output FILE] [--color auto|always|never] [--no-color]
   aiops policy evaluate [--target DIR|--snapshot FILE] [--strict-level LEVEL] --json
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
@@ -87,6 +87,7 @@ Examples:
   aiops project dashboard --format html --map dependencies --focus T-20260805-007 --depth 2
   aiops project dashboard --format html --filter-status approved,scoped --filter-agent "iOS Agent"
   aiops project dashboard --format html --map swimlane --group-by agent
+  aiops project dashboard --serve --refresh 10 --open
   aiops project dashboard --view work --format mermaid --map dependencies
   aiops project dashboard --format html --output dashboard.html
   aiops project dashboard --json
@@ -400,6 +401,7 @@ Examples:
   aiops project dashboard
   aiops project dashboard --format html --output dashboard.html
   aiops project dashboard --format html --filter-status approved,scoped --filter-agent "iOS Agent" --output dashboard.html
+  aiops project dashboard --serve --refresh 10 --open
   aiops project dashboard --view work --format mermaid --map dependencies
 
 Related:
@@ -417,6 +419,7 @@ terminal, tree, Mermaid, HTML, JSON 같은 상세 출력을 다루는 고급 대
   aiops project dashboard
   aiops project dashboard --format html --output dashboard.html
   aiops project dashboard --format html --filter-status approved,scoped --filter-agent "iOS Agent" --output dashboard.html
+  aiops project dashboard --serve --refresh 10 --open
   aiops project dashboard --view work --format mermaid --map dependencies
 
 비슷한 명령:
@@ -3396,6 +3399,12 @@ cmd_project() {
       filter_agent=""
       filter_role=""
       filter_workflow=""
+      serve="no"
+      serve_port="8765"
+      serve_refresh="0"
+      serve_open="no"
+      serve_option_set="no"
+      format_set="no"
       map_set="no"
       user_cli="no"
 
@@ -3420,6 +3429,7 @@ cmd_project() {
             shift
             [ "$#" -gt 0 ] || die "--format requires a value"
             format="$1"
+            format_set="yes"
             ;;
           --map)
             shift
@@ -3461,6 +3471,25 @@ cmd_project() {
             shift
             [ "$#" -gt 0 ] || die "--filter-workflow requires a value"
             filter_workflow="$1"
+            ;;
+          --serve)
+            serve="yes"
+            ;;
+          --port)
+            shift
+            [ "$#" -gt 0 ] || die "--port requires a value"
+            serve_port="$1"
+            serve_option_set="yes"
+            ;;
+          --refresh)
+            shift
+            [ "$#" -gt 0 ] || die "--refresh requires a value"
+            serve_refresh="$1"
+            serve_option_set="yes"
+            ;;
+          --open)
+            serve_open="yes"
+            serve_option_set="yes"
             ;;
           --no-color)
             color="never"
@@ -3527,6 +3556,30 @@ cmd_project() {
           die "project dashboard --depth requires a non-negative integer"
           ;;
       esac
+      case "$serve_port" in
+        ''|*[!0-9]*|??????*)
+          die "project dashboard --port requires an integer between 0 and 65535"
+          ;;
+      esac
+      [ "$serve_port" -le 65535 ] || die "project dashboard --port requires an integer between 0 and 65535"
+      case "$serve_refresh" in
+        ''|*[!0-9]*|??????*)
+          die "project dashboard --refresh requires an integer between 0 and 86400"
+          ;;
+      esac
+      [ "$serve_refresh" -le 86400 ] || die "project dashboard --refresh requires an integer between 0 and 86400"
+      if [ "$serve" = "yes" ]; then
+        [ "$json" = "no" ] || die "project dashboard --serve cannot be combined with --json"
+        [ -z "$output" ] || die "project dashboard --serve cannot be combined with --output"
+        [ "$user_cli" = "no" ] || die "project dashboard --serve cannot be combined with --user-cli"
+        if [ "$format_set" = "yes" ] && [ "$format" != "html" ]; then
+          die "project dashboard --serve only supports --format html"
+        fi
+        format="html"
+        [ "$map_set" = "yes" ] || map="summary"
+      elif [ "$serve_option_set" = "yes" ]; then
+        die "project dashboard --port, --refresh, and --open require --serve"
+      fi
       if [ "$format" = "html" ] && [ "$map_set" = "no" ]; then
         map="summary"
       fi
@@ -3551,6 +3604,19 @@ cmd_project() {
 
       target="$(abs_path "$target")"
       command -v ruby >/dev/null 2>&1 || die "ruby is required for project dashboard"
+      if [ "$serve" = "yes" ]; then
+        dashboard_server="$(default_core_dir)/runtime/dashboard_server.rb"
+        [ -f "$dashboard_server" ] || die "dashboard server runtime missing: $dashboard_server"
+        aiops_executable="$(script_dir)/$(basename "$0")"
+        set -- "$dashboard_server" --aiops "$aiops_executable" --target "$target" --port "$serve_port" --refresh "$serve_refresh" --view "$view" --level "$level" --map "$map" --depth "$depth" --group-by "$group_by"
+        [ -z "$focus" ] || set -- "$@" --focus "$focus"
+        [ -z "$filter_status" ] || set -- "$@" --filter-status "$filter_status"
+        [ -z "$filter_agent" ] || set -- "$@" --filter-agent "$filter_agent"
+        [ -z "$filter_role" ] || set -- "$@" --filter-role "$filter_role"
+        [ -z "$filter_workflow" ] || set -- "$@" --filter-workflow "$filter_workflow"
+        [ "$serve_open" = "no" ] || set -- "$@" --open
+        exec ruby "$@"
+      fi
       snapshot_json="$("$0" project snapshot --target "$target" --json)"
       health_json="$("$0" project health --target "$target" --json)"
 
