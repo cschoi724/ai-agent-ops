@@ -8655,6 +8655,39 @@ cmd_validate() {
         def validate_schema(value, schema, path, errors)
           return unless schema.is_a?(Hash)
 
+          if schema.key?("$ref")
+            prefix = "#/$defs/"
+            reference = schema["$ref"].to_s
+            unless reference.start_with?(prefix) && $schema_defs.key?(reference.delete_prefix(prefix))
+              errors << "#{path}: unresolved schema reference #{reference.inspect}"
+              return
+            end
+            validate_schema(value, $schema_defs.fetch(reference.delete_prefix(prefix)), path, errors)
+            return
+          end
+
+          if schema["allOf"].is_a?(Array)
+            schema["allOf"].each { |candidate| validate_schema(value, candidate, path, errors) }
+          end
+
+          if schema["anyOf"].is_a?(Array)
+            matched = schema["anyOf"].any? do |candidate|
+              candidate_errors = []
+              validate_schema(value, candidate, path, candidate_errors)
+              candidate_errors.empty?
+            end
+            errors << "#{path}: did not match anyOf" unless matched
+          end
+
+          if schema["oneOf"].is_a?(Array)
+            matches = schema["oneOf"].count do |candidate|
+              candidate_errors = []
+              validate_schema(value, candidate, path, candidate_errors)
+              candidate_errors.empty?
+            end
+            errors << "#{path}: expected exactly one matching oneOf schema, got #{matches}" unless matches == 1
+          end
+
           if schema.key?("const") && value != schema["const"]
             errors << "#{path}: expected const #{schema["const"].inspect}, got #{value.inspect}"
           end
@@ -8675,11 +8708,29 @@ cmd_validate() {
             errors << "#{path}: shorter than minLength #{schema["minLength"]}"
           end
 
+          if value.is_a?(String) && schema.key?("maxLength") && value.length > schema["maxLength"].to_i
+            errors << "#{path}: longer than maxLength #{schema["maxLength"]}"
+          end
+
+          if value.is_a?(String) && schema.key?("pattern") && !value.match?(Regexp.new(schema["pattern"]))
+            errors << "#{path}: pattern mismatch"
+          end
+
           if value.is_a?(Numeric) && schema.key?("minimum") && value < schema["minimum"]
             errors << "#{path}: smaller than minimum #{schema["minimum"]}"
           end
 
+          if value.is_a?(Numeric) && schema.key?("maximum") && value > schema["maximum"]
+            errors << "#{path}: greater than maximum #{schema["maximum"]}"
+          end
+
           if value.is_a?(Array)
+            if schema.key?("minItems") && value.length < schema["minItems"].to_i
+              errors << "#{path}: fewer than minItems #{schema["minItems"]}"
+            end
+            if schema.key?("maxItems") && value.length > schema["maxItems"].to_i
+              errors << "#{path}: more than maxItems #{schema["maxItems"]}"
+            end
             if schema["uniqueItems"] && value.uniq.length != value.length
               errors << "#{path}: array items must be unique"
             end
@@ -8691,6 +8742,12 @@ cmd_validate() {
           end
 
           if value.is_a?(Hash)
+            if schema["propertyNames"].is_a?(Hash)
+              value.each_key do |key|
+                validate_schema(key, schema["propertyNames"], "#{path}.#{key}", errors)
+              end
+            end
+
             Array(schema["required"]).each do |key|
               errors << "#{path}.#{key}: required property missing" unless value.key?(key)
             end
@@ -8709,18 +8766,10 @@ cmd_validate() {
                 validate_schema(value[key], additional, "#{path}.#{key}", errors)
               end
             end
-
-            if schema["anyOf"].is_a?(Array)
-              matched = schema["anyOf"].any? do |candidate|
-                candidate_errors = []
-                validate_schema(value, candidate, path, candidate_errors)
-                candidate_errors.empty?
-              end
-              errors << "#{path}: did not match anyOf" unless matched
-            end
           end
         end
 
+        $schema_defs = schema["$defs"].is_a?(Hash) ? schema["$defs"] : {}
         validate_schema(data, schema, "$", errors)
         abort("schema_error:\n" + errors.join("\n")) unless errors.empty?
         puts "ok: schema"

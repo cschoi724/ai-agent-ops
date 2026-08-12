@@ -243,8 +243,11 @@ class GitHubReleaseStatus
   end
 
   def current_branch
-    stdout, = Open3.capture2("git", "-C", @target, "branch", "--show-current")
-    stdout.strip
+    stdout, _stderr, status = Open3.capture3("git", "-C", @target, "branch", "--show-current")
+    return nil unless status.success?
+
+    branch = stdout.strip
+    branch.empty? ? nil : branch
   rescue SystemCallError
     nil
   end

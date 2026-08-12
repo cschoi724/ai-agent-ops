@@ -101,6 +101,34 @@ ruby -rjson -e '
   abort("release version mismatch") unless github.dig("release", "tag") == "v1.2.3" && github.dig("release", "version_state") == "match"
 ' "$tmpdir/github.json"
 
+ruby -rjson -e '
+  source = JSON.parse(File.read(ARGV.shift))
+  output_dir = ARGV.shift
+  mutations = {
+    "repository-number" => 42,
+    "repository-empty" => {},
+    "repository-name-missing" => {"url" => "https://github.com/example/dashboard-project"},
+    "repository-name-invalid" => {"name_with_owner" => "invalid", "url" => "https://github.com/example/dashboard-project"},
+    "repository-url-invalid" => {"name_with_owner" => "example/dashboard-project", "url" => 42}
+  }
+  mutations.each do |name, repository|
+    document = Marshal.load(Marshal.dump(source))
+    document.fetch("views").fetch("release").fetch("github")["repository"] = repository
+    File.write(File.join(output_dir, "#{name}.json"), JSON.pretty_generate(document))
+  end
+' "$tmpdir/github.json" "$tmpdir"
+
+for invalid_json in "$tmpdir"/repository-*.json; do
+  if run_aiops validate project-dashboard "$invalid_json" > "$tmpdir/invalid-schema.out" 2>&1; then
+    printf '%s\n' "invalid GitHub repository projection should fail: $invalid_json" >&2
+    exit 1
+  fi
+  grep -q 'schema_error:' "$tmpdir/invalid-schema.out" || {
+    printf '%s\n' "invalid GitHub repository schema error missing: $invalid_json" >&2
+    exit 1
+  }
+done
+
 mkdir -p "$tmpdir/no-gh-bin"
 PATH="$tmpdir/no-gh-bin:/usr/bin:/bin" ruby "$repo_root/runtime/github_release_status.rb" \
   --target "$project" > "$tmpdir/no-gh.json"
@@ -108,6 +136,15 @@ ruby -rjson -e '
   data = JSON.parse(File.read(ARGV[0]))
   abort("missing gh should be unavailable") unless data["status"] == "unavailable" && data["reason_code"] == "gh_missing"
 ' "$tmpdir/no-gh.json"
+
+mkdir -p "$tmpdir/non-git"
+PATH="$tmpdir/no-gh-bin:/usr/bin:/bin" ruby "$repo_root/runtime/github_release_status.rb" \
+  --target "$tmpdir/non-git" > "$tmpdir/non-git.json" 2> "$tmpdir/non-git.err"
+[ ! -s "$tmpdir/non-git.err" ] || {
+  printf '%s\n' "non-Git branch detection leaked stderr" >&2
+  cat "$tmpdir/non-git.err" >&2
+  exit 1
+}
 
 run_aiops project dashboard --target "$project" --view release --github --level detail --color never > "$tmpdir/github-terminal.out"
 grep -q '^GitHub Release Status$' "$tmpdir/github-terminal.out" || {
@@ -204,6 +241,49 @@ grep -q 'repo requires github' "$tmpdir/invalid-preset.out" || {
   printf '%s\n' "invalid GitHub repository preset error missing" >&2
   exit 1
 }
+
+invalid_repo_index=0
+for invalid_repo in \
+  invalid \
+  'owner/' \
+  '/repo' \
+  'owner/repo/extra' \
+  'owner repo/name' \
+  'owner/re!po'
+do
+  invalid_repo_index=$((invalid_repo_index + 1))
+  if run_aiops project dashboard preset add "invalid-repo-$invalid_repo_index" \
+    --target "$project" --view release --github --repo "$invalid_repo" > "$tmpdir/invalid-preset.out" 2>&1; then
+    printf '%s\n' "invalid GitHub repository preset should fail: $invalid_repo" >&2
+    exit 1
+  fi
+  grep -q 'repo must use owner/name format' "$tmpdir/invalid-preset.out" || {
+    printf '%s\n' "invalid GitHub repository format guidance missing: $invalid_repo" >&2
+    exit 1
+  }
+done
+
+ruby -rjson -e '
+  File.write(ARGV[0], JSON.pretty_generate({
+    "schema" => "aiops.dashboard_presets.v1",
+    "presets" => {
+      "invalid-repository" => {
+        "view" => "release",
+        "github" => true,
+        "repo" => "invalid"
+      }
+    }
+  }))
+' "$project/.ai_project/dashboard_presets.json"
+if run_aiops validate dashboard-presets "$project/.ai_project/dashboard_presets.json" > "$tmpdir/invalid-preset.out" 2>&1; then
+  printf '%s\n' "invalid repository in preset file should fail validation" >&2
+  exit 1
+fi
+grep -Eq 'pattern mismatch|repo must use owner/name format' "$tmpdir/invalid-preset.out" || {
+  printf '%s\n' "invalid preset repository validation guidance missing" >&2
+  exit 1
+}
+rm -f "$project/.ai_project/dashboard_presets.json"
 
 run_aiops project dashboard preset add github-release \
   --target "$project" \

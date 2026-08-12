@@ -9,6 +9,7 @@ class DashboardPresets
   SCHEMA = "aiops.dashboard_presets.v1"
   FILE_NAME = "dashboard_presets.json"
   NAME_PATTERN = /\A[a-z0-9][a-z0-9._-]{0,63}\z/
+  REPOSITORY_PATTERN = /\A[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\z/
   CONTROL_PATTERN = /[\x00-\x1f\x7f]/
 
   ENUMS = {
@@ -138,6 +139,9 @@ class DashboardPresets
     end
     STRINGS.each do |key|
       validate_text!(name, key, entry[key]) if entry.key?(key)
+    end
+    if entry.key?("repo") && !entry["repo"].match?(REPOSITORY_PATTERN)
+      raise PresetError, "invalid dashboard preset #{name}: repo must use owner/name format"
     end
     INTEGERS.each do |key, allowed|
       next unless entry.key?(key)
