@@ -108,6 +108,14 @@ for pattern in '<html lang="en">' 'AI Ops Project Dashboard' 'Task explorer' 'Pr
     exit 1
   }
 done
+grep -q 'class="table-scroll"' "$tmpdir/dashboard-en.html" || {
+  printf '%s\n' "responsive task table wrapper missing" >&2
+  exit 1
+}
+grep -q '\.table-scroll{width:100%;max-width:100%;overflow-x:auto' "$tmpdir/dashboard-en.html" || {
+  printf '%s\n' "responsive task table overflow rule missing" >&2
+  exit 1
+}
 grep -q '>Custom Status<' "$tmpdir/dashboard-en.html" || {
   printf '%s\n' "unknown dashboard label readable fallback missing" >&2
   exit 1

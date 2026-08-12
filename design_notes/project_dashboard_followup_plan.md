@@ -1,6 +1,6 @@
 # Project Dashboard Follow-up Implementation Plan
 
-상태: 진행 중 / 1~7차 main 반영 완료 / 8차 구현 완료·검증 중
+상태: 진행 중 / 1~7차 main 반영 완료 / 8차 독립 검증 후 보완·재검증 대기
 대상: `aiops project dashboard` HTML/CLI 사용성 확장
 기준 버전: v0.13.0
 작성일: 2026-08-10
@@ -14,7 +14,7 @@
 - 5차 Local Serve / Refresh: 구현·독립 검증 완료, PR #38로 main 반영 완료
 - 6차 Dashboard Presets: 구현·독립 검증 완료, PR #40으로 main 반영 완료
 - 7차 GitHub PR / CI Release View: 구현·독립 검증 완료, PR #42로 main 반영 완료
-- 8차 Locale Extension: 구현 및 저장소 내부 검증 완료, 독립 검증 대기
+- 8차 Locale Extension: 구현 및 독립 검증 완료, 좁은 화면 작업 표 보완 후 재검증 대기
 
 이 문서는 v0.13.0에서 완료된 Project Dashboard의 후속 개선 후보를 실제 구현 가능한 차수로 정리한다.
 
