@@ -18,9 +18,10 @@ class DashboardPresets
     "format" => %w[terminal tree mermaid html],
     "map" => %w[summary dependencies swimlane critical-path workflow agents blockers],
     "group_by" => %w[area agent role status workflow],
-    "color" => %w[auto always never]
+    "color" => %w[auto always never],
+    "locale" => %w[ko en]
   }.freeze
-  STRINGS = %w[focus filter_agent filter_role filter_workflow repo].freeze
+  STRINGS = %w[focus filter_agent filter_role filter_workflow repo locale_file].freeze
   INTEGERS = {"depth" => (0..1_000_000), "port" => (0..65_535), "refresh" => (0..86_400)}.freeze
   BOOLEANS = %w[serve open github].freeze
   OPTION_KEYS = (ENUMS.keys + STRINGS + INTEGERS.keys + BOOLEANS + %w[filter_status]).freeze
@@ -223,7 +224,8 @@ class DashboardPresets
       "focus" => "--focus", "depth" => "--depth", "group_by" => "--group-by",
       "filter_status" => "--filter-status", "filter_agent" => "--filter-agent",
       "filter_role" => "--filter-role", "filter_workflow" => "--filter-workflow",
-      "port" => "--port", "refresh" => "--refresh", "color" => "--color", "repo" => "--repo"
+      "port" => "--port", "refresh" => "--refresh", "color" => "--color", "repo" => "--repo",
+      "locale" => "--locale", "locale_file" => "--locale-file"
     }
     args = []
     flags.each do |key, flag|
@@ -280,6 +282,8 @@ def preset_add_usage
       --filter-workflow VALUE      Workflow filter
       --github                     Include GitHub PR, CI, and release status; requires release view
       --repo OWNER/NAME            Override GitHub repository; requires --github
+      --locale VALUE               ko|en; defaults to ko
+      --locale-file FILE           Project-relative or absolute label override file
       --serve                      Start the localhost HTML server
       --port N                     Server port, 0..65535; requires --serve
       --refresh N                  Refresh interval, 0..86400; requires --serve

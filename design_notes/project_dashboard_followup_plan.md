@@ -1,6 +1,6 @@
 # Project Dashboard Follow-up Implementation Plan
 
-상태: 진행 중 / 1~7차 완료
+상태: 진행 중 / 1~7차 main 반영 완료 / 8차 구현 완료·검증 중
 대상: `aiops project dashboard` HTML/CLI 사용성 확장
 기준 버전: v0.13.0
 작성일: 2026-08-10
@@ -14,6 +14,7 @@
 - 5차 Local Serve / Refresh: 구현·독립 검증 완료, PR #38로 main 반영 완료
 - 6차 Dashboard Presets: 구현·독립 검증 완료, PR #40으로 main 반영 완료
 - 7차 GitHub PR / CI Release View: 구현·독립 검증 완료, PR #42로 main 반영 완료
+- 8차 Locale Extension: 구현 및 저장소 내부 검증 완료, 독립 검증 대기
 
 이 문서는 v0.13.0에서 완료된 Project Dashboard의 후속 개선 후보를 실제 구현 가능한 차수로 정리한다.
 
@@ -546,11 +547,12 @@ aiops project dashboard --locale-file .ai_project/dashboard_labels.ko.json
 
 구현 범위:
 
-- locale option parser
-- built-in `ko`, `en` catalog
-- external locale file schema 검토
+- `--locale ko|en`, `--locale-file FILE` option parser
+- 한국어 기본값과 built-in 영어 사용자 표시 catalog
+- `aiops.dashboard_locale.v1` external locale file schema와 validator
+- 사용자용 CLI, HTML, Local Serve, preset locale 전달
 - unknown key readable fallback 유지
-- terminal 출력 적용 여부는 별도 결정
+- 고급 terminal 진단 출력과 machine JSON 계약은 기존 값 유지
 
 비범위:
 
@@ -560,10 +562,12 @@ aiops project dashboard --locale-file .ai_project/dashboard_labels.ko.json
 
 검증:
 
-- `ko`와 `en` HTML label snapshot
-- unknown key fallback
+- 기본 실행과 `--locale ko` 사용자 CLI 출력 동일
+- `ko`와 `en` HTML label E2E
+- external override와 잘못된 category/locale mismatch 거부
 - Mermaid internal id는 locale과 무관하게 stable
 - JSON projection 기본 machine value 보존
+- Local Serve와 preset locale 전달
 
 ## 9차. HTML Visual Regression
 
@@ -670,10 +674,9 @@ Dashboard 변경 차수는 추가로 아래를 확인한다.
 
 ## 추천 다음 단계
 
-7차 독립 검증과 main 반영이 끝났으므로 8차 `Locale Extension`을 진행한다.
+8차 `Locale Extension` 구현이 끝났으므로 독립 검증 후 PR로 main에 반영한다. 그다음 9차 `HTML Visual Regression`을 진행한다.
 
 이유:
 
-- 1~3차에서 사용자 명령, help, CLI 표시 계층을 분리했고 4차에서 큰 graph 탐색 문제를 줄였다.
-- 5~6차에서 동적 localhost 화면과 반복 가능한 preset을 추가했다.
-- 7차에서 GitHub 외부 상태를 opt-in으로 연결했으므로, 다음은 현재 내부 catalog를 외부 locale/프로젝트 override 계약으로 확장하는 순서가 적절하다.
+- 8차는 기본 한국어를 유지하면서 영어와 프로젝트별 용어 override를 사용자 표시 계층에만 추가했다.
+- 9차는 locale별 HTML이 실제 브라우저 viewport와 Mermaid 렌더링에서 깨지지 않는지 자동 검증하는 단계다.

@@ -231,6 +231,7 @@ class DashboardServer
     args = ["project", "dashboard", "--target", @target, "--view", @dashboard.fetch(:view), "--level", @dashboard.fetch(:level)]
     args.concat(["--format", "html", "--map", @dashboard.fetch(:map)])
     append_dashboard_scope(args)
+    append_locale(args)
     append_github_status(args)
     if kind == "json"
       args << "--json"
@@ -243,6 +244,7 @@ class DashboardServer
   def map_args(map)
     args = ["project", "dashboard", "--target", @target, "--view", "work", "--format", "mermaid", "--map", map]
     append_dashboard_scope(args)
+    append_locale(args)
     args
   end
 
@@ -273,6 +275,12 @@ class DashboardServer
     args.concat(["--repo", repository]) unless repository.empty?
   end
 
+  def append_locale(args)
+    args.concat(["--locale", @dashboard.fetch(:locale)])
+    locale_file = @dashboard.fetch(:locale_file)
+    args.concat(["--locale-file", locale_file]) unless locale_file.empty?
+  end
+
   def run_aiops(*args)
     stdout, stderr, status = Open3.capture3(@aiops, *args)
     return stdout if status.success?
@@ -283,12 +291,19 @@ class DashboardServer
   end
 
   def decorate_html(html)
-    refresh_label = @refresh.zero? ? "수동 새로고침" : "#{@refresh}초마다 자동 새로고침"
+    english = @dashboard.fetch(:locale) == "en"
+    refresh_label = if english
+                      @refresh.zero? ? "Manual refresh" : "Auto refresh every #{@refresh}s"
+                    else
+                      @refresh.zero? ? "수동 새로고침" : "#{@refresh}초마다 자동 새로고침"
+                    end
+    title = english ? "Live local dashboard" : "실시간 로컬 대시보드"
+    button = english ? "Refresh now" : "지금 새로고침"
     bar = <<~HTML
       <style>
       .serve-bar{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 32px;background:#0f172a;color:#f8fafc;border-bottom:1px solid #334155}.serve-bar div{display:flex;align-items:center;gap:10px;min-width:0}.serve-bar strong{white-space:nowrap}.serve-bar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#cbd5e1;font-size:13px}.serve-bar button{border:1px solid #64748b;border-radius:6px;background:#fff;color:#0f172a;padding:6px 10px;font-weight:700;cursor:pointer}@media(max-width:620px){.serve-bar{padding:10px 18px;align-items:flex-start}.serve-bar div{display:block}.serve-bar span{display:block;margin-top:2px}}
       </style>
-      <div class="serve-bar" data-refresh-seconds="#{@refresh}"><div><strong>실시간 로컬 대시보드</strong><span>#{CGI.escapeHTML(refresh_label)} · #{CGI.escapeHTML(@target)}</span></div><button type="button" id="serve-refresh">지금 새로고침</button></div>
+      <div class="serve-bar" data-refresh-seconds="#{@refresh}"><div><strong>#{title}</strong><span>#{CGI.escapeHTML(refresh_label)} · #{CGI.escapeHTML(@target)}</span></div><button type="button" id="serve-refresh">#{button}</button></div>
       <script>
       (()=>{const seconds=#{@refresh};const button=document.getElementById("serve-refresh");button.addEventListener("click",()=>window.location.reload());if(seconds>0)window.setTimeout(()=>window.location.reload(),seconds*1000);})();
       </script>
@@ -381,7 +396,9 @@ options = {
     filter_role: "",
     filter_workflow: "",
     github: false,
-    github_repo: ""
+    github_repo: "",
+    locale: "ko",
+    locale_file: ""
   }
 }
 
@@ -403,6 +420,8 @@ OptionParser.new do |parser|
   parser.on("--filter-workflow NAME") { |value| options[:dashboard][:filter_workflow] = value }
   parser.on("--github") { options[:dashboard][:github] = true }
   parser.on("--repo OWNER/NAME") { |value| options[:dashboard][:github_repo] = value }
+  parser.on("--locale NAME") { |value| options[:dashboard][:locale] = value }
+  parser.on("--locale-file FILE") { |value| options[:dashboard][:locale_file] = value }
 end.parse!
 
 abort("dashboard server requires --aiops") unless options[:aiops]

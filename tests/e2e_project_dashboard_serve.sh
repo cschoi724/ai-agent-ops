@@ -251,6 +251,45 @@ kill "$server_pid"
 wait "$server_pid"
 server_pid=""
 
+"$repo_root/bin/aiops" project dashboard \
+  --target "$project" \
+  --serve \
+  --port 0 \
+  --locale en \
+  >"$tmpdir/server-en.log" 2>&1 &
+server_pid="$!"
+
+attempt=0
+while [ "$attempt" -lt 100 ]; do
+  port="$(sed -n 's#^url: http://127\.0\.0\.1:\([0-9][0-9]*\)/$#\1#p' "$tmpdir/server-en.log" | tail -1)"
+  [ -n "$port" ] && break
+  kill -0 "$server_pid" >/dev/null 2>&1 || {
+    cat "$tmpdir/server-en.log" >&2
+    printf '%s\n' "English dashboard server exited before startup" >&2
+    exit 1
+  }
+  sleep 0.05
+  attempt=$((attempt + 1))
+done
+
+[ -n "${port:-}" ] || {
+  cat "$tmpdir/server-en.log" >&2
+  printf '%s\n' "English dashboard server port missing" >&2
+  exit 1
+}
+request GET / 200 "$tmpdir/dashboard-en.html" "$tmpdir/dashboard-en.headers"
+grep -q 'Live local dashboard' "$tmpdir/dashboard-en.html" || {
+  printf '%s\n' "English served dashboard banner missing" >&2
+  exit 1
+}
+grep -q 'AI Ops Project Dashboard' "$tmpdir/dashboard-en.html" || {
+  printf '%s\n' "English served dashboard content missing" >&2
+  exit 1
+}
+kill "$server_pid"
+wait "$server_pid"
+server_pid=""
+
 mkdir -p "$tmpdir/fake-bin"
 printf '%s\n' '#!/bin/sh' 'printf "%s\n" "$1" > "$AIOPS_OPEN_LOG"' > "$tmpdir/fake-bin/open"
 cp "$tmpdir/fake-bin/open" "$tmpdir/fake-bin/xdg-open"
