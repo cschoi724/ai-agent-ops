@@ -12,6 +12,7 @@
 
 ### Added
 
+- Optional GitHub PR, required-check, workflow-run, and release-version status in Release Dashboard terminal, HTML, JSON, Local Serve, and the user-facing `aiops release --github` command.
 - Built-in and project-local dashboard presets with list, show, add, schema validation, and explicit CLI override support.
 - Localhost-only dashboard server with live HTML, JSON, Mermaid endpoints, optional timed refresh, browser opening, security headers, and clean signal shutdown.
 - HTML Large Graph Explorer with task search, semantic filters, status toggles, focus/depth controls, and client-side dependency map regeneration.
@@ -22,6 +23,7 @@
 
 ### Fixed
 
+- Validate dashboard schema `oneOf`, `$ref`, string patterns, property names, and collection bounds; reject invalid GitHub repository presets before execution; and suppress expected non-Git branch lookup errors.
 - Dashboard preset validation now rejects non-HTML serve formats, reports expected file errors without Ruby stack traces, and documents all preset add options.
 - Keep the local dashboard server alive after client disconnects, bound partial requests with timeout and size limits, return complete overload responses, and reject unknown status filters.
 - Keep HTML Explorer result counts, task rows, and dependency nodes on the same filtered task set, serialize Mermaid rerenders, preserve Agent proper names, and reject unknown entity filters.

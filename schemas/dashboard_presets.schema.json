@@ -27,6 +27,8 @@
           "filter_agent": { "type": "string", "minLength": 1 },
           "filter_role": { "type": "string", "minLength": 1 },
           "filter_workflow": { "type": "string", "minLength": 1 },
+          "github": { "type": "boolean" },
+          "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
           "serve": { "type": "boolean" },
           "port": { "type": "integer", "minimum": 0, "maximum": 65535 },
           "refresh": { "type": "integer", "minimum": 0, "maximum": 86400 },

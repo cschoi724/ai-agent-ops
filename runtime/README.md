@@ -10,3 +10,4 @@
 | `bootstrap_options.json` | Bootstrap 선택 후보의 기계 판독 가능한 catalog |
 | `dashboard_server.rb` | localhost dashboard 요청·새로고침 runtime |
 | `dashboard_presets.rb` | built-in/local dashboard preset 조회·검증·확장 runtime |
+| `github_release_status.rb` | 명시 요청 시 GitHub PR·required check·workflow run·release 상태를 읽는 runtime |

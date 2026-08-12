@@ -9,6 +9,7 @@ class DashboardPresets
   SCHEMA = "aiops.dashboard_presets.v1"
   FILE_NAME = "dashboard_presets.json"
   NAME_PATTERN = /\A[a-z0-9][a-z0-9._-]{0,63}\z/
+  REPOSITORY_PATTERN = /\A[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\z/
   CONTROL_PATTERN = /[\x00-\x1f\x7f]/
 
   ENUMS = {
@@ -19,9 +20,9 @@ class DashboardPresets
     "group_by" => %w[area agent role status workflow],
     "color" => %w[auto always never]
   }.freeze
-  STRINGS = %w[focus filter_agent filter_role filter_workflow].freeze
+  STRINGS = %w[focus filter_agent filter_role filter_workflow repo].freeze
   INTEGERS = {"depth" => (0..1_000_000), "port" => (0..65_535), "refresh" => (0..86_400)}.freeze
-  BOOLEANS = %w[serve open].freeze
+  BOOLEANS = %w[serve open github].freeze
   OPTION_KEYS = (ENUMS.keys + STRINGS + INTEGERS.keys + BOOLEANS + %w[filter_status]).freeze
 
   BUILT_INS = {
@@ -139,6 +140,9 @@ class DashboardPresets
     STRINGS.each do |key|
       validate_text!(name, key, entry[key]) if entry.key?(key)
     end
+    if entry.key?("repo") && !entry["repo"].match?(REPOSITORY_PATTERN)
+      raise PresetError, "invalid dashboard preset #{name}: repo must use owner/name format"
+    end
     INTEGERS.each do |key, allowed|
       next unless entry.key?(key)
       value = entry[key]
@@ -187,6 +191,12 @@ class DashboardPresets
     if !%w[mermaid html].include?(effective["format"]) && effective["map"] != "dependencies"
       raise PresetError, "invalid dashboard preset #{name}: map requires Mermaid or HTML format"
     end
+    if options.key?("repo") && !effective["github"]
+      raise PresetError, "invalid dashboard preset #{name}: repo requires github"
+    end
+    if effective["github"] && effective["view"] != "release"
+      raise PresetError, "invalid dashboard preset #{name}: github requires view release"
+    end
   end
 
   def write_document(document)
@@ -213,7 +223,7 @@ class DashboardPresets
       "focus" => "--focus", "depth" => "--depth", "group_by" => "--group-by",
       "filter_status" => "--filter-status", "filter_agent" => "--filter-agent",
       "filter_role" => "--filter-role", "filter_workflow" => "--filter-workflow",
-      "port" => "--port", "refresh" => "--refresh", "color" => "--color"
+      "port" => "--port", "refresh" => "--refresh", "color" => "--color", "repo" => "--repo"
     }
     args = []
     flags.each do |key, flag|
@@ -224,6 +234,7 @@ class DashboardPresets
     end
     args << "--serve" if options["serve"]
     args << "--open" if options["open"]
+    args << "--github" if options["github"]
     args
   end
 end
@@ -267,6 +278,8 @@ def preset_add_usage
       --filter-agent VALUE         Agent filter
       --filter-role VALUE          Role filter
       --filter-workflow VALUE      Workflow filter
+      --github                     Include GitHub PR, CI, and release status; requires release view
+      --repo OWNER/NAME            Override GitHub repository; requires --github
       --serve                      Start the localhost HTML server
       --port N                     Server port, 0..65535; requires --serve
       --refresh N                  Refresh interval, 0..86400; requires --serve
@@ -301,6 +314,7 @@ def preset_options_parser(target:, description: nil, force: false, options: {})
   end
   parser.on("--serve") { state[:options]["serve"] = true }
   parser.on("--open") { state[:options]["open"] = true }
+  parser.on("--github") { state[:options]["github"] = true }
   [parser, state]
 end
 

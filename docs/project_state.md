@@ -75,6 +75,9 @@ aiops project dashboard --format html --map dependencies --focus T-20260805-007 
 aiops project dashboard --format html --filter-status approved,scoped --filter-agent "iOS Agent" --output dashboard.html
 aiops project dashboard --serve
 aiops project dashboard --serve --port 8765 --refresh 10 --open
+aiops project dashboard --view release --github
+aiops project dashboard --view release --github --repo owner/name
+aiops release --github
 aiops project dashboard --preset overview
 aiops project dashboard preset list
 aiops project dashboard preset show work-current
@@ -118,7 +121,7 @@ Risk Dashboard 표시 항목은 blocker/warning, policy rule, canonical sync, un
 
 Agent Dashboard 표시 항목은 Agent status/team/role/capability/current task/branch/worktree/drift와 Agent별 활성 Task 배정이다.
 
-Release Dashboard 표시 항목은 release 전 readiness, canonical status, blocker/warning, policy rule, blocked action, required approval, release-check 실행 명령이다. 이 view는 실제 CI나 GitHub required check 결과를 대체하지 않는다.
+Release Dashboard 표시 항목은 release 전 readiness, canonical status, blocker/warning, policy rule, blocked action, required approval, release-check 실행 명령이다. `--github`를 명시하면 현재 branch의 open PR, GitHub required check, 최신 workflow run, 최신 release tag와 로컬 `VERSION` 비교를 추가한다. 이 정보는 GitHub의 실제 상태를 읽어 표시하며 required check 정책을 독자적으로 대체하거나 PR·릴리스를 변경하지 않는다.
 
 지원 범위:
 
@@ -138,6 +141,8 @@ Release Dashboard 표시 항목은 release 전 readiness, canonical status, bloc
 - `--refresh N` (초 단위 전체 화면 새로고침, 기본값 `0`은 수동)
 - `--open` (지원되는 로컬 브라우저 실행)
 - `--preset NAME` (built-in 또는 프로젝트 local 옵션 조합 적용)
+- `--github` (release view에서만 GitHub PR·CI·release 상태 조회)
+- `--repo OWNER/NAME` (`--github`와 함께 조회 repository 명시)
 - `--output FILE`
 - `--json`
 - `--color auto|always|never`
@@ -156,6 +161,15 @@ HTML의 `일감 탐색` 패널은 브라우저 안에서 ID/제목 검색, 상�
 로컬 server는 브라우저의 요청 취소가 전체 프로세스를 종료하지 않도록 연결별로 처리한다. 동시에 최대 8개 연결을 처리하며, 완성되지 않은 요청은 3초 후 종료하고 요청 헤더는 64KB로 제한한다.
 
 `--serve`는 `--json`·`--output`과 함께 사용할 수 없고 HTML만 제공한다. `--port`, `--refresh`, `--open`은 `--serve` 없이 사용할 수 없다. 외부 interface 바인딩, 원격 공개, 인증, 장기 daemon 관리는 지원 범위가 아니다.
+
+GitHub release 상태는 명시적으로 요청한 경우에만 `gh` CLI를 호출한다. `gh` 미설치·미인증·repository 감지 실패·API 오류는 local release dashboard를 실패시키지 않고 `확인 불가`로 표시한다. `--github`가 없으면 기존 terminal/HTML/JSON projection과 네트워크 동작은 그대로 유지된다.
+
+```sh
+aiops release --github
+aiops project dashboard --view release --github --level detail
+aiops project dashboard --view release --github --repo cschoi724/CookLog --json
+aiops project dashboard --view release --github --format html --output release.html
+```
 
 Dashboard preset은 긴 옵션 조합을 이름으로 재사용한다. 모든 프로젝트에서 `overview`, `work-current`, `risk-review`, `agent-load`, `release-readiness` built-in preset을 사용할 수 있다.
 

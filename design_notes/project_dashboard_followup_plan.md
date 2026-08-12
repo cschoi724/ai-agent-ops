@@ -1,6 +1,6 @@
 # Project Dashboard Follow-up Implementation Plan
 
-상태: 진행 중 / 1~6차 완료
+상태: 진행 중 / 1~6차 완료, 7차 구현 완료·독립 검증 대기
 대상: `aiops project dashboard` HTML/CLI 사용성 확장
 기준 버전: v0.13.0
 작성일: 2026-08-10
@@ -13,6 +13,7 @@
 - 4차 Large Graph Explorer: 구현·독립 검증 완료, PR #36으로 main 반영 완료
 - 5차 Local Serve / Refresh: 구현·독립 검증 완료, PR #38로 main 반영 완료
 - 6차 Dashboard Presets: 구현·독립 검증 완료, PR #40으로 main 반영 완료
+- 7차 GitHub PR / CI Release View: 구현 완료, 독립 검증 대기
 
 이 문서는 v0.13.0에서 완료된 Project Dashboard의 후속 개선 후보를 실제 구현 가능한 차수로 정리한다.
 
@@ -34,7 +35,7 @@ v0.13.0의 목표는 dashboard/work map을 사용할 수 있는 형태로 완성
 - HTML Mermaid rendering, map section collapse, zoom control, source detail
 - 사용자용 label catalog 기반 표시명
 
-현재 한계:
+계획 수립 당시 한계:
 
 - 사용자용 명령과 Agent/자동화용 명령이 같은 `project dashboard` 하위 옵션에 섞여 있다.
 - 사용자 입장에서는 `--view`, `--format`, `--map`, `--group-by`, `--focus` 조합이 길고 어렵다.
@@ -491,6 +492,8 @@ aiops project dashboard --preset team-live --open
 
 ## 7차. GitHub PR / CI Release View
 
+상태: 구현 완료 / 독립 검증 대기
+
 목표:
 
 - release view에서 로컬 readiness뿐 아니라 GitHub PR/CI 상태까지 확인한다.
@@ -665,12 +668,12 @@ Dashboard 변경 차수는 추가로 아래를 확인한다.
 - 인증 실패 또는 네트워크 실패가 dashboard 전체 실패로 번지지 않음
 - API 결과를 source of truth처럼 저장하지 않음
 
-## 추천 시작점
+## 추천 다음 단계
 
-5차 독립 검증과 main 반영이 끝났으므로 6차 `Dashboard Presets`를 진행한다.
+7차 독립 검증과 main 반영이 끝나면 8차 `Locale Extension`을 진행한다.
 
 이유:
 
-- 1~3차에서 사용자 명령, help, CLI 표시 계층을 분리했고 4차에서 큰 그래프 탐색 문제를 줄였다.
-- 5차에서 브라우저 새로고침마다 최신 projection을 만드는 localhost serve 흐름을 추가했다.
-- 다음 사용성 문제는 반복해서 사용하는 긴 dashboard 옵션 조합이므로, 6차에서 프로젝트별 preset 저장·조회·재사용 흐름을 제공한다.
+- 1~3차에서 사용자 명령, help, CLI 표시 계층을 분리했고 4차에서 큰 graph 탐색 문제를 줄였다.
+- 5~6차에서 동적 localhost 화면과 반복 가능한 preset을 추가했다.
+- 7차에서 GitHub 외부 상태를 opt-in으로 연결했으므로, 다음은 현재 내부 catalog를 외부 locale/프로젝트 override 계약으로 확장하는 순서가 적절하다.

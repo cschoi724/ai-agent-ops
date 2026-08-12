@@ -231,6 +231,7 @@ class DashboardServer
     args = ["project", "dashboard", "--target", @target, "--view", @dashboard.fetch(:view), "--level", @dashboard.fetch(:level)]
     args.concat(["--format", "html", "--map", @dashboard.fetch(:map)])
     append_dashboard_scope(args)
+    append_github_status(args)
     if kind == "json"
       args << "--json"
     else
@@ -262,6 +263,14 @@ class DashboardServer
       value = @dashboard.fetch(key)
       args.concat([option, value]) unless value.empty?
     end
+  end
+
+  def append_github_status(args)
+    return unless @dashboard.fetch(:github)
+
+    args << "--github"
+    repository = @dashboard.fetch(:github_repo)
+    args.concat(["--repo", repository]) unless repository.empty?
   end
 
   def run_aiops(*args)
@@ -370,7 +379,9 @@ options = {
     filter_status: "",
     filter_agent: "",
     filter_role: "",
-    filter_workflow: ""
+    filter_workflow: "",
+    github: false,
+    github_repo: ""
   }
 }
 
@@ -390,6 +401,8 @@ OptionParser.new do |parser|
   parser.on("--filter-agent NAME") { |value| options[:dashboard][:filter_agent] = value }
   parser.on("--filter-role ROLE") { |value| options[:dashboard][:filter_role] = value }
   parser.on("--filter-workflow NAME") { |value| options[:dashboard][:filter_workflow] = value }
+  parser.on("--github") { options[:dashboard][:github] = true }
+  parser.on("--repo OWNER/NAME") { |value| options[:dashboard][:github_repo] = value }
 end.parse!
 
 abort("dashboard server requires --aiops") unless options[:aiops]
