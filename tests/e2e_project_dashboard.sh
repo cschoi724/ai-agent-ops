@@ -647,7 +647,7 @@ grep -q '^출시 전 확인$' /tmp/aiops-e2e-user-release.out || {
   printf '%s\n' "user release checklist section missing" >&2
   exit 1
 }
-grep -q '점검 명령: aiops release-check --strict --allow-pending-release' /tmp/aiops-e2e-user-release.out || {
+grep -q '^  점검 명령: aiops release-check --strict --allow-pending-release$' /tmp/aiops-e2e-user-release.out || {
   printf '%s\n' "user release release-check command missing" >&2
   exit 1
 }

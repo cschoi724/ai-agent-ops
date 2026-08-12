@@ -6,11 +6,11 @@ usage_all() {
 aiops - AI Agent Ops project helper
 
 Usage:
-  aiops status [--target DIR] [--level compact|standard|detail] [--color auto|always|never] [--no-color]
-  aiops work [--target DIR] [--level compact|standard|detail] [--format terminal|tree] [--color auto|always|never] [--no-color]
-  aiops risks [--target DIR] [--level compact|standard|detail] [--color auto|always|never] [--no-color]
-  aiops agents [--target DIR] [--level compact|standard|detail] [--color auto|always|never] [--no-color]
-  aiops release [--target DIR] [--level compact|standard|detail] [--github] [--repo OWNER/NAME] [--color auto|always|never] [--no-color]
+  aiops status [--target DIR] [--level compact|standard|detail] [--locale ko|en] [--locale-file FILE] [--color auto|always|never] [--no-color]
+  aiops work [--target DIR] [--level compact|standard|detail] [--format terminal|tree] [--locale ko|en] [--locale-file FILE] [--color auto|always|never] [--no-color]
+  aiops risks [--target DIR] [--level compact|standard|detail] [--locale ko|en] [--locale-file FILE] [--color auto|always|never] [--no-color]
+  aiops agents [--target DIR] [--level compact|standard|detail] [--locale ko|en] [--locale-file FILE] [--color auto|always|never] [--no-color]
+  aiops release [--target DIR] [--level compact|standard|detail] [--github] [--repo OWNER/NAME] [--locale ko|en] [--locale-file FILE] [--color auto|always|never] [--no-color]
   aiops seed [--adapter codex|claude|both] [--mode link|copy] [--target DIR] [--core DIR] [--force]
   aiops doctor [--target DIR] [--strict]
   aiops migrate [--target DIR] [--plan|--apply]
@@ -18,7 +18,7 @@ Usage:
   aiops project snapshot [--target DIR] --json
   aiops project context --role ROLE [--target DIR] [--task TASK_ID] [--json]
   aiops project health [--target DIR] [--json]
-  aiops project dashboard [--target DIR] [--view main|work|risk|agents|release] [--level compact|standard|detail] [--format terminal|tree|mermaid|html] [--map summary|dependencies|swimlane|critical-path|workflow|agents|blockers] [--focus TASK_ID] [--depth N] [--group-by area|agent|role|status|workflow] [--filter-status LIST] [--filter-agent NAME] [--filter-role ROLE] [--filter-workflow NAME] [--github] [--repo OWNER/NAME] [--serve] [--port N] [--refresh N] [--open] [--json] [--output FILE] [--color auto|always|never] [--no-color]
+  aiops project dashboard [--target DIR] [--view main|work|risk|agents|release] [--level compact|standard|detail] [--format terminal|tree|mermaid|html] [--map summary|dependencies|swimlane|critical-path|workflow|agents|blockers] [--focus TASK_ID] [--depth N] [--group-by area|agent|role|status|workflow] [--filter-status LIST] [--filter-agent NAME] [--filter-role ROLE] [--filter-workflow NAME] [--github] [--repo OWNER/NAME] [--locale ko|en] [--locale-file FILE] [--serve] [--port N] [--refresh N] [--open] [--json] [--output FILE] [--color auto|always|never] [--no-color]
   aiops project dashboard --preset NAME [dashboard options]
   aiops project dashboard preset list [--target DIR]
   aiops project dashboard preset show NAME [--target DIR]
@@ -36,6 +36,7 @@ Usage:
   aiops validate workflow-catalog [--target DIR|--core DIR]
   aiops validate project-snapshot FILE
   aiops validate project-dashboard FILE
+  aiops validate dashboard-locale FILE
   aiops validate dashboard-presets FILE
   aiops validate policy-evaluation FILE
   aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
@@ -137,6 +138,15 @@ help_locale() {
   case "$locale" in
     en|en-*|en_*) printf '%s\n' "en" ;;
     *) printf '%s\n' "ko" ;;
+  esac
+}
+
+dashboard_locale() {
+  locale="${1:-ko}"
+  case "$locale" in
+    ko|ko-*|ko_*) printf '%s\n' "ko" ;;
+    en|en-*|en_*) printf '%s\n' "en" ;;
+    *) return 1 ;;
   esac
 }
 
@@ -252,6 +262,7 @@ Examples:
   aiops status
   aiops status --target ./CookLog
   aiops status --level detail
+  aiops status --locale ko
 
 Related:
   aiops work       Active work and owners
@@ -268,6 +279,7 @@ aiops status
   aiops status
   aiops status --target ./CookLog
   aiops status --level detail
+  aiops status --locale en
 
 비슷한 명령:
   aiops work       현재 일감과 담당 확인
@@ -418,6 +430,8 @@ Examples:
   aiops project dashboard --format html --filter-status approved,scoped --filter-agent "iOS Agent" --output dashboard.html
   aiops project dashboard --serve --refresh 10 --open
   aiops project dashboard --view release --github
+  aiops project dashboard --format html --locale ko --output dashboard-ko.html
+  aiops project dashboard --format html --locale-file .ai_project/dashboard_labels.en.json --output dashboard.html
   aiops project dashboard --preset overview
   aiops project dashboard preset list
   aiops project dashboard --view work --format mermaid --map dependencies
@@ -439,6 +453,8 @@ terminal, tree, Mermaid, HTML, JSON 같은 상세 출력을 다루는 고급 대
   aiops project dashboard --format html --filter-status approved,scoped --filter-agent "iOS Agent" --output dashboard.html
   aiops project dashboard --serve --refresh 10 --open
   aiops project dashboard --view release --github
+  aiops project dashboard --format html --locale en --output dashboard-en.html
+  aiops project dashboard --format html --locale-file .ai_project/dashboard_labels.ko.json --output dashboard.html
   aiops project dashboard --preset overview
   aiops project dashboard preset list
   aiops project dashboard --view work --format mermaid --map dependencies
@@ -3458,6 +3474,9 @@ cmd_project() {
       github="no"
       github_repo=""
       github_repo_set="no"
+      locale="${AIOPS_DASHBOARD_LOCALE:-${AIOPS_LOCALE:-ko}}"
+      locale_set="no"
+      locale_file=""
 
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -3531,6 +3550,17 @@ cmd_project() {
             [ "$#" -gt 0 ] || die "--repo requires a value"
             github_repo="$1"
             github_repo_set="yes"
+            ;;
+          --locale)
+            shift
+            [ "$#" -gt 0 ] || die "--locale requires a value"
+            locale="$1"
+            locale_set="yes"
+            ;;
+          --locale-file)
+            shift
+            [ "$#" -gt 0 ] || die "--locale-file requires a value"
+            locale_file="$1"
             ;;
           --serve)
             serve="yes"
@@ -3681,12 +3711,27 @@ cmd_project() {
       esac
 
       target="$(abs_path "$target")"
+      locale="$(dashboard_locale "$locale")" || die "project dashboard --locale supports: ko, en"
+      if [ -n "$locale_file" ]; then
+        case "$locale_file" in
+          /*) ;;
+          *) locale_file="$target/$locale_file" ;;
+        esac
+        locale_file="$(abs_path "$locale_file")"
+        [ -f "$locale_file" ] || die "dashboard locale file not found: $locale_file"
+        "$0" validate dashboard-locale "$locale_file" >/dev/null
+        file_locale="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).fetch("locale")' "$locale_file")"
+        if [ "$locale_set" = "yes" ] && [ "$locale" != "$file_locale" ]; then
+          die "project dashboard --locale does not match --locale-file locale: $file_locale"
+        fi
+        locale="$file_locale"
+      fi
       command -v ruby >/dev/null 2>&1 || die "ruby is required for project dashboard"
       if [ "$serve" = "yes" ]; then
         dashboard_server="$(default_core_dir)/runtime/dashboard_server.rb"
         [ -f "$dashboard_server" ] || die "dashboard server runtime missing: $dashboard_server"
         aiops_executable="$(script_dir)/$(basename "$0")"
-        set -- "$dashboard_server" --aiops "$aiops_executable" --target "$target" --port "$serve_port" --refresh "$serve_refresh" --view "$view" --level "$level" --map "$map" --depth "$depth" --group-by "$group_by"
+        set -- "$dashboard_server" --aiops "$aiops_executable" --target "$target" --port "$serve_port" --refresh "$serve_refresh" --view "$view" --level "$level" --map "$map" --depth "$depth" --group-by "$group_by" --locale "$locale"
         [ -z "$focus" ] || set -- "$@" --focus "$focus"
         [ -z "$filter_status" ] || set -- "$@" --filter-status "$filter_status"
         [ -z "$filter_agent" ] || set -- "$@" --filter-agent "$filter_agent"
@@ -3694,6 +3739,7 @@ cmd_project() {
         [ -z "$filter_workflow" ] || set -- "$@" --filter-workflow "$filter_workflow"
         [ "$github" = "no" ] || set -- "$@" --github
         [ -z "$github_repo" ] || set -- "$@" --repo "$github_repo"
+        [ -z "$locale_file" ] || set -- "$@" --locale-file "$locale_file"
         [ "$serve_open" = "no" ] || set -- "$@" --open
         exec ruby "$@"
       fi
@@ -3737,6 +3783,13 @@ cmd_project() {
           "role" => ARGV[13].to_s,
           "workflow" => ARGV[14].to_s
         }
+        $dashboard_locale = ARGV[15].to_s.empty? ? "ko" : ARGV[15].to_s
+        locale_file = ARGV[16].to_s
+        $dashboard_locale_override = if locale_file.empty?
+                                       {}
+                                     else
+                                       JSON.parse(File.read(locale_file)).fetch("labels", {})
+                                     end
         color_enabled = color_mode == "always" || (color_mode == "auto" && STDOUT.tty? && ENV["NO_COLOR"].to_s.empty?)
 
         def colorize(enabled, text, code)
@@ -5057,11 +5110,14 @@ cmd_project() {
         end
 
         def html_dashboard_locale
-          locale = ENV.fetch("AIOPS_DASHBOARD_LOCALE", "ko").to_s
-          locale.split(/[_.-]/).first
+          $dashboard_locale.to_s.empty? ? "ko" : $dashboard_locale.to_s
         end
 
         def html_label_catalog(locale = html_dashboard_locale)
+          $dashboard_label_catalog_cache ||= {}
+          cache_key = locale.to_s
+          return $dashboard_label_catalog_cache[cache_key] if $dashboard_label_catalog_cache.key?(cache_key)
+
           catalogs = {
             "ko" => {
               "fallback" => {
@@ -5298,10 +5354,281 @@ cmd_project() {
                 "workflow" => "작업 흐름",
                 "agents" => "담당자",
                 "blockers" => "차단/주의"
+              },
+              "ui" => {
+                "project_status" => "%{project} 상태",
+                "project_work" => "%{project} 일감",
+                "project_work_tree" => "%{project} 일감 트리",
+                "project_risks" => "%{project} 위험",
+                "project_agents" => "%{project} 에이전트",
+                "project_release" => "%{project} 출시 준비",
+                "overall_status" => "전체 상태",
+                "blockers_warnings" => "차단 %{blockers}개 / 주의 %{warnings}개",
+                "progress" => "진행률",
+                "completed_progress" => "%{done} / %{total} 완료",
+                "operations" => "운영 상태",
+                "task_work" => "작업 가능",
+                "collaboration" => "협업 상태",
+                "migration" => "마이그레이션",
+                "canonical_status" => "공용 기준 상태",
+                "workflow_policy" => "작업 흐름 정책",
+                "current_work" => "현재 일감",
+                "warnings" => "주의 항목",
+                "blockers" => "차단 항목",
+                "next_recommendations" => "다음 추천",
+                "none" => "없음",
+                "more" => "... %{count}개 더 있음",
+                "active_tasks" => "활성 일감",
+                "status_summary" => "상태 요약",
+                "task_list" => "일감 목록",
+                "role" => "담당 역할",
+                "agent" => "담당 에이전트",
+                "next" => "다음",
+                "workflow" => "작업 유형",
+                "lock" => "잠금",
+                "command" => "명령",
+                "current_tasks" => "현재 일감",
+                "assigned" => "담당",
+                "risk_signals" => "위험 신호",
+                "unresolved_decisions" => "미해결 결정",
+                "task_metadata_missing" => "일감 메타데이터 누락",
+                "task_status_ref_missing" => "일감 기준 SHA 누락",
+                "agent_drift" => "에이전트 drift",
+                "agents" => "에이전트",
+                "agent_counts" => "활성 %{enabled}명 / 보류 %{deferred}명 / 전체 %{total}명",
+                "assigned_tasks" => "담당 일감 %{count}개",
+                "roles" => "역할",
+                "role_unassigned" => "역할 미지정",
+                "tasks_by_role" => "역할별 일감",
+                "release_status" => "출시 상태",
+                "readiness" => "준비 상태",
+                "bootstrap" => "운영 설정",
+                "multi_agent" => "다중 담당자",
+                "release_check" => "출시 전 확인",
+                "approvals" => "사용자 승인",
+                "github_status" => "GitHub 상태",
+                "github_release_status" => "GitHub 출시 상태",
+                "github_connection_status" => "연결 상태",
+                "repository" => "저장소",
+                "branch" => "브랜치",
+                "pull_request" => "Pull Request",
+                "required_checks" => "필수 검사",
+                "latest_ci" => "최근 CI",
+                "latest_release" => "최근 릴리스",
+                "local_version" => "로컬 VERSION",
+                "unavailable_reason" => "확인 불가 사유",
+                "dashboard_title" => "AI Ops 프로젝트 대시보드",
+                "generated_at" => "생성 시각",
+                "how_to_read" => "보는 법",
+                "summary_guide" => "요약 안내",
+                "guide_text" => "상단 카드는 프로젝트 설정, 진행률, 다중 담당자 준비 상태를 빠르게 보여줍니다. 아래 작업 현황은 지금 처리 가능한 일감과 담당 역할/담당자를 정리합니다. 맵은 접었다 펼칠 수 있고, 복잡한 의존성 맵은 +/- 버튼으로 확대하거나 축소해서 봅니다.",
+                "legend_ok" => "초록: 정상 / 완료 / 사용 가능",
+                "legend_active" => "파랑: 진행 대상 / 승인됨",
+                "legend_warn" => "노랑: 주의 / 범위 확정 / 후보",
+                "legend_bad" => "빨강: 차단 / 비활성",
+                "actionable_tasks" => "진행 대상 일감",
+                "actionable_tasks_detail" => "현재 처리 가능한 일감",
+                "multi_agent_status" => "다중 담당자 상태",
+                "collaboration_detail" => "협업 기준 상태",
+                "core_version" => "코어 버전",
+                "release_gate" => "출시 게이트",
+                "local_readiness" => "로컬 준비도 기준",
+                "project_settings" => "프로젝트 설정",
+                "knowledge_mode" => "지식 관리 방식",
+                "current_recorded" => "현재 %{current} / 기록 %{recorded}",
+                "state" => "상태",
+                "initial_setup" => "초기 설정",
+                "task_activity" => "일감 작업",
+                "work_status" => "작업 현황",
+                "task" => "일감",
+                "status" => "상태",
+                "owner" => "담당자",
+                "next_action" => "다음 조치",
+                "agent_status" => "담당자 현황",
+                "enabled_deferred" => "사용 가능 %{enabled}명 / 보류 %{deferred}명",
+                "release_readiness" => "출시 준비",
+                "release_check_command" => "점검 명령",
+                "next_actions" => "다음 조치",
+                "graph_explorer" => "일감 탐색",
+                "graph_explorer_help" => "검색과 필터로 작업 표와 의존성 맵을 함께 좁힙니다.",
+                "shown_count" => "%{count}개 표시",
+                "task_search" => "일감 검색",
+                "task_search_placeholder" => "ID 또는 제목 검색",
+                "all_agents" => "전체 담당자",
+                "all_roles" => "전체 역할",
+                "all_workflows" => "전체 작업 유형",
+                "focus_task" => "중심 일감",
+                "all_flow" => "전체 흐름",
+                "connection_depth" => "연결 깊이",
+                "depth_steps" => "%{count}단계",
+                "show_status" => "상태 표시",
+                "reset" => "초기화",
+                "no_matching_tasks" => "조건에 맞는 진행 일감이 없습니다",
+                "large_graph_warning" => "의존성 맵에 %{count}개 일감이 표시됩니다. 중심 일감과 연결 깊이를 선택하면 더 읽기 쉽습니다.",
+                "no_warning_items" => "주의 항목 없음",
+                "no_blocker_items" => "차단 항목 없음",
+                "capability_unassigned" => "역량 미지정",
+                "no_registered_agents" => "등록된 담당자 없음",
+                "zoom_help" => "확대/축소 후 가로·세로 스크롤로 탐색",
+                "mermaid_source" => "Mermaid 원본 보기",
+                "map_render_failed" => "맵 렌더링 실패: %{message}",
+                "no_matching_map_tasks" => "조건에 맞는 일감 없음",
+                "map_dependencies" => "일감 간 선후관계입니다. 복잡하면 --focus와 --depth로 좁혀 보세요.",
+                "map_dependencies_focused" => "%{focus} 기준 앞뒤 %{depth}단계 의존성입니다.",
+                "map_summary" => "Task를 영역 단위로 접은 요약 맵입니다. 큰 프로젝트는 여기서 전체 흐름을 먼저 봅니다.",
+                "map_swimlane" => "%{group} 기준으로 활성 일감을 나눈 작업 보드형 맵입니다.",
+                "map_critical_path" => "출시/목표 Task까지 필요한 선행 경로를 휴리스틱으로 좁혀 보여줍니다.",
+                "map_workflow" => "상태 전이 흐름과 현재 일감이 놓인 위치입니다.",
+                "map_agents" => "담당자, 역할, 일감 연결입니다.",
+                "map_blockers" => "현재 warning/blocker가 어디에서 발생하는지 보여줍니다.",
+                "map_default" => "관계 맵입니다.",
+                "footer" => "맵은 브라우저에서 Mermaid로 렌더링됩니다. 각 맵 아래의 원본 보기는 다른 도구로 옮기거나 문제를 확인할 때 사용합니다."
+              }
+            },
+            "en" => {
+              "fallback" => {
+                "empty" => "None",
+                "role" => "Role unassigned",
+                "team" => "Team unassigned",
+                "agent" => "Agent unassigned"
+              },
+              "status" => {
+                "ok" => "OK", "warning" => "Warning", "blocked" => "Blocked", "complete" => "Complete",
+                "allowed" => "Allowed", "ready" => "Ready", "recorded_current" => "In sync",
+                "recorded_stale" => "Sync required", "not_recorded" => "Not recorded", "not_required" => "Not required",
+                "not_configured" => "Not configured", "needs_canonical_status_ref" => "Canonical status required",
+                "unresolved" => "Review required", "missing" => "Missing", "partial" => "Partial",
+                "ref_not_found_locally" => "Reference unavailable", "done" => "Done", "true" => "Available",
+                "false" => "Unavailable", "ready_for_release_check" => "Ready for release check",
+                "review_required" => "Review required", "review_needed" => "Review required", "enabled" => "Enabled",
+                "deferred" => "Deferred", "disabled" => "Disabled", "allowed_with_warnings" => "Allowed with warnings",
+                "sync_required" => "Sync required", "migration_needed" => "Migration required", "proposed" => "Proposed",
+                "scoped" => "Scoped", "approved" => "Approved", "in_progress" => "In progress",
+                "verification_ready" => "Ready for verification", "verification_passed" => "Verification passed",
+                "completion_review" => "Completion review", "rework_requested" => "Rework requested",
+                "cancelled" => "Cancelled", "available" => "Available", "unavailable" => "Unavailable",
+                "not_applicable" => "Not applicable", "not_found" => "Not found", "success" => "Passed",
+                "failure" => "Failed", "pending" => "Pending", "queued" => "Queued", "waiting" => "Waiting",
+                "requested" => "Requested", "completed" => "Completed", "neutral" => "Neutral", "skipped" => "Skipped",
+                "timed_out" => "Timed out", "startup_failure" => "Startup failed", "action_required" => "Action required",
+                "stale" => "Stale", "match" => "Version matches", "different" => "Version differs",
+                "local_version_missing" => "Local version missing", "release_missing" => "Release missing",
+                "mergeable" => "Mergeable", "conflicting" => "Conflicting", "unknown" => "Unknown"
+              },
+              "role" => {
+                "Direction Role" => "Product direction", "Lead Role" => "Planning / coordination",
+                "Execution Role" => "Implementation / execution", "Verification Role" => "Verification",
+                "Completion Role" => "Completion decision", "Ops Governance Role" => "Operations governance"
+              },
+              "project_setting" => {
+                "multi_team" => "Multiple teams", "single_team" => "Single team", "standard_vnext" => "Standard workflow",
+                "standard" => "Standard workflow", "context_packs" => "Context packs", "guided_full" => "Guided full setup",
+                "implementation_ready" => "Implementation ready", "path_plus_domain" => "Path and domain ownership",
+                "project_plus_team_board" => "Project and team boards", "pr_required" => "Pull request required"
+              },
+              "workflow" => {
+                "feature" => "Feature development", "docs" => "Documentation", "bugfix" => "Bug fix",
+                "qa" => "Quality verification", "ops" => "Operations", "ops_migration" => "Operations migration"
+              },
+              "next_action" => {
+                "start execution" => "Start implementation", "approve or split" => "Approve or split",
+                "scope or approve" => "Scope or approve", "start verification" => "Start verification",
+                "start completion" => "Start completion review", "review rework" => "Review rework", "no action" => "No next action"
+              },
+              "check" => {
+                "task_metadata_incomplete" => "Task metadata missing", "task_status_ref_missing" => "Task baseline SHA missing",
+                "unresolved_decisions_present" => "Unresolved decisions", "canonical_status_stale" => "Canonical status sync required",
+                "canonical_status_current" => "Canonical status current", "core_version_current" => "Core version current",
+                "migration_needed" => "Migration required", "core_missing" => "AI Ops core missing",
+                "project_config_missing" => "Project configuration missing", "adapter_missing" => "Adapter guide missing",
+                "required_file_missing" => "Required file missing", "required_dir_missing" => "Required directory missing",
+                "workflow_catalog_missing" => "Workflow catalog missing"
+              },
+              "approval" => {
+                "commit" => "Commit", "push" => "Push", "create_pr" => "Create pull request", "merge" => "Merge",
+                "deploy" => "Deploy", "external_configuration_changes" => "External configuration change",
+                "task_start" => "Start task", "task_transition" => "Transition task"
+              },
+              "group_by" => {"area" => "Area", "agent" => "Agent", "role" => "Role", "status" => "Status", "workflow" => "Workflow"},
+              "map_title" => {
+                "summary" => "Project summary map", "dependencies" => "Task dependency map", "swimlane" => "Work board map",
+                "critical-path" => "Critical path map", "workflow" => "Workflow map", "agents" => "Agent / role map",
+                "blockers" => "Blocker / warning map"
+              },
+              "map_badge" => {
+                "summary" => "Summary", "dependencies" => "Dependencies", "swimlane" => "Work board",
+                "critical-path" => "Critical path", "workflow" => "Workflow", "agents" => "Agents", "blockers" => "Blockers / warnings"
+              },
+              "ui" => {
+                "project_status" => "%{project} status", "project_work" => "%{project} work", "project_work_tree" => "%{project} work tree",
+                "project_risks" => "%{project} risks", "project_agents" => "%{project} agents", "project_release" => "%{project} release readiness",
+                "overall_status" => "Overall status", "blockers_warnings" => "%{blockers} blockers / %{warnings} warnings",
+                "progress" => "Progress", "completed_progress" => "%{done} / %{total} complete", "operations" => "Operations",
+                "task_work" => "Task work", "collaboration" => "Collaboration", "migration" => "Migration",
+                "canonical_status" => "Canonical status", "workflow_policy" => "Workflow policy", "current_work" => "Current work",
+                "warnings" => "Warnings", "blockers" => "Blockers", "next_recommendations" => "Recommended next steps",
+                "none" => "None", "more" => "... %{count} more", "active_tasks" => "Active tasks", "status_summary" => "Status summary",
+                "task_list" => "Task list", "role" => "Role", "agent" => "Agent", "next" => "Next", "workflow" => "Workflow",
+                "lock" => "Lock", "command" => "Command", "current_tasks" => "Current tasks", "assigned" => "Assigned",
+                "risk_signals" => "Risk signals", "unresolved_decisions" => "Unresolved decisions",
+                "task_metadata_missing" => "Task metadata missing", "task_status_ref_missing" => "Task baseline SHA missing",
+                "agent_drift" => "Agent drift", "agents" => "Agents", "agent_counts" => "%{enabled} enabled / %{deferred} deferred / %{total} total",
+                "assigned_tasks" => "%{count} assigned tasks", "roles" => "Roles", "role_unassigned" => "Role unassigned",
+                "tasks_by_role" => "Tasks by role", "release_status" => "Release status", "readiness" => "Readiness",
+                "bootstrap" => "Bootstrap", "multi_agent" => "Multi-agent", "release_check" => "Release check",
+                "approvals" => "User approvals", "github_status" => "GitHub status", "github_release_status" => "GitHub Release Status", "github_connection_status" => "Connection status", "repository" => "Repository", "branch" => "Branch",
+                "pull_request" => "Pull Request", "required_checks" => "Required checks", "latest_ci" => "Latest CI",
+                "latest_release" => "Latest release", "local_version" => "Local VERSION", "unavailable_reason" => "Unavailable reason",
+                "dashboard_title" => "AI Ops Project Dashboard", "generated_at" => "Generated at", "how_to_read" => "How to read",
+                "summary_guide" => "Summary guide",
+                "guide_text" => "The top cards summarize project setup, progress, and multi-agent readiness. The work section lists actionable tasks and ownership. Maps can be collapsed, expanded, and zoomed for large dependency graphs.",
+                "legend_ok" => "Green: OK / complete / enabled", "legend_active" => "Blue: active / approved",
+                "legend_warn" => "Yellow: warning / scoped / proposed", "legend_bad" => "Red: blocked / disabled",
+                "actionable_tasks" => "Actionable tasks", "actionable_tasks_detail" => "Tasks ready for action",
+                "multi_agent_status" => "Multi-agent status", "collaboration_detail" => "Collaboration readiness",
+                "core_version" => "Core version", "release_gate" => "Release gate", "local_readiness" => "Local readiness",
+                "project_settings" => "Project settings", "knowledge_mode" => "Knowledge mode",
+                "current_recorded" => "Current %{current} / recorded %{recorded}", "state" => "Status", "initial_setup" => "Initial setup",
+                "task_activity" => "Task activity", "work_status" => "Work status", "task" => "Task", "status" => "Status",
+                "owner" => "Owner", "next_action" => "Next action", "agent_status" => "Agent status",
+                "enabled_deferred" => "%{enabled} enabled / %{deferred} deferred", "release_readiness" => "Release readiness",
+                "release_check_command" => "Release check command", "next_actions" => "Next actions",
+                "graph_explorer" => "Task explorer", "graph_explorer_help" => "Use search and filters to narrow the task table and dependency map together.",
+                "shown_count" => "%{count} shown", "task_search" => "Task search", "task_search_placeholder" => "Search by ID or title",
+                "all_agents" => "All agents", "all_roles" => "All roles", "all_workflows" => "All workflows",
+                "focus_task" => "Focus task", "all_flow" => "All tasks", "connection_depth" => "Connection depth",
+                "depth_steps" => "%{count} levels", "show_status" => "Statuses", "reset" => "Reset",
+                "no_matching_tasks" => "No tasks match the current filters", "large_graph_warning" => "%{count} tasks are shown in the dependency map. Select a focus task and depth to make it easier to read.",
+                "no_warning_items" => "No warnings", "no_blocker_items" => "No blockers", "capability_unassigned" => "Capabilities unassigned",
+                "no_registered_agents" => "No registered agents", "zoom_help" => "Zoom, then use horizontal and vertical scrolling to explore",
+                "mermaid_source" => "View Mermaid source", "map_render_failed" => "Map rendering failed: %{message}",
+                "no_matching_map_tasks" => "No matching tasks",
+                "map_dependencies" => "Task dependencies. Use --focus and --depth to narrow a complex graph.",
+                "map_dependencies_focused" => "Dependencies %{depth} levels before and after %{focus}.",
+                "map_summary" => "A project summary grouped by area. Start here to understand a large project.",
+                "map_swimlane" => "Active tasks grouped by %{group}.",
+                "map_critical_path" => "A heuristic view of prerequisite paths to release and goal tasks.",
+                "map_workflow" => "Workflow transitions and the current position of tasks.",
+                "map_agents" => "Connections between agents, roles, and tasks.",
+                "map_blockers" => "Where current warnings and blockers originate.",
+                "map_default" => "Relationship map.",
+                "footer" => "Maps are rendered with Mermaid in the browser. Use the source view to move a map into another tool or troubleshoot rendering."
               }
             }
           }
-          catalogs[locale.to_s] || catalogs["ko"]
+          base = catalogs.fetch(locale.to_s, catalogs.fetch("ko"))
+          overrides = $dashboard_locale_override.is_a?(Hash) ? $dashboard_locale_override : {}
+          merged_catalog = base.each_with_object({}) do |(category, labels), merged|
+            merged[category] = labels.merge(overrides.fetch(category, {}))
+          end.tap do |merged|
+            overrides.each { |category, labels| merged[category] = labels unless merged.key?(category) }
+          end
+          $dashboard_label_catalog_cache[cache_key] = merged_catalog
+        end
+
+        def dashboard_text(key, values = {})
+          template = html_localized_label("ui", key, key.to_s.tr("_", " "))
+          values.reduce(template) { |text, (name, value)| text.gsub("%{#{name}}", value.to_s) }
         end
 
         def html_fallback_label(category)
@@ -5311,7 +5638,7 @@ cmd_project() {
             "team" => "team",
             "agent" => "agent"
           }[category.to_s] || "empty"
-          catalog.fetch("fallback", {}).fetch(fallback_key, "없음")
+          catalog.fetch("fallback", {}).fetch(fallback_key, html_dashboard_locale == "en" ? "None" : "없음")
         end
 
         def html_localized_label(category, value, fallback = nil)
@@ -5386,6 +5713,7 @@ cmd_project() {
 
         def html_check_message(message)
           text = message.to_s
+          return text if html_dashboard_locale == "en"
           case text
           when /\A(\d+) task\(s\) missing status, workflow, or target_role\z/
             "#{$1}개 일감에 상태, 작업 유형 또는 담당 역할 정보가 없습니다"
@@ -5421,24 +5749,26 @@ cmd_project() {
           colorize(enabled, text, "1;36")
         end
 
-        def cli_display_label(category, value, default_label = "확인 필요")
+        def cli_display_label(category, value, default_label = nil)
           text = value.to_s
           label = html_localized_label(category, text)
-          fallback = html_humanize_key(text)
-          return default_label if !text.empty? && label == fallback && text =~ /\A[A-Za-z0-9_ -]+\z/
+          labels = html_label_catalog.fetch(category.to_s, {})
+          known = labels.key?(text) || labels.key?(text.downcase)
+          default_label ||= html_dashboard_locale == "en" ? "Review required" : "확인 필요"
+          return default_label if !text.empty? && !known && text =~ /\A[A-Za-z0-9_ -]+\z/
           label
         end
 
         def cli_status_label(value)
-          cli_display_label("status", value, "확인 필요")
+          cli_display_label("status", value)
         end
 
         def cli_check_label(value)
-          cli_display_label("check", value, "확인 항목")
+          cli_display_label("check", value, html_dashboard_locale == "en" ? "Check" : "확인 항목")
         end
 
         def cli_action_label(value)
-          cli_display_label("approval", value, "조치 필요")
+          cli_display_label("approval", value, html_dashboard_locale == "en" ? "Action required" : "조치 필요")
         end
 
         def cli_status_value(enabled, value)
@@ -5482,6 +5812,13 @@ cmd_project() {
           text = message.to_s
           path = evidence.is_a?(Hash) ? evidence["path"].to_s.strip : ""
           path = text.sub(/ missing(?:;.*)?\z/, "") if path.empty? && text =~ / missing(?:;.*)?\z/
+          if html_dashboard_locale == "en"
+            return "Required file is missing: #{path}" if check_code.to_s == "required_file_missing" && !path.empty?
+            return "Required directory is missing: #{path}" if check_code.to_s == "required_dir_missing" && !path.empty?
+            return "Workflow catalog is unreadable: #{path}" if check_code.to_s == "workflow_catalog_missing" && !path.empty?
+            return "AI Ops core is not connected; install the seed first." if text == "AI Ops core가 연결되지 않았습니다. seed 설치가 필요합니다."
+            return text
+          end
           case check_code.to_s
           when "required_file_missing"
             return "#{path} 파일이 없습니다" unless path.empty?
@@ -5540,12 +5877,13 @@ cmd_project() {
         def cli_status_count_lines(items, color_enabled, limit = 3)
           grouped = cli_task_groups(items)
           statuses = grouped.keys.sort_by { |status| [status_order(status), status] }
-          return ["  없음"] if statuses.empty?
+          return ["  #{dashboard_text("none")}"] if statuses.empty?
           statuses.map do |status|
             tasks = grouped[status]
             preview = tasks.first(limit).map { |task| shorten(task["title"], 28) }.join(", ")
-            preview = "#{preview} 외 #{tasks.length - limit}개" if tasks.length > limit
-            "  #{cli_task_status_value(color_enabled, status)} #{tasks.length}개  #{preview}"
+            preview = html_dashboard_locale == "en" ? "#{preview} and #{tasks.length - limit} more" : "#{preview} 외 #{tasks.length - limit}개" if tasks.length > limit
+            count_text = html_dashboard_locale == "en" ? "#{tasks.length}" : "#{tasks.length}개"
+            "  #{cli_task_status_value(color_enabled, status)} #{count_text}  #{preview}"
           end
         end
 
@@ -5563,39 +5901,39 @@ cmd_project() {
           done_tasks = count(tasks.fetch("by_status", {}), "done")
           total_tasks = tasks["total"].to_i
 
-          puts cli_title(color_enabled, "#{cli_project_name(snapshot)} 상태")
-          puts "전체 상태  #{cli_status_value(color_enabled, health_summary["overall"])}   차단 #{health["blockers"].to_i}개 / 주의 #{health["warnings"].to_i}개"
-          puts "진행률     #{progress_bar(done_tasks, total_tasks, 30, color_enabled)}  #{done_tasks} / #{total_tasks} 완료"
+          puts cli_title(color_enabled, dashboard_text("project_status", project: cli_project_name(snapshot)))
+          puts "#{dashboard_text("overall_status")}  #{cli_status_value(color_enabled, health_summary["overall"])}   #{dashboard_text("blockers_warnings", blockers: health["blockers"].to_i, warnings: health["warnings"].to_i)}"
+          puts "#{dashboard_text("progress")}     #{progress_bar(done_tasks, total_tasks, 30, color_enabled)}  #{dashboard_text("completed_progress", done: done_tasks, total: total_tasks)}"
           puts ""
 
-          puts section(color_enabled, "운영 상태")
-          puts "  작업 가능     #{cli_status_value(color_enabled, readiness["task_work"])}"
-          puts "  협업 상태     #{cli_status_value(color_enabled, readiness["multi_agent"])}"
-          puts "  마이그레이션   #{cli_status_value(color_enabled, readiness["migration"])}"
-          puts "  공용 기준 상태 #{cli_status_value(color_enabled, source_refs["status_ref_state"])}"
-          puts "  작업 흐름 정책 #{html_project_setting_label(project["workflow_policy"])}" unless level == "compact"
+          puts section(color_enabled, dashboard_text("operations"))
+          puts "  #{dashboard_text("task_work")}     #{cli_status_value(color_enabled, readiness["task_work"])}"
+          puts "  #{dashboard_text("collaboration")}     #{cli_status_value(color_enabled, readiness["multi_agent"])}"
+          puts "  #{dashboard_text("migration")}   #{cli_status_value(color_enabled, readiness["migration"])}"
+          puts "  #{dashboard_text("canonical_status")} #{cli_status_value(color_enabled, source_refs["status_ref_state"])}"
+          puts "  #{dashboard_text("workflow_policy")} #{html_project_setting_label(project["workflow_policy"])}" unless level == "compact"
           puts ""
 
-          puts section(color_enabled, "현재 일감")
+          puts section(color_enabled, dashboard_text("current_work"))
           cli_status_count_lines(items, color_enabled).each { |line| puts line }
           puts ""
 
           checks = Array(health_summary["checks"])
           blockers = checks.select { |check| check["level"] == "blocker" }
           warnings = checks.select { |check| check["level"] == "warn" }
-          puts section(color_enabled, "주의 항목")
+          puts section(color_enabled, dashboard_text("warnings"))
           if blockers.empty? && warnings.empty?
-            puts "  없음"
+            puts "  #{dashboard_text("none")}"
           else
             (blockers + warnings).first(level == "detail" ? 8 : 4).each { |check| puts "  - #{cli_check_line(color_enabled, check)}" }
             remaining = blockers.length + warnings.length - (level == "detail" ? 8 : 4)
-            puts "  ... #{remaining}개 더 있음" if remaining.positive?
+            puts "  #{dashboard_text("more", count: remaining)}" if remaining.positive?
           end
           puts ""
 
           next_steps = cli_next_steps(snapshot, health_summary, level == "compact" ? 2 : 4)
           unless next_steps.empty?
-            puts section(color_enabled, "다음 추천")
+            puts section(color_enabled, dashboard_text("next_recommendations"))
             next_steps.each { |step| puts "  - #{step}" }
           end
         end
@@ -5603,27 +5941,28 @@ cmd_project() {
         def render_user_work_dashboard(snapshot, level, color_enabled)
           tasks = snapshot.fetch("tasks", {})
           items = sorted_work_items(active_work_items(tasks))
-          puts cli_title(color_enabled, "#{cli_project_name(snapshot)} 일감")
-          puts "활성 일감  #{items.length} / #{tasks["total"].to_i}개"
+          puts cli_title(color_enabled, dashboard_text("project_work", project: cli_project_name(snapshot)))
+          total_label = html_dashboard_locale == "en" ? tasks["total"].to_i.to_s : "#{tasks["total"].to_i}개"
+          puts "#{dashboard_text("active_tasks")}  #{items.length} / #{total_label}"
           puts ""
 
-          puts section(color_enabled, "상태 요약")
+          puts section(color_enabled, dashboard_text("status_summary"))
           cli_status_count_lines(items, color_enabled).each { |line| puts line }
           puts ""
 
           return if level == "compact"
 
-          puts section(color_enabled, "일감 목록")
+          puts section(color_enabled, dashboard_text("task_list"))
           items.first(level == "detail" ? items.length : 12).each do |task|
             next_action = next_action_label(task)
             puts "  #{cli_task_status_value(color_enabled, task["status"])} #{task["id"]}  #{shorten(task["title"], 44)}"
-            puts "    담당 역할: #{cli_role_value(color_enabled, clean(task["target_role"]))} | 담당 에이전트: #{cli_agent_value(color_enabled, clean(task["target_agent"]))} | 다음: #{cli_next_action_value(color_enabled, next_action)}"
+            puts "    #{dashboard_text("role")}: #{cli_role_value(color_enabled, clean(task["target_role"]))} | #{dashboard_text("agent")}: #{cli_agent_value(color_enabled, clean(task["target_agent"]))} | #{dashboard_text("next")}: #{cli_next_action_value(color_enabled, next_action)}"
             next unless level == "detail"
-            puts "    작업 유형: #{cli_workflow_value(color_enabled, task["workflow"])} | 잠금: #{lock_value(color_enabled, clean(task["locked_by"], "none"))}"
-            puts "    명령: #{next_role_command(task, snapshot["target"])}"
+            puts "    #{dashboard_text("workflow")}: #{cli_workflow_value(color_enabled, task["workflow"])} | #{dashboard_text("lock")}: #{lock_value(color_enabled, clean(task["locked_by"], "none"))}"
+            puts "    #{dashboard_text("command")}: #{next_role_command(task, snapshot["target"])}"
           end
           remaining = items.length - 12
-          puts "  ... #{remaining}개 더 있음" if level != "detail" && remaining.positive?
+          puts "  #{dashboard_text("more", count: remaining)}" if level != "detail" && remaining.positive?
         end
 
         def render_user_work_tree(snapshot, level, color_enabled)
@@ -5631,10 +5970,10 @@ cmd_project() {
           items = sorted_work_items(active_work_items(tasks))
           grouped = cli_task_groups(items)
           statuses = grouped.keys.sort_by { |status| [status_order(status), status] }
-          puts cli_title(color_enabled, "#{cli_project_name(snapshot)} 일감 트리")
-          puts "현재 일감"
+          puts cli_title(color_enabled, dashboard_text("project_work_tree", project: cli_project_name(snapshot)))
+          puts dashboard_text("current_tasks")
           if statuses.empty?
-            puts "`-- 없음"
+            puts "`-- #{dashboard_text("none")}"
             return
           end
           statuses.each_with_index do |status, status_index|
@@ -5648,7 +5987,7 @@ cmd_project() {
               detail_prefix = task_last ? "   " : "|  "
               puts "#{child_prefix}#{task_prefix} #{task["id"]} #{shorten(task["title"], 52)}"
               next if level == "compact"
-              puts "#{child_prefix}#{detail_prefix}`-- 담당: #{cli_agent_value(color_enabled, clean(task["target_agent"]))} / #{cli_role_value(color_enabled, clean(task["target_role"]))}"
+              puts "#{child_prefix}#{detail_prefix}`-- #{dashboard_text("assigned")}: #{cli_agent_value(color_enabled, clean(task["target_agent"]))} / #{cli_role_value(color_enabled, clean(task["target_role"]))}"
             end
           end
         end
@@ -5659,112 +5998,121 @@ cmd_project() {
           task_status_ref_missing = snapshot.dig("tasks", "missing_status_ref_sha")
           task_metadata_missing = health_summary.dig("tasks", "missing_metadata") if task_metadata_missing.nil?
           task_status_ref_missing = health_summary.dig("tasks", "missing_status_ref_sha") if task_status_ref_missing.nil?
-          puts cli_title(color_enabled, "#{cli_project_name(snapshot)} 위험")
-          puts "전체 상태  #{cli_status_value(color_enabled, data["overall"])}   차단 #{data["blockers"].length}개 / 주의 #{data["warnings"].length}개"
+          puts cli_title(color_enabled, dashboard_text("project_risks", project: cli_project_name(snapshot)))
+          puts "#{dashboard_text("overall_status")}  #{cli_status_value(color_enabled, data["overall"])}   #{dashboard_text("blockers_warnings", blockers: data["blockers"].length, warnings: data["warnings"].length)}"
           puts ""
 
-          puts section(color_enabled, "차단 항목")
-          data["blockers"].empty? ? puts("  없음") : data["blockers"].each { |check| puts "  - #{cli_check_line(color_enabled, check)}" }
+          puts section(color_enabled, dashboard_text("blockers"))
+          data["blockers"].empty? ? puts("  #{dashboard_text("none")}") : data["blockers"].each { |check| puts "  - #{cli_check_line(color_enabled, check)}" }
           puts ""
 
-          puts section(color_enabled, "주의 항목")
+          puts section(color_enabled, dashboard_text("warnings"))
           if data["warnings"].empty?
-            puts "  없음"
+            puts "  #{dashboard_text("none")}"
           else
             data["warnings"].first(level == "detail" ? data["warnings"].length : 6).each { |check| puts "  - #{cli_check_line(color_enabled, check)}" }
           end
           puts ""
 
-          puts section(color_enabled, "위험 신호")
-          puts "  공용 기준 상태: #{cli_status_value(color_enabled, data["status_ref_state"])}"
-          puts "  미해결 결정: #{data["unresolved_decisions"]}개"
-          puts "  일감 메타데이터 누락: #{task_metadata_missing.to_i}개"
-          puts "  일감 기준 SHA 누락: #{task_status_ref_missing.to_i}개"
-          puts "  에이전트 drift: #{data["agent_drift"].length}개"
+          puts section(color_enabled, dashboard_text("risk_signals"))
+          suffix = html_dashboard_locale == "en" ? "" : "개"
+          puts "  #{dashboard_text("canonical_status")}: #{cli_status_value(color_enabled, data["status_ref_state"])}"
+          puts "  #{dashboard_text("unresolved_decisions")}: #{data["unresolved_decisions"]}#{suffix}"
+          puts "  #{dashboard_text("task_metadata_missing")}: #{task_metadata_missing.to_i}#{suffix}"
+          puts "  #{dashboard_text("task_status_ref_missing")}: #{task_status_ref_missing.to_i}#{suffix}"
+          puts "  #{dashboard_text("agent_drift")}: #{data["agent_drift"].length}#{suffix}"
         end
 
         def render_user_agents_dashboard(snapshot, level, color_enabled)
           data = agent_dashboard_data(snapshot)
-          puts cli_title(color_enabled, "#{cli_project_name(snapshot)} 에이전트")
-          puts "활성 #{data["enabled"]}명 / 보류 #{data["deferred"]}명 / 전체 #{data["total"]}명"
+          puts cli_title(color_enabled, dashboard_text("project_agents", project: cli_project_name(snapshot)))
+          puts dashboard_text("agent_counts", enabled: data["enabled"], deferred: data["deferred"], total: data["total"])
           puts ""
 
-          puts section(color_enabled, "에이전트")
+          puts section(color_enabled, dashboard_text("agents"))
           data["items"].each do |agent|
             roles = Array(agent["declared_roles"]).map { |role| html_role_label(role) }.join(", ")
-            roles = "역할 미지정" if roles.empty?
+            roles = dashboard_text("role_unassigned") if roles.empty?
             task_count = Array(agent["assigned_active_tasks"]).length
-            puts "  #{cli_agent_value(color_enabled, agent["name"] || agent["id"])}  #{cli_status_value(color_enabled, agent["status"])}  #{cli_team_label(agent["team"])}  담당 일감 #{task_count}개"
-            puts "    역할: #{roles}" unless level == "compact"
+            puts "  #{cli_agent_value(color_enabled, agent["name"] || agent["id"])}  #{cli_status_value(color_enabled, agent["status"])}  #{cli_team_label(agent["team"])}  #{dashboard_text("assigned_tasks", count: task_count)}"
+            puts "    #{dashboard_text("roles")}: #{roles}" unless level == "compact"
           end
           puts ""
 
-          puts section(color_enabled, "역할별 일감")
-          data["role_task_counts"].empty? ? puts("  없음") : data["role_task_counts"].each { |role, count_value| puts "  #{cli_role_value(color_enabled, role)} #{count_value}개" }
+          puts section(color_enabled, dashboard_text("tasks_by_role"))
+          data["role_task_counts"].empty? ? puts("  #{dashboard_text("none")}") : data["role_task_counts"].each { |role, count_value| puts "  #{cli_role_value(color_enabled, role)} #{count_value}#{html_dashboard_locale == "en" ? "" : "개"}" }
         end
 
         def render_user_release_dashboard(snapshot, health_summary, level, color_enabled, github_status = nil)
           data = release_dashboard_data(snapshot, health_summary, github_status)
-          puts cli_title(color_enabled, "#{cli_project_name(snapshot)} 출시 준비")
-          puts "출시 상태  #{cli_status_value(color_enabled, data["gate_status"])}"
+          puts cli_title(color_enabled, dashboard_text("project_release", project: cli_project_name(snapshot)))
+          puts "#{dashboard_text("release_status")}  #{cli_status_value(color_enabled, data["gate_status"])}"
           puts ""
 
-          puts section(color_enabled, "준비 상태")
+          puts section(color_enabled, dashboard_text("readiness"))
           data["readiness"].each do |key, state|
             label = {
-              "bootstrap" => "운영 설정",
-              "task_work" => "작업 가능",
-              "multi_agent" => "협업 상태",
-              "migration" => "마이그레이션"
+              "bootstrap" => dashboard_text("bootstrap"),
+              "task_work" => dashboard_text("task_work"),
+              "multi_agent" => dashboard_text("collaboration"),
+              "migration" => dashboard_text("migration")
             }.fetch(key, html_humanize_identifier(key))
             puts "  #{label}: #{cli_status_value(color_enabled, state)}"
           end
-          puts "  공용 기준 상태: #{cli_status_value(color_enabled, data.dig("canonical_status", "state"))}"
+          puts "  #{dashboard_text("canonical_status")}: #{cli_status_value(color_enabled, data.dig("canonical_status", "state"))}"
           puts ""
 
-          puts section(color_enabled, "출시 전 확인")
+          puts section(color_enabled, dashboard_text("release_check"))
           blockers = Array(data["blockers"]) + Array(data["blocked_actions"])
           if blockers.empty?
-            puts "  차단 항목 없음"
+            puts "  #{dashboard_text("no_blocker_items")}"
           else
             Array(data["blockers"]).each { |check| puts "  - #{cli_check_line(color_enabled, check)}" }
             Array(data["blocked_actions"]).each { |action| puts "  - #{colorize(color_enabled, cli_action_label(action["action"]), "31")}: #{cli_action_reason(action["reason"])}" }
           end
-          puts "  점검 명령: #{data["release_check_command"]}" unless level == "compact"
+          puts "  #{dashboard_text("release_check_command")}: #{data["release_check_command"]}" unless level == "compact"
 
           render_user_github_release(data["github"], color_enabled) if data["github"]
         end
 
         def render_user_github_release(github, color_enabled)
           puts ""
-          puts section(color_enabled, "GitHub 상태")
+          puts section(color_enabled, dashboard_text("github_status"))
           unless %w[available partial].include?(github["status"])
-            puts "  연결 상태: #{cli_status_value(color_enabled, github["status"])}"
-            puts "  확인 내용: #{github_reason_label(github)}"
+            puts "  #{dashboard_text("github_connection_status")}: #{cli_status_value(color_enabled, github["status"])}"
+            puts "  #{dashboard_text("unavailable_reason")}: #{github_reason_label(github)}"
             return
           end
 
-          puts "  저장소: #{github.dig("repository", "name_with_owner")}"
-          puts "  브랜치: #{github["branch"] || "확인되지 않음"}"
+          puts "  #{dashboard_text("repository")}: #{github.dig("repository", "name_with_owner")}"
+          puts "  #{dashboard_text("branch")}: #{github["branch"] || html_status_label("unknown")}"
           pull_request = github["pull_request"] || {}
           if pull_request["status"] == "available"
             puts "  Pull Request: ##{pull_request["number"]} #{pull_request["title"]}"
-            puts "  병합 가능 상태: #{cli_status_value(color_enabled, pull_request["mergeable"])}"
+            puts "  #{dashboard_text("state")}: #{cli_status_value(color_enabled, pull_request["mergeable"])}"
           else
             puts "  Pull Request: #{cli_status_value(color_enabled, pull_request["status"] || "unavailable")}"
           end
           checks = github["required_checks"] || {}
-          puts "  필수 검사: #{cli_status_value(color_enabled, checks["status"])} (통과 #{checks["passing"].to_i} / 실패 #{checks["failing"].to_i} / 대기 #{checks["pending"].to_i} / 건너뜀 #{checks["skipping"].to_i})"
+          check_counts = html_dashboard_locale == "en" ? "passed #{checks["passing"].to_i} / failed #{checks["failing"].to_i} / pending #{checks["pending"].to_i} / skipped #{checks["skipping"].to_i}" : "통과 #{checks["passing"].to_i} / 실패 #{checks["failing"].to_i} / 대기 #{checks["pending"].to_i} / 건너뜀 #{checks["skipping"].to_i}"
+          puts "  #{dashboard_text("required_checks")}: #{cli_status_value(color_enabled, checks["status"])} (#{check_counts})"
           latest_run = github["latest_run"] || {}
           run_state = latest_run["conclusion"].to_s.empty? ? latest_run["status"] : latest_run["conclusion"]
-          puts "  최근 CI: #{cli_status_value(color_enabled, run_state || "unavailable")}#{latest_run["workflow"] ? " - #{latest_run["workflow"]}" : ""}"
+          puts "  #{dashboard_text("latest_ci")}: #{cli_status_value(color_enabled, run_state || "unavailable")}#{latest_run["workflow"] ? " - #{latest_run["workflow"]}" : ""}"
           release = github["release"] || {}
-          puts "  최근 릴리스: #{release["tag"] || html_status_label(release["status"])}"
-          puts "  로컬 VERSION: #{release["local_version"] || "없음"} (#{html_status_label(release["version_state"] || "unknown")})"
+          puts "  #{dashboard_text("latest_release")}: #{release["tag"] || html_status_label(release["status"])}"
+          puts "  #{dashboard_text("local_version")}: #{release["local_version"] || dashboard_text("none")} (#{html_status_label(release["version_state"] || "unknown")})"
         end
 
         def github_reason_label(github)
-          labels = {
+          labels = html_dashboard_locale == "en" ? {
+            "gh_missing" => "GitHub CLI (gh) is not installed.",
+            "auth_required" => "GitHub CLI authentication is required.",
+            "repository_unavailable" => "The GitHub repository could not be determined.",
+            "invalid_repository" => "The repository name must use owner/name format.",
+            "invalid_response" => "The GitHub response could not be read.",
+            "collector_error" => "GitHub status could not be loaded."
+          } : {
             "gh_missing" => "GitHub CLI(gh)가 설치되어 있지 않습니다.",
             "auth_required" => "GitHub CLI 인증이 필요합니다.",
             "repository_unavailable" => "GitHub 저장소를 확인할 수 없습니다.",
@@ -5772,7 +6120,7 @@ cmd_project() {
             "invalid_response" => "GitHub 응답을 읽을 수 없습니다.",
             "collector_error" => "GitHub 상태를 불러오지 못했습니다."
           }
-          labels[github["reason_code"]] || github["reason"] || "GitHub 상태를 확인할 수 없습니다."
+          labels[github["reason_code"]] || github["reason"] || (html_dashboard_locale == "en" ? "GitHub status is unavailable." : "GitHub 상태를 확인할 수 없습니다.")
         end
 
         def render_user_cli_dashboard(snapshot, health_summary, view, level, format, color_enabled, github_status = nil)
@@ -5797,7 +6145,7 @@ cmd_project() {
           status = github["status"] || "unavailable"
           if !%w[available partial].include?(status)
             reason = github_reason_label(github)
-            return %Q(<section class="panel"><div class="panel-head"><h2>GitHub 출시 상태</h2>#{html_badge(status)}</div><p>#{html_escape(reason)}</p></section>)
+            return %Q(<section class="panel"><div class="panel-head"><h2>#{html_escape(dashboard_text("github_release_status"))}</h2>#{html_badge(status)}</div><p>#{html_escape(reason)}</p></section>)
           end
 
           pull_request = github["pull_request"] || {}
@@ -5807,14 +6155,17 @@ cmd_project() {
                        html_status_label(pull_request["status"] || "unavailable")
                      end
           checks = github["required_checks"] || {}
-          checks_value = "#{html_status_label(checks["status"])} · 통과 #{checks["passing"].to_i} / 실패 #{checks["failing"].to_i} / 대기 #{checks["pending"].to_i} / 건너뜀 #{checks["skipping"].to_i}"
+          check_counts = html_dashboard_locale == "en" ? "passed #{checks["passing"].to_i} / failed #{checks["failing"].to_i} / pending #{checks["pending"].to_i} / skipped #{checks["skipping"].to_i}" : "통과 #{checks["passing"].to_i} / 실패 #{checks["failing"].to_i} / 대기 #{checks["pending"].to_i} / 건너뜀 #{checks["skipping"].to_i}"
+          checks_value = "#{html_status_label(checks["status"])} · #{check_counts}"
           latest_run = github["latest_run"] || {}
           run_state = latest_run["conclusion"].to_s.empty? ? latest_run["status"] : latest_run["conclusion"]
           run_value = [latest_run["workflow"], html_status_label(run_state || "unavailable")].compact.join(" · ")
           github_release = github["release"] || {}
-          release_value = "#{github_release["tag"] || html_status_label(github_release["status"])} / 로컬 #{github_release["local_version"] || "VERSION 없음"} · #{html_status_label(github_release["version_state"] || "unknown")}"
+          local_prefix = html_dashboard_locale == "en" ? "local" : "로컬"
+          version_missing = html_dashboard_locale == "en" ? "VERSION missing" : "VERSION 없음"
+          release_value = "#{github_release["tag"] || html_status_label(github_release["status"])} / #{local_prefix} #{github_release["local_version"] || version_missing} · #{html_status_label(github_release["version_state"] || "unknown")}"
 
-          %Q(<section class="panel"><div class="panel-head"><h2>GitHub 출시 상태</h2>#{html_badge(status)}</div><div class="kv"><div>저장소</div><div>#{html_escape(github.dig("repository", "name_with_owner"))}</div><div>브랜치</div><div>#{html_escape(github["branch"] || "확인되지 않음")}</div><div>Pull Request</div><div>#{html_escape(pr_value)}</div><div>필수 검사</div><div>#{html_escape(checks_value)}</div><div>최근 CI</div><div>#{html_escape(run_value)}</div><div>릴리스 버전</div><div>#{html_escape(release_value)}</div></div></section>)
+          %Q(<section class="panel"><div class="panel-head"><h2>#{html_escape(dashboard_text("github_release_status"))}</h2>#{html_badge(status)}</div><div class="kv"><div>#{html_escape(dashboard_text("repository"))}</div><div>#{html_escape(github.dig("repository", "name_with_owner"))}</div><div>#{html_escape(dashboard_text("branch"))}</div><div>#{html_escape(github["branch"] || html_status_label("unknown"))}</div><div>#{html_escape(dashboard_text("pull_request"))}</div><div>#{html_escape(pr_value)}</div><div>#{html_escape(dashboard_text("required_checks"))}</div><div>#{html_escape(checks_value)}</div><div>#{html_escape(dashboard_text("latest_ci"))}</div><div>#{html_escape(run_value)}</div><div>#{html_escape(dashboard_text("latest_release"))}</div><div>#{html_escape(release_value)}</div></div></section>)
         end
 
         def render_html_dashboard(snapshot, health_summary, view, level, selected_map, focus = "", depth = 2, group_by = "area", html_filters = {}, github_status = nil)
@@ -5843,7 +6194,7 @@ cmd_project() {
           rows = all_items.map do |task|
             %Q(<tr class="task-row" data-task-id="#{html_escape(task["id"])}"><td><strong>#{html_escape(task["id"])}</strong><small>#{html_escape(task["title"])}</small></td><td>#{html_badge(task["status"])}</td><td>#{html_escape(html_workflow_label(task["workflow"]))}</td><td>#{html_escape(html_role_label(task["target_role"]))}</td><td>#{html_escape(html_agent_label(task["target_agent"]))}</td><td>#{html_escape(html_next_action_label(task.dig("next", "action")))}</td></tr>)
           end
-          rows << %Q(<tr id="explorer-empty-row" hidden><td colspan="6" class="empty">조건에 맞는 진행 일감이 없습니다</td></tr>)
+          rows << %Q(<tr id="explorer-empty-row" hidden><td colspan="6" class="empty">#{html_escape(dashboard_text("no_matching_tasks"))}</td></tr>)
 
           agent_tokens = all_items.map { |task| task["target_agent"].to_s }.reject(&:empty?).uniq.sort.each_with_index.to_h { |item, index| [item, "agent-#{index}"] }
           role_tokens = all_items.map { |task| task["target_role"].to_s }.reject(&:empty?).uniq.sort.each_with_index.to_h { |item, index| [item, "role-#{index}"] }
@@ -5885,6 +6236,12 @@ cmd_project() {
               "workflow" => workflow_tokens.fetch(requested_workflow, ""),
               "focus" => focus.to_s,
               "depth" => initial_depth
+            },
+            "labels" => {
+              "shown_count" => dashboard_text("shown_count", count: "%{count}"),
+              "large_graph_warning" => dashboard_text("large_graph_warning", count: "%{count}"),
+              "map_render_failed" => dashboard_text("map_render_failed", message: "%{message}"),
+              "no_matching_map_tasks" => dashboard_text("no_matching_map_tasks")
             }
           }
           status_toggles = observed_statuses.map do |status_text|
@@ -5904,55 +6261,43 @@ cmd_project() {
             task = explorer_tasks.find { |candidate| candidate["id"] == item }
             "#{item} · #{shorten(task && task["title"], 42)}"
           end
-          depth_options = (1..4).map { |item| %Q(<option value="#{item}"#{item == initial_depth ? " selected" : ""}>#{item}단계</option>) }.join
-          explorer_controls = %Q(<section class="panel explorer" id="graph-explorer"><div class="panel-head"><div><h2>일감 탐색</h2><p>검색과 필터로 작업 표와 의존성 맵을 함께 좁힙니다.</p></div><span id="explorer-result-count">0개 표시</span></div><div class="explorer-grid"><label class="field search-field"><span>일감 검색</span><input id="explorer-search" type="search" placeholder="ID 또는 제목 검색"></label><label class="field"><span>담당자</span><select id="explorer-agent"><option value="">전체 담당자</option>#{agent_options}</select></label><label class="field"><span>담당 역할</span><select id="explorer-role"><option value="">전체 역할</option>#{role_options}</select></label><label class="field"><span>작업 유형</span><select id="explorer-workflow"><option value="">전체 작업 유형</option>#{workflow_options}</select></label><label class="field focus-field"><span>중심 일감</span><select id="explorer-focus"><option value="">전체 흐름</option>#{focus_options}</select></label><label class="field"><span>연결 깊이</span><select id="explorer-depth">#{depth_options}</select></label></div><div class="status-filters"><strong>상태 표시</strong><div>#{status_toggles}</div><button type="button" id="explorer-reset">초기화</button></div><p class="explorer-warning" id="explorer-warning" hidden></p></section>)
+          depth_options = (1..4).map { |item| %Q(<option value="#{item}"#{item == initial_depth ? " selected" : ""}>#{html_escape(dashboard_text("depth_steps", count: item))}</option>) }.join
+          explorer_controls = %Q(<section class="panel explorer" id="graph-explorer"><div class="panel-head"><div><h2>#{html_escape(dashboard_text("graph_explorer"))}</h2><p>#{html_escape(dashboard_text("graph_explorer_help"))}</p></div><span id="explorer-result-count">#{html_escape(dashboard_text("shown_count", count: 0))}</span></div><div class="explorer-grid"><label class="field search-field"><span>#{html_escape(dashboard_text("task_search"))}</span><input id="explorer-search" type="search" placeholder="#{html_escape(dashboard_text("task_search_placeholder"))}"></label><label class="field"><span>#{html_escape(dashboard_text("owner"))}</span><select id="explorer-agent"><option value="">#{html_escape(dashboard_text("all_agents"))}</option>#{agent_options}</select></label><label class="field"><span>#{html_escape(dashboard_text("role"))}</span><select id="explorer-role"><option value="">#{html_escape(dashboard_text("all_roles"))}</option>#{role_options}</select></label><label class="field"><span>#{html_escape(dashboard_text("workflow"))}</span><select id="explorer-workflow"><option value="">#{html_escape(dashboard_text("all_workflows"))}</option>#{workflow_options}</select></label><label class="field focus-field"><span>#{html_escape(dashboard_text("focus_task"))}</span><select id="explorer-focus"><option value="">#{html_escape(dashboard_text("all_flow"))}</option>#{focus_options}</select></label><label class="field"><span>#{html_escape(dashboard_text("connection_depth"))}</span><select id="explorer-depth">#{depth_options}</select></label></div><div class="status-filters"><strong>#{html_escape(dashboard_text("show_status"))}</strong><div>#{status_toggles}</div><button type="button" id="explorer-reset">#{html_escape(dashboard_text("reset"))}</button></div><p class="explorer-warning" id="explorer-warning" hidden></p></section>)
 
           warning_items = Array(risks["warnings"]).first(8).map do |check|
             %Q(<li><strong>#{html_escape(html_check_label(check["code"]))}</strong><span>#{html_escape(html_check_message(check["message"]))}</span></li>)
           end
-          warning_items << %Q(<li><strong>없음</strong><span>주의 항목 없음</span></li>) if warning_items.empty?
+          warning_items << %Q(<li><strong>#{html_escape(dashboard_text("none"))}</strong><span>#{html_escape(dashboard_text("no_warning_items"))}</span></li>) if warning_items.empty?
 
           blocker_items = Array(risks["blockers"]).first(8).map do |check|
             %Q(<li><strong>#{html_escape(html_check_label(check["code"]))}</strong><span>#{html_escape(html_check_message(check["message"]))}</span></li>)
           end
-          blocker_items << %Q(<li><strong>없음</strong><span>차단 항목 없음</span></li>) if blocker_items.empty?
+          blocker_items << %Q(<li><strong>#{html_escape(dashboard_text("none"))}</strong><span>#{html_escape(dashboard_text("no_blocker_items"))}</span></li>) if blocker_items.empty?
 
           agent_cards = Array(agents["items"]).map do |agent|
             roles = Array(agent["declared_roles"]).map { |role| html_role_label(role) }.join(", ")
             caps = Array(agent["capabilities"]).first(5).map { |capability| html_capability_label(capability) }.join(", ")
-            %Q(<article class="agent-card #{html_status_class(agent["status"])}"><div><strong>#{html_escape(html_agent_label(agent["name"] || agent["id"]))}</strong>#{html_badge(agent["status"])}</div><p>#{html_escape(html_team_label(agent["team"]))}</p><small>#{html_escape(roles.empty? ? "역할 미지정" : roles)}</small><small>#{html_escape(caps.empty? ? "역량 미지정" : caps)}</small></article>)
+            %Q(<article class="agent-card #{html_status_class(agent["status"])}"><div><strong>#{html_escape(html_agent_label(agent["name"] || agent["id"]))}</strong>#{html_badge(agent["status"])}</div><p>#{html_escape(html_team_label(agent["team"]))}</p><small>#{html_escape(roles.empty? ? dashboard_text("role_unassigned") : roles)}</small><small>#{html_escape(caps.empty? ? dashboard_text("capability_unassigned") : caps)}</small></article>)
           end
-          agent_cards << %Q(<article class="agent-card"><strong>등록된 담당자 없음</strong></article>) if agent_cards.empty?
+          agent_cards << %Q(<article class="agent-card"><strong>#{html_escape(dashboard_text("no_registered_agents"))}</strong></article>) if agent_cards.empty?
 
           next_items = next_steps.first(8).map { |step| %Q(<li><code>#{html_escape(step)}</code></li>) }
-          next_items << %Q(<li><code>없음</code></li>) if next_items.empty?
+          next_items << %Q(<li><code>#{html_escape(dashboard_text("none"))}</code></li>) if next_items.empty?
 
           map_sections = map_names.map do |name|
             source = mermaid_sources[name]
             open_attr = name == selected_map ? " open" : ""
-            description =
-              case name
-              when "dependencies"
-                focus.to_s.empty? ? "일감 간 선후관계입니다. 복잡하면 --focus와 --depth로 좁혀 보세요." : "#{focus} 기준 앞뒤 #{depth}단계 의존성입니다."
-              when "summary"
-                "Task를 영역 단위로 접은 요약 맵입니다. 큰 프로젝트는 여기서 전체 흐름을 먼저 봅니다."
-              when "swimlane"
-                "#{html_group_by_label(group_by)} 기준으로 활성 일감을 나눈 작업 보드형 맵입니다."
-              when "critical-path"
-                "출시/목표 Task까지 필요한 선행 경로를 휴리스틱으로 좁혀 보여줍니다."
-              when "workflow"
-                "상태 전이 흐름과 현재 일감이 놓인 위치입니다."
-              when "agents"
-                "담당자, 역할, 일감 연결입니다."
-              when "blockers"
-                "현재 warning/blocker가 어디에서 발생하는지 보여줍니다."
-              else
-                "관계 맵입니다."
-              end
+            description = if name == "dependencies" && !focus.to_s.empty?
+                            dashboard_text("map_dependencies_focused", focus: focus, depth: depth)
+                          elsif name == "swimlane"
+                            dashboard_text("map_swimlane", group: html_group_by_label(group_by))
+                          else
+                            dashboard_text("map_#{name}")
+                          end
             dependency_ids = name == "dependencies" ? %Q( id="dependency-map-panel" data-explorer-map="true") : ""
             graph_id = name == "dependencies" ? %Q( id="dependency-graph") : ""
             source_id = name == "dependencies" ? %Q( id="dependency-source") : ""
-            %Q(<details class="panel map-panel" data-map="#{html_escape(name)}"#{open_attr}#{dependency_ids}><summary class="map-summary"><span><strong>#{html_escape(html_map_title(name))}</strong><em>#{html_escape(description)}</em></span><span class="badge neutral">#{html_escape(html_map_badge_label(name))}</span></summary><div class="map-toolbar"><button type="button" data-zoom="out">-</button><button type="button" data-zoom="reset">100%</button><button type="button" data-zoom="in">+</button><span>확대/축소 후 가로·세로 스크롤로 탐색</span></div><div class="map-viewport"><div class="mermaid"#{graph_id} data-zoom-level="1">#{html_escape(source)}</div></div><details class="source-panel"><summary>Mermaid 원본 보기</summary><pre#{source_id}>#{html_escape(source)}</pre></details></details>)
+            %Q(<details class="panel map-panel" data-map="#{html_escape(name)}"#{open_attr}#{dependency_ids}><summary class="map-summary"><span><strong>#{html_escape(html_map_title(name))}</strong><em>#{html_escape(description)}</em></span><span class="badge neutral">#{html_escape(html_map_badge_label(name))}</span></summary><div class="map-toolbar"><button type="button" data-zoom="out">-</button><button type="button" data-zoom="reset">100%</button><button type="button" data-zoom="in">+</button><span>#{html_escape(dashboard_text("zoom_help"))}</span></div><div class="map-viewport"><div class="mermaid"#{graph_id} data-zoom-level="1">#{html_escape(source)}</div></div><details class="source-panel"><summary>#{html_escape(dashboard_text("mermaid_source"))}</summary><pre#{source_id}>#{html_escape(source)}</pre></details></details>)
           end.join("\n")
 
           explorer_script = %q@
@@ -6018,7 +6363,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const dependencySource = tasks => {
-    if (!tasks.length) return `flowchart LR\n  T_none["조건에 맞는 일감 없음"]\n  class T_none unknown\n\n${data.class_defs.join("\\n")}`;
+    if (!tasks.length) return `flowchart LR\n  T_none["${escapeLabel(data.labels.no_matching_map_tasks)}"]\n  class T_none unknown\n\n${data.class_defs.join("\\n")}`;
     const visible = new Set(tasks.map(task => task.id));
     const lines = ["flowchart LR"];
     tasks.forEach(task => {
@@ -6049,7 +6394,7 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         await window.aiopsMermaid.run({nodes: [graph]});
       } catch (error) {
-        if (version === renderVersion) graph.textContent = `맵 렌더링 실패: ${error.message}`;
+        if (version === renderVersion) graph.textContent = data.labels.map_render_failed.replace("%{message}", error.message);
       }
     });
   };
@@ -6077,10 +6422,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!row.hidden) visibleRows += 1;
     });
     if (emptyRow) emptyRow.hidden = visibleRows > 0;
-    resultCount.textContent = `${visibleTasks.length}개 표시`;
+    resultCount.textContent = data.labels.shown_count.replace("%{count}", String(visibleTasks.length));
     if (visibleTasks.length > 20) {
       warning.hidden = false;
-      warning.textContent = `의존성 맵에 ${visibleTasks.length}개 일감이 표시됩니다. 중심 일감과 연결 깊이를 선택하면 더 읽기 쉽습니다.`;
+      warning.textContent = data.labels.large_graph_warning.replace("%{count}", String(visibleTasks.length));
     } else {
       warning.hidden = true;
       warning.textContent = "";
@@ -6108,48 +6453,49 @@ document.addEventListener("DOMContentLoaded", () => {
 
           [
             "<!doctype html>",
-            "<html lang=\"ko\">",
+            "<html lang=\"#{html_escape(html_dashboard_locale)}\">",
             "<head>",
             "<meta charset=\"utf-8\">",
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
-            "<title>AI Ops 프로젝트 대시보드 - #{html_escape(project["name"])}</title>",
+            "<title>#{html_escape(dashboard_text("dashboard_title"))} - #{html_escape(project["name"])}</title>",
             "<style>",
             ":root{color-scheme:light;--bg:#f8fafc;--panel:#ffffff;--ink:#0f172a;--muted:#64748b;--line:#dbe3ef;--ok:#15803d;--ok-bg:#dcfce7;--warn:#b45309;--warn-bg:#fef3c7;--bad:#b91c1c;--bad-bg:#fee2e2;--active:#1d4ed8;--active-bg:#dbeafe;--neutral:#475569;--neutral-bg:#f1f5f9;--violet:#6d28d9;--cyan:#0e7490}",
             "*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;line-height:1.45}header{padding:28px 32px 18px;border-bottom:1px solid var(--line);background:linear-gradient(135deg,#ffffff 0%,#eef6ff 100%)}main{max-width:1440px;margin:0 auto;padding:24px 32px 40px}.eyebrow{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.08em}h1{margin:6px 0 8px;font-size:32px;letter-spacing:0}h2{margin:0;font-size:18px}p{margin:4px 0;color:var(--muted)}code,pre{font-family:SFMono-Regular,Consolas,monospace}.grid{display:grid;gap:16px}.metrics{grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin:22px 0}.metric,.panel,.agent-card{background:var(--panel);border:1px solid var(--line);border-radius:8px}.metric{padding:16px;border-left:5px solid var(--neutral)}.metric span{display:block;color:var(--muted);font-size:13px}.metric strong{display:block;margin-top:6px;font-size:24px}.metric.ok{border-left-color:var(--ok)}.metric.warn{border-left-color:var(--warn)}.metric.bad{border-left-color:var(--bad)}.metric.active{border-left-color:var(--active)}.panel{padding:18px;margin:16px 0}.panel-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}.panel-head span{color:var(--muted);font-size:13px}.two{grid-template-columns:minmax(0,1.4fr) minmax(280px,.6fr)}.progress{height:12px;background:#e2e8f0;border-radius:999px;overflow:hidden}.progress div{height:100%;background:linear-gradient(90deg,#16a34a,#0891b2);width:#{progress_pct}%}.badge{display:inline-flex;align-items:center;white-space:nowrap;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:700}.badge.ok{background:var(--ok-bg);color:var(--ok)}.badge.warn{background:var(--warn-bg);color:var(--warn)}.badge.bad{background:var(--bad-bg);color:var(--bad)}.badge.active{background:var(--active-bg);color:var(--active)}.badge.neutral{background:var(--neutral-bg);color:var(--neutral)}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.05em}td small{display:block;color:var(--muted);margin-top:2px}.empty{text-align:center;color:var(--muted)}ul.clean{list-style:none;padding:0;margin:0}ul.clean li{display:grid;grid-template-columns:minmax(120px,.4fr) minmax(0,1fr);gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}.agent-grid{grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}.agent-card{padding:14px;border-left:5px solid var(--neutral)}.agent-card.ok{border-left-color:var(--ok)}.agent-card.warn{border-left-color:var(--warn)}.agent-card.bad{border-left-color:var(--bad)}.agent-card.active{border-left-color:var(--active)}.agent-card div{display:flex;justify-content:space-between;gap:10px;align-items:center}.agent-card small{display:block;color:var(--muted);margin-top:6px}.help{border-left:5px solid var(--cyan)}.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.map-panel{overflow:hidden}.map-summary{display:flex;justify-content:space-between;gap:16px;align-items:center;cursor:pointer;color:var(--ink);list-style:none}.map-summary::-webkit-details-marker{display:none}.map-summary strong{display:block;font-size:18px}.map-summary em{display:block;margin-top:4px;color:var(--muted);font-style:normal;font-weight:400}.map-toolbar{display:flex;align-items:center;gap:8px;margin:12px 0;color:var(--muted);font-size:13px}.map-toolbar button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:6px;padding:6px 10px;font-weight:700;cursor:pointer}.map-toolbar button:hover{border-color:var(--active);color:var(--active)}.map-viewport{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:680px;min-height:260px}.mermaid{display:inline-block;min-width:900px;padding:16px;transform-origin:top left;transition:transform .12s ease}details.source-panel{margin-top:10px}details{margin-top:10px}summary{cursor:pointer;color:var(--active);font-weight:700}pre{overflow:auto;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:14px;font-size:12px}.kv{display:grid;grid-template-columns:160px minmax(0,1fr);gap:8px}.kv div{padding:6px 0;border-bottom:1px solid var(--line)}.footer{margin-top:24px;color:var(--muted);font-size:13px}@media(max-width:820px){header{padding:22px 18px}main{padding:18px}.two{grid-template-columns:1fr}.kv{grid-template-columns:1fr}th:nth-child(3),td:nth-child(3),th:nth-child(4),td:nth-child(4){display:none}.mermaid{min-width:720px}}",
+            "html,body{max-width:100%;overflow-x:hidden}.grid,.panel,.metric,.agent-card{min-width:0}header p,.kv div{overflow-wrap:anywhere}.table-scroll{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}.table-scroll table{min-width:720px;table-layout:fixed}.table-scroll th,.table-scroll td{overflow-wrap:anywhere}.table-scroll th:nth-child(1){width:28%}.table-scroll th:nth-child(2){width:12%}.table-scroll th:nth-child(3){width:14%}.table-scroll th:nth-child(4){width:14%}.table-scroll th:nth-child(5){width:14%}.table-scroll th:nth-child(6){width:18%}@media(max-width:820px){.table-scroll table{min-width:560px}.table-scroll th:nth-child(1){width:38%}.table-scroll th:nth-child(2){width:18%}.table-scroll th:nth-child(5){width:18%}.table-scroll th:nth-child(6){width:26%}}",
             ".explorer{border-left:5px solid var(--violet)}.explorer .panel-head>div{min-width:0}.explorer-grid{display:grid;grid-template-columns:minmax(220px,1.5fr) repeat(3,minmax(150px,1fr));gap:12px}.field{display:flex;flex-direction:column;gap:6px;min-width:0}.field span,.status-filters>strong{font-size:12px;color:var(--muted);font-weight:700}.field input,.field select{width:100%;height:40px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);padding:0 10px;font:inherit}.field input:focus,.field select:focus{outline:2px solid var(--active-bg);border-color:var(--active)}.focus-field{grid-column:span 2}.status-filters{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.status-filters>div{display:flex;flex-wrap:wrap;gap:8px;flex:1}.filter-toggle{display:inline-flex;align-items:center;gap:5px;font-size:13px}.filter-toggle input{accent-color:var(--active)}#explorer-reset{height:34px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);padding:0 12px;font-weight:700;cursor:pointer}#explorer-reset:hover{border-color:var(--active);color:var(--active)}.explorer-warning{margin-top:12px;padding:10px 12px;border-left:4px solid var(--warn);background:var(--warn-bg);color:#78350f}@media(max-width:980px){.explorer-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.search-field,.focus-field{grid-column:span 2}}@media(max-width:620px){.explorer-grid{grid-template-columns:1fr}.search-field,.focus-field{grid-column:span 1}.status-filters{align-items:flex-start;flex-direction:column}}",
             "</style>",
             "</head>",
             "<body>",
-            "<header><div class=\"eyebrow\">AI Ops 프로젝트 대시보드</div><h1>#{html_escape(project["name"])}</h1><p>생성 시각 #{html_escape(projection["generated_at"])} · #{html_escape(projection["target"])}</p></header>",
+            "<header><div class=\"eyebrow\">#{html_escape(dashboard_text("dashboard_title"))}</div><h1>#{html_escape(project["name"])}</h1><p>#{html_escape(dashboard_text("generated_at"))} #{html_escape(projection["generated_at"])} · #{html_escape(projection["target"])}</p></header>",
             "<main>",
-            "<section class=\"panel help\"><div class=\"panel-head\"><h2>보는 법</h2><span>요약 안내</span></div><p>상단 카드는 프로젝트 설정, 진행률, 다중 담당자 준비 상태를 빠르게 보여줍니다. 아래 작업 현황은 지금 처리 가능한 일감과 담당 역할/담당자를 정리합니다. 맵은 접었다 펼칠 수 있고, 복잡한 의존성 맵은 +/- 버튼으로 확대하거나 축소해서 봅니다.</p><div class=\"legend\"><span class=\"badge ok\">초록: 정상 / 완료 / 사용 가능</span><span class=\"badge active\">파랑: 진행 대상 / 승인됨</span><span class=\"badge warn\">노랑: 주의 / 범위 확정 / 후보</span><span class=\"badge bad\">빨강: 차단 / 비활성</span></div></section>",
+            "<section class=\"panel help\"><div class=\"panel-head\"><h2>#{html_escape(dashboard_text("how_to_read"))}</h2><span>#{html_escape(dashboard_text("summary_guide"))}</span></div><p>#{html_escape(dashboard_text("guide_text"))}</p><div class=\"legend\"><span class=\"badge ok\">#{html_escape(dashboard_text("legend_ok"))}</span><span class=\"badge active\">#{html_escape(dashboard_text("legend_active"))}</span><span class=\"badge warn\">#{html_escape(dashboard_text("legend_warn"))}</span><span class=\"badge bad\">#{html_escape(dashboard_text("legend_bad"))}</span></div></section>",
             "<section class=\"metrics grid\">",
-            html_metric_card("전체 상태", html_status_label(status["overall"]), "차단 #{status["blockers"]}개, 주의 #{status["warnings"]}개", status["overall"]),
-            html_metric_card("진행률", "#{progress_pct}%", "#{progress["done_tasks"]} / #{progress["total_tasks"]} 완료", progress_pct >= 80 ? "ok" : "warning"),
-            html_metric_card("진행 대상 일감", progress["active_tasks"], "현재 처리 가능한 일감", progress["active_tasks"].to_i.zero? ? "ok" : "active"),
-            html_metric_card("다중 담당자 상태", html_status_label(readiness["multi_agent"]), "협업 기준 상태", readiness["multi_agent"]),
-            html_metric_card("마이그레이션", html_status_label(readiness["migration"]), "core #{project["core_version"]}", readiness["migration"]),
-            html_metric_card("출시 게이트", html_status_label(release["gate_status"]), "로컬 준비도 기준", release["gate_status"]),
+            html_metric_card(dashboard_text("overall_status"), html_status_label(status["overall"]), dashboard_text("blockers_warnings", blockers: status["blockers"], warnings: status["warnings"]), status["overall"]),
+            html_metric_card(dashboard_text("progress"), "#{progress_pct}%", dashboard_text("completed_progress", done: progress["done_tasks"], total: progress["total_tasks"]), progress_pct >= 80 ? "ok" : "warning"),
+            html_metric_card(dashboard_text("actionable_tasks"), progress["active_tasks"], dashboard_text("actionable_tasks_detail"), progress["active_tasks"].to_i.zero? ? "ok" : "active"),
+            html_metric_card(dashboard_text("multi_agent_status"), html_status_label(readiness["multi_agent"]), dashboard_text("collaboration_detail"), readiness["multi_agent"]),
+            html_metric_card(dashboard_text("migration"), html_status_label(readiness["migration"]), "core #{project["core_version"]}", readiness["migration"]),
+            html_metric_card(dashboard_text("release_gate"), html_status_label(release["gate_status"]), dashboard_text("local_readiness"), release["gate_status"]),
             "</section>",
-            "<section class=\"panel\"><div class=\"panel-head\"><h2>진행률</h2><span>#{progress["done_tasks"]} 완료 / 전체 #{progress["total_tasks"]}</span></div><div class=\"progress\"><div></div></div></section>",
+            "<section class=\"panel\"><div class=\"panel-head\"><h2>#{html_escape(dashboard_text("progress"))}</h2><span>#{html_escape(dashboard_text("completed_progress", done: progress["done_tasks"], total: progress["total_tasks"]))}</span></div><div class=\"progress\"><div></div></div></section>",
             "<section class=\"grid two\">",
-            "<article class=\"panel\"><div class=\"panel-head\"><h2>프로젝트 설정</h2><span>#{html_escape(html_project_setting_label(project["operating_mode"]))}</span></div><div class=\"kv\"><div>작업 흐름 정책</div><div>#{html_escape(html_project_setting_label(project["workflow_policy"]))}</div><div>지식 관리 방식</div><div>#{html_escape(html_project_setting_label(project["knowledge_mode"]))}</div><div>코어 버전</div><div>현재 #{html_escape(project["core_version"])} / 기록 #{html_escape(project["recorded_core_version"])}</div><div>브랜치</div><div>#{html_escape(git["branch"])} @ #{html_escape(git["head"])}</div><div>공용 기준 상태</div><div>#{html_badge(git["status_ref_state"])} #{html_escape(git["canonical_status_ref"])}</div></div></article>",
-            "<article class=\"panel\"><div class=\"panel-head\"><h2>준비 상태</h2><span>상태</span></div><div class=\"kv\"><div>초기 설정</div><div>#{html_badge(readiness["bootstrap"])}</div><div>일감 작업</div><div>#{html_badge(readiness["task_work"])}</div><div>다중 담당자</div><div>#{html_badge(readiness["multi_agent"])}</div><div>마이그레이션</div><div>#{html_badge(readiness["migration"])}</div></div></article>",
+            "<article class=\"panel\"><div class=\"panel-head\"><h2>#{html_escape(dashboard_text("project_settings"))}</h2><span>#{html_escape(html_project_setting_label(project["operating_mode"]))}</span></div><div class=\"kv\"><div>#{html_escape(dashboard_text("workflow_policy"))}</div><div>#{html_escape(html_project_setting_label(project["workflow_policy"]))}</div><div>#{html_escape(dashboard_text("knowledge_mode"))}</div><div>#{html_escape(html_project_setting_label(project["knowledge_mode"]))}</div><div>#{html_escape(dashboard_text("core_version"))}</div><div>#{html_escape(dashboard_text("current_recorded", current: project["core_version"], recorded: project["recorded_core_version"]))}</div><div>#{html_escape(dashboard_text("branch"))}</div><div>#{html_escape(git["branch"])} @ #{html_escape(git["head"])}</div><div>#{html_escape(dashboard_text("canonical_status"))}</div><div>#{html_badge(git["status_ref_state"])} #{html_escape(git["canonical_status_ref"])}</div></div></article>",
+            "<article class=\"panel\"><div class=\"panel-head\"><h2>#{html_escape(dashboard_text("readiness"))}</h2><span>#{html_escape(dashboard_text("state"))}</span></div><div class=\"kv\"><div>#{html_escape(dashboard_text("initial_setup"))}</div><div>#{html_badge(readiness["bootstrap"])}</div><div>#{html_escape(dashboard_text("task_activity"))}</div><div>#{html_badge(readiness["task_work"])}</div><div>#{html_escape(dashboard_text("multi_agent"))}</div><div>#{html_badge(readiness["multi_agent"])}</div><div>#{html_escape(dashboard_text("migration"))}</div><div>#{html_badge(readiness["migration"])}</div></div></article>",
             "</section>",
             explorer_controls,
-            "<section class=\"panel\"><div class=\"panel-head\"><h2>작업 현황</h2><span>진행 대상 #{active_items.length}개</span></div><table><thead><tr><th>일감</th><th>상태</th><th>작업 유형</th><th>역할</th><th>담당자</th><th>다음 조치</th></tr></thead><tbody>#{rows.join}</tbody></table></section>",
+            "<section class=\"panel\"><div class=\"panel-head\"><h2>#{html_escape(dashboard_text("work_status"))}</h2><span>#{html_escape(dashboard_text("actionable_tasks"))} #{active_items.length}</span></div><div class=\"table-scroll\" role=\"region\" aria-label=\"#{html_escape(dashboard_text("work_status"))}\" tabindex=\"0\"><table><thead><tr><th>#{html_escape(dashboard_text("task"))}</th><th>#{html_escape(dashboard_text("status"))}</th><th>#{html_escape(dashboard_text("workflow"))}</th><th>#{html_escape(dashboard_text("role"))}</th><th>#{html_escape(dashboard_text("owner"))}</th><th>#{html_escape(dashboard_text("next_action"))}</th></tr></thead><tbody>#{rows.join}</tbody></table></div></section>",
             map_sections,
             "<section class=\"grid two\">",
-            "<article class=\"panel\"><div class=\"panel-head\"><h2>차단 항목</h2><span>#{Array(risks["blockers"]).length}</span></div><ul class=\"clean\">#{blocker_items.join}</ul></article>",
-            "<article class=\"panel\"><div class=\"panel-head\"><h2>주의 항목</h2><span>#{Array(risks["warnings"]).length}</span></div><ul class=\"clean\">#{warning_items.join}</ul></article>",
+            "<article class=\"panel\"><div class=\"panel-head\"><h2>#{html_escape(dashboard_text("blockers"))}</h2><span>#{Array(risks["blockers"]).length}</span></div><ul class=\"clean\">#{blocker_items.join}</ul></article>",
+            "<article class=\"panel\"><div class=\"panel-head\"><h2>#{html_escape(dashboard_text("warnings"))}</h2><span>#{Array(risks["warnings"]).length}</span></div><ul class=\"clean\">#{warning_items.join}</ul></article>",
             "</section>",
-            "<section class=\"panel\"><div class=\"panel-head\"><h2>담당자 현황</h2><span>사용 가능 #{agents["enabled"]}명 / 보류 #{agents["deferred"]}명</span></div><div class=\"agent-grid grid\">#{agent_cards.join}</div></section>",
+            "<section class=\"panel\"><div class=\"panel-head\"><h2>#{html_escape(dashboard_text("agent_status"))}</h2><span>#{html_escape(dashboard_text("enabled_deferred", enabled: agents["enabled"], deferred: agents["deferred"]))}</span></div><div class=\"agent-grid grid\">#{agent_cards.join}</div></section>",
             "<section class=\"grid two\">",
-            "<article class=\"panel\"><div class=\"panel-head\"><h2>출시 준비</h2><span>#{html_escape(html_status_label(release["gate_status"]))}</span></div><div class=\"kv\"><div>공용 기준 상태</div><div>#{html_badge(git["status_ref_state"])}</div><div>사용자 승인 필요</div><div>#{html_escape(Array(release["required_approvals"]).map { |item| html_approval_label(item) }.join(", "))}</div><div>출시 점검 명령</div><div><code>#{html_escape(release["release_check_command"])}</code></div></div></article>",
-            "<article class=\"panel\"><div class=\"panel-head\"><h2>다음 조치</h2><span>명령</span></div><ul class=\"clean\">#{next_items.join}</ul></article>",
+            "<article class=\"panel\"><div class=\"panel-head\"><h2>#{html_escape(dashboard_text("release_readiness"))}</h2><span>#{html_escape(html_status_label(release["gate_status"]))}</span></div><div class=\"kv\"><div>#{html_escape(dashboard_text("canonical_status"))}</div><div>#{html_badge(git["status_ref_state"])}</div><div>#{html_escape(dashboard_text("approvals"))}</div><div>#{html_escape(Array(release["required_approvals"]).map { |item| html_approval_label(item) }.join(", "))}</div><div>#{html_escape(dashboard_text("release_check_command"))}</div><div><code>#{html_escape(release["release_check_command"])}</code></div></div></article>",
+            "<article class=\"panel\"><div class=\"panel-head\"><h2>#{html_escape(dashboard_text("next_actions"))}</h2><span>#{html_escape(dashboard_text("command"))}</span></div><ul class=\"clean\">#{next_items.join}</ul></article>",
             "</section>",
             github_release_panel,
-            "<p class=\"footer\">맵은 브라우저에서 Mermaid로 렌더링됩니다. 각 맵 아래의 원본 보기는 다른 도구로 옮기거나 문제를 확인할 때 사용합니다.</p>",
+            "<p class=\"footer\">#{html_escape(dashboard_text("footer"))}</p>",
             "</main>",
             "<script type=\"application/json\" id=\"dashboard-explorer-data\">#{html_json_payload(explorer_data)}</script>",
             "<script type=\"module\">import mermaid from \"https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs\"; window.aiopsMermaid=mermaid; mermaid.initialize({startOnLoad:false,securityLevel:\"strict\",theme:\"base\"}); await mermaid.run({querySelector:\".mermaid\"});</script>",
@@ -6308,7 +6654,7 @@ document.addEventListener("DOMContentLoaded", () => {
           puts section(color_enabled, "Next")
           next_steps.first(level == "compact" ? 3 : next_steps.length).each { |step| puts "  - #{step}" }
         end
-      ' "$view" "$format" "$level" "$color" "$map" "$json" "$output" "$focus" "$depth" "$group_by" "$user_cli" "$filter_status" "$filter_agent" "$filter_role" "$filter_workflow"
+      ' "$view" "$format" "$level" "$color" "$map" "$json" "$output" "$focus" "$depth" "$group_by" "$user_cli" "$filter_status" "$filter_agent" "$filter_role" "$filter_workflow" "$locale" "$locale_file"
       ;;
     snapshot)
       target="$(pwd)"
@@ -8579,7 +8925,7 @@ cmd_validate() {
       ' "$catalog"
       info "ok: workflow catalog"
       ;;
-    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets)
+    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets|dashboard-locale)
       file=""
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -8613,6 +8959,10 @@ cmd_validate() {
         dashboard-presets)
           schema="$core/schemas/dashboard_presets.schema.json"
           label="dashboard presets"
+          ;;
+        dashboard-locale)
+          schema="$core/schemas/dashboard_locale.schema.json"
+          label="dashboard locale"
           ;;
         policy-evaluation)
           schema="$core/schemas/policy_evaluation.schema.json"
@@ -8742,6 +9092,12 @@ cmd_validate() {
           end
 
           if value.is_a?(Hash)
+            if schema.key?("minProperties") && value.length < schema["minProperties"].to_i
+              errors << "#{path}: fewer than minProperties #{schema["minProperties"]}"
+            end
+            if schema.key?("maxProperties") && value.length > schema["maxProperties"].to_i
+              errors << "#{path}: more than maxProperties #{schema["maxProperties"]}"
+            end
             if schema["propertyNames"].is_a?(Hash)
               value.each_key do |key|
                 validate_schema(key, schema["propertyNames"], "#{path}.#{key}", errors)
@@ -11376,6 +11732,7 @@ cmd_release_check() {
     "$core/schemas/project_snapshot.schema.json" \
     "$core/schemas/project_dashboard.schema.json" \
     "$core/schemas/dashboard_presets.schema.json" \
+    "$core/schemas/dashboard_locale.schema.json" \
     "$core/schemas/policy_rules.schema.json" \
     "$core/schemas/policy_evaluation.schema.json" \
     "$core/schemas/action_plan.schema.json" \
@@ -11743,6 +12100,9 @@ cmd_user_dashboard_view() {
   format="terminal"
   github="no"
   github_repo=""
+  locale="${AIOPS_DASHBOARD_LOCALE:-${AIOPS_LOCALE:-ko}}"
+  locale_set="no"
+  locale_file=""
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -11788,11 +12148,22 @@ cmd_user_dashboard_view() {
         [ "$#" -gt 0 ] || die "--repo requires a value"
         github_repo="$1"
         ;;
+      --locale)
+        shift
+        [ "$#" -gt 0 ] || die "--locale requires a value"
+        locale="$1"
+        locale_set="yes"
+        ;;
+      --locale-file)
+        shift
+        [ "$#" -gt 0 ] || die "--locale-file requires a value"
+        locale_file="$1"
+        ;;
       --view|--map|--focus|--depth|--group-by|--filter-status|--filter-agent|--filter-role|--filter-workflow|--preset|--json|--output)
         die "aiops $user_cmd does not support $1; use aiops project dashboard for advanced options"
         ;;
       -h|--help)
-        usage_command_help "$user_cmd" "${AIOPS_LOCALE:-ko}"
+        usage_command_help "$user_cmd" "$locale"
         exit 0
         ;;
       *)
@@ -11807,6 +12178,8 @@ cmd_user_dashboard_view() {
   [ "$allow_format" = "no" ] || set -- "$@" --format "$format"
   [ "$github" = "no" ] || set -- "$@" --github
   [ -z "$github_repo" ] || set -- "$@" --repo "$github_repo"
+  [ "$locale_set" = "no" ] || set -- "$@" --locale "$locale"
+  [ -z "$locale_file" ] || set -- "$@" --locale-file "$locale_file"
   cmd_project dashboard "$@"
 }
 

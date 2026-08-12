@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/dashboard_locale.schema.json",
+  "title": "AI Ops Dashboard Locale",
+  "description": "Project-local user-facing label overrides for AI Ops dashboard rendering.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "locale", "labels"],
+  "properties": {
+    "schema": { "const": "aiops.dashboard_locale.v1" },
+    "locale": { "type": "string", "enum": ["ko", "en"] },
+    "labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "fallback": { "$ref": "#/$defs/category" },
+        "status": { "$ref": "#/$defs/category" },
+        "role": { "$ref": "#/$defs/category" },
+        "team": { "$ref": "#/$defs/category" },
+        "agent": { "$ref": "#/$defs/category" },
+        "project_setting": { "$ref": "#/$defs/category" },
+        "workflow": { "$ref": "#/$defs/category" },
+        "capability": { "$ref": "#/$defs/category" },
+        "next_action": { "$ref": "#/$defs/category" },
+        "check": { "$ref": "#/$defs/category" },
+        "approval": { "$ref": "#/$defs/category" },
+        "group_by": { "$ref": "#/$defs/category" },
+        "map_title": { "$ref": "#/$defs/category" },
+        "map_badge": { "$ref": "#/$defs/category" },
+        "ui": { "$ref": "#/$defs/category" }
+      }
+    }
+  },
+  "$defs": {
+    "category": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000,
+        "pattern": "^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]*$"
+      }
+    }
+  }
+}

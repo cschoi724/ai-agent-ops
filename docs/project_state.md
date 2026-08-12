@@ -78,6 +78,9 @@ aiops project dashboard --serve --port 8765 --refresh 10 --open
 aiops project dashboard --view release --github
 aiops project dashboard --view release --github --repo owner/name
 aiops release --github
+aiops status --locale en
+aiops project dashboard --format html --locale en --output dashboard-en.html
+aiops project dashboard --format html --locale-file .ai_project/dashboard_labels.ko.json --output dashboard.html
 aiops project dashboard --preset overview
 aiops project dashboard preset list
 aiops project dashboard preset show work-current
@@ -143,6 +146,8 @@ Release Dashboard 표시 항목은 release 전 readiness, canonical status, bloc
 - `--preset NAME` (built-in 또는 프로젝트 local 옵션 조합 적용)
 - `--github` (release view에서만 GitHub PR·CI·release 상태 조회)
 - `--repo OWNER/NAME` (`--github`와 함께 조회 repository 명시)
+- `--locale ko|en` (사용자 표시 언어, 기본값 `ko`)
+- `--locale-file FILE` (검증된 프로젝트별 표시 label override)
 - `--output FILE`
 - `--json`
 - `--color auto|always|never`
@@ -150,7 +155,32 @@ Release Dashboard 표시 항목은 release 전 readiness, canonical status, bloc
 
 `--format mermaid`는 현재 `--view work`에서만 지원하며, 터미널에는 렌더링된 그림이 아니라 Mermaid source text를 출력한다. summary map은 Task를 영역 단위로 접은 요약, dependency map은 `depends_on`/`blocks`, swimlane map은 `--group-by` 기준 활성 일감 보드, critical-path map은 출시/목표 Task 중심 선행 경로, workflow map은 표준 상태 흐름, agents map은 target_agent/target_role, blockers map은 health warning/blocker를 Mermaid `flowchart`로 출력한다.
 
-`--format html --output dashboard.html`은 같은 dashboard projection과 Mermaid source를 정적 HTML로 감싸 브라우저에서 시각적으로 볼 수 있게 만든다. HTML은 Mermaid CDN module을 사용해 diagram을 렌더링하며, 각 diagram 아래에는 원본 Mermaid source도 함께 접어 둔다. HTML dashboard에는 한국어 안내, 상태 색상 범례, Agent 상태 색상, map별 접기/펼치기, diagram 확대/축소 버튼이 포함된다. 상태, Role, Team, Agent 표시명, workflow, capability 같은 기계 판독 값은 HTML 표시에서 locale label catalog를 거쳐 사용자가 읽기 쉬운 라벨로 치환한다. 기본 catalog는 `ko`이며, 미등록 값은 원본 의미를 잃지 않도록 사람이 읽을 수 있는 fallback으로 표시한다. HTML에서 `--map`을 지정하지 않으면 큰 dependency graph 대신 `summary` map을 먼저 연다.
+`--format html --output dashboard.html`은 같은 dashboard projection과 Mermaid source를 정적 HTML로 감싸 브라우저에서 시각적으로 볼 수 있게 만든다. HTML은 Mermaid CDN module을 사용해 diagram을 렌더링하며, 각 diagram 아래에는 원본 Mermaid source도 함께 접어 둔다. HTML dashboard에는 상태 색상 범례, Agent 상태 색상, map별 접기/펼치기, diagram 확대/축소 버튼이 포함된다. 상태, Role, workflow, capability 같은 의미형 값은 locale label catalog를 거쳐 사용자가 읽기 쉬운 라벨로 표시한다. 기본 locale은 한국어(`ko`)이고 `--locale en`으로 영어 표시를 선택할 수 있다. Task 제목과 machine projection의 Agent/Team 값은 변경하지 않는다. 사용자 CLI와 Explorer 필터는 프로젝트의 Agent/Team 고유 이름을 보존하며, HTML/Mermaid 시각 label에는 built-in 또는 프로젝트 override catalog의 별칭을 사용할 수 있다. HTML에서 `--map`을 지정하지 않으면 큰 dependency graph 대신 `summary` map을 먼저 연다.
+
+프로젝트별 용어는 `aiops.dashboard_locale.v1` 파일로 일부만 덮어쓸 수 있다. 상대 경로는 target 프로젝트를 기준으로 해석하며, 파일의 `locale`과 명시한 `--locale`이 다르면 오류로 종료한다.
+
+```json
+{
+  "schema": "aiops.dashboard_locale.v1",
+  "locale": "ko",
+  "labels": {
+    "ui": {
+      "dashboard_title": "프로젝트 운영 관제판"
+    },
+    "status": {
+      "approved": "실행 승인"
+    }
+  }
+}
+```
+
+```sh
+aiops validate dashboard-locale .ai_project/dashboard_labels.ko.json
+aiops status --locale-file .ai_project/dashboard_labels.ko.json
+aiops project dashboard --serve --locale en --refresh 10 --open
+```
+
+Locale은 사용자용 CLI, HTML, Local Serve, 시각 맵의 표시 label에만 적용한다. `project dashboard --json`의 key/value, Task metadata, Mermaid 내부 node ID는 locale과 무관하게 유지된다. 미등록 label은 snake_case를 공백으로 바꾸는 readable fallback을 사용한다.
 
 HTML의 `일감 탐색` 패널은 브라우저 안에서 ID/제목 검색, 상태 toggle, 담당자/역할/workflow 필터, 중심 일감과 연결 깊이 1~4단계 선택을 제공한다. 필터는 작업 표와 dependency map에 함께 적용되며, 결과가 큰 경우 중심 일감으로 범위를 줄이라는 안내를 표시한다. 필터용 task/edge 데이터는 생성된 HTML 안에서만 사용하고 target project나 dashboard JSON projection을 수정하지 않는다. `--filter-*` 옵션은 HTML이 처음 열릴 때 적용할 필터를 지정하며 다른 format과 함께 사용하면 오류가 난다.
 

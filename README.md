@@ -107,6 +107,8 @@ YourProject/
 
 자주 쓰는 명령은 `aiops help`, 전체 명령은 `aiops help all`, Agent/자동화용 명령은 `aiops help ai`를 확인한다.
 
+사용자용 dashboard와 HTML은 한국어가 기본이다. 영어 표시는 `aiops status --locale en` 또는 `aiops project dashboard --format html --locale en --output dashboard.html`로 선택한다. 프로젝트별 표시 용어는 검증된 `aiops.dashboard_locale.v1` 파일을 `--locale-file`로 지정한다.
+
 ## Safety Rules
 
 - `.ai/`는 일반 사용자가 직접 수정하지 않는다.
