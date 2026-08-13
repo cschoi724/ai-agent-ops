@@ -359,7 +359,11 @@ Task 시작 시 다음 형태로 추천한다.
 
 ### 10.1 목표
 
-Role Session을 계속 유지할 모델과 실제 Task를 처리할 모델을 구분해 추천한다. 특정 공급자의 모델명을 core 정책에 직접 고정하지 않는다.
+Role Session을 계속 유지할 모델, 실제 Task를 처리할 모델, 독립 검증 모델을 구분하고 현재 실행 환경에서 사용할 수 있는 **실제 모델과 effort**를 추천한다.
+
+사용자에게 `fast`, `balanced`, `deep` 같은 추상 profile만 보여주지 않는다. 이 값은 내부 판단 기준으로만 사용하고 최종 출력에는 Codex 또는 Claude Code에서 선택할 실제 모델, effort, 추천 이유, fallback을 표시한다.
+
+모델과 계정별 가용성은 계속 바뀔 수 있으므로 특정 모델명을 영구 정책으로 고정하지 않는다. core에는 provider adapter와 추천 규칙을 두고 실제 후보는 local model catalog, provider alias, 조직 allowlist와 project override를 기준으로 실행 시점에 해석한다.
 
 ### 10.2 모델 Profile
 
@@ -371,9 +375,47 @@ Role Session을 계속 유지할 모델과 실제 Task를 처리할 모델을 �
 | `independent_review` | 독립 검증, 보안, 회귀, 계약 검토 |
 | `vision` | UI screenshot, 디자인 비교, 시각 QA |
 
-### 10.3 Role 기본 추천
+### 10.3 현재 실제 모델 추천 기준
 
-| Role | 상시 Session | 실제 Task 조건 |
+아래 표는 2026-08-13 공식 model guidance를 기준으로 한 초기 추천값이다. 실제 실행 시에는 Agent 도구의 사용 가능 모델과 조직 allowlist를 먼저 확인한다.
+
+| 작업 | Codex 추천 | Claude Code 추천 |
+|---|---|---|
+| 상태 확인, 단순 문서, 반복 작업 | `gpt-5.6-luna`, effort `low` | `haiku`, effort `low` |
+| 일반 Role Session과 조율 | `gpt-5.6-terra`, effort `medium` | `sonnet`, effort `medium` |
+| 일반 코드 구현 | `gpt-5.3-codex`, effort `high` | `sonnet`, effort `high` |
+| 복잡한 설계, migration, 장애 분석 | `gpt-5.6-sol`, effort `high` 또는 `xhigh` | `opus` 또는 `opusplan`, effort `xhigh` |
+| 가장 어렵고 장시간인 자율 작업 | `gpt-5.6-sol`, effort `xhigh` | 사용 가능하면 `fable`, effort `high` 또는 `xhigh` |
+| 독립 코드·계약 검증 | `gpt-5.6-sol` 또는 `gpt-5.3-codex`, effort `xhigh` | `opus`, effort `xhigh` |
+| UI 구현과 시각 QA | `gpt-5.6-sol`, effort `high` | `sonnet` 또는 `opus`, effort `high` |
+
+Codex 기준:
+
+- `gpt-5.6-sol`은 복잡한 전문 작업과 품질 우선 판단에 사용한다.
+- `gpt-5.6-terra`는 일반 세션의 성능과 비용 균형에 사용한다.
+- `gpt-5.6-luna`는 단순하고 반복적인 고빈도 작업에 사용한다.
+- `gpt-5.3-codex`는 agentic coding과 repository 도구 사용이 중심인 구현에 사용한다.
+- 지원 effort는 모델마다 다르므로 local model catalog가 허용하는 범위에서 선택한다.
+
+Claude Code 기준:
+
+- `haiku`는 빠른 단순 작업에 사용한다.
+- `sonnet`은 일상적인 코딩과 일반 Role Session에 사용한다.
+- `opus`는 복잡한 추론과 독립 검증에 사용한다.
+- `opusplan`은 계획 단계에서 Opus, 실행 단계에서 Sonnet으로 자동 전환하는 경우에 사용한다.
+- `fable`은 조직에서 사용할 수 있을 때 가장 어렵고 장시간인 작업에만 추천한다.
+- alias가 실제로 가리키는 버전은 provider에 따라 다르므로 alias와 resolved model을 모두 기록한다.
+
+공식 기준 문서:
+
+- OpenAI Model Guidance: <https://developers.openai.com/api/docs/guides/latest-model>
+- OpenAI GPT-5.3-Codex: <https://developers.openai.com/api/docs/models/gpt-5.3-codex>
+- OpenAI Codex Configuration: <https://developers.openai.com/codex/config-reference>
+- Claude Code Model Configuration: <https://code.claude.com/docs/en/model-config>
+
+### 10.4 Role 기본 추천
+
+| Role | 내부 기본 Profile | 실제 Task 조건 |
 |---|---|---|
 | Direction Role | `balanced` | 정책 충돌과 복잡한 의사결정은 `deep` |
 | Lead Role | `balanced` | 복잡한 분해, ownership, architecture는 `deep` |
@@ -385,39 +427,104 @@ Role Session을 계속 유지할 모델과 실제 Task를 처리할 모델을 �
 Task projection 후보:
 
 ```yaml
-model_profile:
-  session: balanced
-  task: deep
-  verification: independent_review
-model_reason: shared workflow contract and migration risk
+model_recommendation:
+  provider: codex
+  session: {model: gpt-5.6-terra, effort: medium}
+  task: {model: gpt-5.6-sol, effort: high}
+  verification: {model: gpt-5.6-sol, effort: xhigh}
+  fallback: {model: gpt-5.3-codex, effort: high}
+  reason: shared workflow contract and migration risk
 ```
 
 표시 예시:
 
 ```text
 권장 모델
-- 세션 유지: balanced
-- 이번 작업: deep
-- 독립 검증: independent_review
+- 실행 환경: Codex
+- 세션 유지: gpt-5.6-terra / medium
+- 이번 작업: gpt-5.6-sol / high
+- 독립 검증: gpt-5.6-sol / xhigh
+- 대체 모델: gpt-5.3-codex / high
 - 이유: 공용 schema와 workflow 계약 변경
 ```
 
-### 10.4 Provider mapping
+Claude Code에서는 같은 Task를 다음처럼 표시할 수 있다.
 
-실제 모델명은 adapter 또는 사용자 설정에서 profile에 매핑한다.
+```text
+권장 모델
+- 실행 환경: Claude Code
+- 세션 유지: sonnet / medium
+- 이번 작업: opusplan / xhigh
+- 독립 검증: opus / xhigh
+- 대체 모델: sonnet / high
+- 이유: 복잡한 계획과 공용 workflow 계약 변경
+```
+
+### 10.5 Provider-aware Resolver
+
+추천 절차:
+
+1. 현재 실행 환경이 Codex, Claude Code 또는 custom provider인지 감지
+2. 현재 모델, local model catalog, 조직 allowlist와 project override 확인
+3. Task의 Role, workflow, 운영 profile, 변경 경로와 위험 신호 분석
+4. session, task, verification, delegated worker별 실제 모델과 effort 계산
+5. 사용할 수 없는 모델은 명확히 표시하고 허용된 fallback 선택
+6. 선택에 필요한 실행 방법과 새 세션 필요 여부 안내
+7. 추천 시점의 alias와 resolved model을 transition receipt에 기록
+
+추천 명령 후보:
+
+```sh
+aiops model recommend --role "Execution Role" --task T-001
+aiops model recommend --role "Verification Role" --task T-001 --provider claude-code
+aiops model recommend --role "Lead Role" --task T-001 --json
+```
+
+적용 안내 예시:
+
+```text
+Codex: codex --model gpt-5.3-codex --config model_reasoning_effort=high
+Claude Code: claude --model sonnet --effort high
+```
+
+AI Ops는 현재 세션의 모델을 임의로 변경하지 않는다. 실행 환경이 안전한 model switch API를 제공하면 사용자 또는 orchestration policy가 허용한 범위에서만 전환하고, 그렇지 않으면 새 세션 시작 명령이나 model picker 선택값을 안내한다.
+
+### 10.6 Alias, Pinning과 Provider Mapping
+
+일상 사용은 provider가 관리하는 alias를 우선할 수 있다. 재현성과 규제 준수가 중요한 Strict Task는 exact model ID pinning을 허용한다.
+
+```yaml
+model_resolution:
+  provider: claude_code
+  requested: opus
+  resolved: claude-opus-5
+  effort: xhigh
+  purpose: independent_verification
+  source: provider_alias
+  resolved_at: 2026-08-13T00:00:00Z
+```
+
+Codex는 local model catalog와 `model` / `model_reasoning_effort` 설정을 기준으로 확인한다. Claude Code는 alias, `availableModels`, provider별 model mapping과 effort 지원 범위를 기준으로 확인한다.
+
+프로젝트 override는 공급자별로 분리한다.
 
 ```yaml
 provider_model_map:
-  fast: provider/model-fast
-  balanced: provider/model-balanced
-  deep: provider/model-deep
-  independent_review: provider/model-review
-  vision: provider/model-vision
+  codex:
+    fast: {model: gpt-5.6-luna, effort: low}
+    balanced: {model: gpt-5.6-terra, effort: medium}
+    coding: {model: gpt-5.3-codex, effort: high}
+    deep: {model: gpt-5.6-sol, effort: xhigh}
+  claude_code:
+    fast: {model: haiku, effort: low}
+    balanced: {model: sonnet, effort: medium}
+    coding: {model: sonnet, effort: high}
+    deep: {model: opus, effort: xhigh}
 ```
 
-가용 모델은 변경될 수 있으므로 mapping은 core release와 분리한다. AI Ops는 모델을 강제로 전환하지 않고 추천 profile, 이유, 필요한 capability를 제공한다. adapter가 안전하게 전환을 지원하는 경우에만 실제 모델 선택을 자동화한다.
+가용 모델은 변경될 수 있으므로 project mapping과 provider catalog는 core release와 분리해 갱신할 수 있어야 한다. built-in 추천표에는 기준 날짜와 공식 출처를 기록한다.
 
-보조 worker는 현재 Role Session의 profile을 무조건 상속하지 않는다. 위임 범위와 위험도에 따라 별도 추천하되, 최종 책임과 결과 검토는 원래 Role Session에 남는다.
+보조 worker는 현재 Role Session의 모델을 무조건 상속하지 않는다. 단순 검색 worker에는 비용이 낮은 모델을, 복잡한 분석 worker에는 상위 모델을 추천할 수 있다. 최종 책임과 결과 검토는 원래 Role Session에 남으며 worker 모델이 주 세션보다 강하더라도 독립 Role Session을 대체하지 않는다.
 
 ## 11. 속도 최적화 세부 원칙
 
@@ -542,26 +649,40 @@ provider_model_map:
 
 목표:
 
-- Role과 Task 위험도에 맞는 session/task/verification 모델 profile을 추천한다.
+- 실행 중인 Agent 도구와 Task 위험도에 맞는 session/task/verification 실제 모델, effort와 fallback을 추천한다.
 
 구현 범위:
 
-- provider-neutral model profile catalog
+- `aiops model recommend --role ROLE --task TASK_ID`
+- Codex, Claude Code와 custom provider adapter 감지
+- local model catalog, alias, allowlist, provider mapping 확인
+- provider-neutral 내부 profile과 실제 모델 resolver 분리
 - Role, workflow profile, capability 기반 추천
-- `role prompt`, `task start`, `session-guide` 표시
-- provider adapter mapping과 프로젝트 override
-- delegated worker 추천 규칙
-- 추천 이유와 fallback 표시
+- session/task/verification/delegated worker별 추천
+- model ID 또는 alias, resolved model, effort, fallback과 추천 이유 표시
+- Codex `model` / `model_reasoning_effort` 적용 안내
+- Claude Code `--model` / `--effort`와 alias 적용 안내
+- floating alias와 Strict Task exact pinning 지원
+- `role prompt`, `task start`, `session-guide` 연결
+- 공식 model catalog 기준 날짜와 갱신 경로
+- provider/project override와 JSON contract
 
 검증:
 
-- 같은 Role에서도 단순/복잡 Task 추천이 달라짐
-- Verification은 구현과 독립된 review profile을 추천
-- vision 필요 Task에 시각 capability 표시
-- 미등록 provider mapping에서 안전한 profile fallback
+- 같은 Role에서도 단순/일반/복잡 Task의 실제 모델과 effort가 달라짐
+- Codex에서 coding Task는 `gpt-5.3-codex`, 복잡한 판단은 가용한 `gpt-5.6` 계열 우선 추천
+- Claude Code에서 단순 작업은 `haiku`, 일반 작업은 `sonnet`, 복잡한 계획은 `opus` 또는 `opusplan` 추천
+- 장시간 작업의 `fable`은 실제 가용할 때만 추천
+- Verification은 구현 세션과 구분된 실제 review 모델과 새 세션 필요 여부를 표시
+- vision 필요 Task에 시각 입력 가능 모델과 capability 표시
+- alias가 provider별 실제 모델로 다르게 해석되는 fixture 검증
+- unsupported effort를 해당 모델의 지원 범위로 안전하게 조정
+- 미등록 또는 사용할 수 없는 모델에서 명확한 fallback
 - 사용자 override 우선
-- JSON에는 profile과 reason을 구조적으로 제공
-- 특정 공급자 모델명이 core 정책에 하드코딩되지 않음
+- JSON에는 provider, requested/resolved model, effort, purpose, source, reason과 fallback 제공
+- 기본 추천표 기준 날짜와 공식 출처 확인
+- 모델 catalog 갱신 없이 기존 Task/machine contract가 변하지 않음
+- AI Ops가 사용자 허용 없이 현재 세션 모델을 변경하지 않음
 - 독립 검증 후 계획 완료 판정
 
 ## 13. 공통 검증 게이트
@@ -594,7 +715,7 @@ bin/aiops release-check --strict --allow-pending-release
 - 다중 Role Agent가 자신을 여러 Agent처럼 잘못 보고하지 않는다.
 - Light Task는 Standard 대비 세션 수, 전체 검사 횟수, 보고량이 감소한다.
 - Strict Task는 기존 독립 검증과 release 안전성을 유지한다.
-- 모델 추천에는 session/task/verification 구분과 추천 이유가 포함된다.
+- 모델 추천에는 provider별 실제 session/task/verification 모델, effort, fallback과 추천 이유가 포함된다.
 
 구현 전 baseline과 각 차수 이후 아래 수치를 비교한다.
 
@@ -623,8 +744,10 @@ bin/aiops release-check --strict --allow-pending-release
 4. remote branch 삭제 승인을 Task 단위로 받을지 프로젝트 정책으로 위임할지
 5. transition receipt를 Task 파일에 내장할지 별도 handoff 파일로 둘지
 6. 기존 report template을 유지할지 receipt 기반 상세 report 생성기로 전환할지
-7. model profile mapping을 adapter 설정과 프로젝트 설정 중 어디에 둘지
+7. built-in 실제 모델 추천표, provider adapter와 프로젝트 override의 우선순위
 8. 상태-only 변경의 canonical publish와 CI 실행 기준
+9. 일상 Task에서 floating alias를 사용할 범위와 Strict Task의 exact model pinning 기준
+10. 현재 세션 model switch를 추천만 할지, 지원 adapter에서는 승인 후 자동화할지
 
 ## 17. 권장 다음 단계
 
