@@ -66,6 +66,14 @@
           ],
           "pattern": "^[a-z][a-z0-9_/-]*$"
         },
+        "default_profile": {
+          "type": "string",
+          "enum": [
+            "light",
+            "standard",
+            "strict"
+          ]
+        },
         "statuses": {
           "type": "object",
           "additionalProperties": {
@@ -163,6 +171,15 @@
         },
         "next_role": {
           "$ref": "#/$defs/roleName"
+        },
+        "profiles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["light", "standard", "strict"]
+          },
+          "minItems": 1,
+          "uniqueItems": true
         }
       }
     },

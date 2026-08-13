@@ -11,6 +11,7 @@ require "pathname"
 require "tempfile"
 require "tmpdir"
 require "yaml"
+require_relative "task_risk_profile"
 
 class LifecycleError < StandardError; end
 
@@ -153,6 +154,10 @@ class TaskLifecycle
     @catalog = JSON.parse(File.read(catalog_path))
     @workflow = resolve_workflow(@task["workflow"])
     raise LifecycleError, "workflow not found: #{@task['workflow']}" if @workflow.empty?
+    @risk_profile = TaskRiskProfiles.evaluate(task: @task, target: @target, catalog: @catalog)
+    unless @risk_profile["ready"]
+      raise LifecycleError, "risk profile is not ready: #{@risk_profile['blockers'].join('; ')}"
+    end
   end
 
   def read_front_matter(path)
@@ -180,7 +185,11 @@ class TaskLifecycle
 
   def resolve_transition
     @from = @task["status"].to_s
-    @to = HAPPY_PATH[@from]
+    @to = if @command == "advance" && @from == "in_progress" && @risk_profile["selected_profile"] == "light"
+            "completion_review"
+          else
+            HAPPY_PATH[@from]
+          end
     raise LifecycleError, "no automatic #{@command} transition from #{@from}" unless @to
 
     if @command == "accept" && !ACCEPT_FROM.include?(@from)
@@ -191,7 +200,10 @@ class TaskLifecycle
     end
 
     transitions = Array(@workflow["transitions"])
-    @transition = transitions.find { |entry| entry["from"] == @from && entry["to"] == @to }
+    @transition = transitions.find do |entry|
+      profiles = Array(entry["profiles"])
+      entry["from"] == @from && entry["to"] == @to && (profiles.empty? || profiles.include?(@risk_profile["selected_profile"]))
+    end
     raise LifecycleError, "workflow does not allow automatic transition: #{@from} -> #{@to}" unless @transition
 
     @actor_role = (@options[:role] || @task["target_role"]).to_s
@@ -310,6 +322,7 @@ class TaskLifecycle
 
   def validate_readiness
     check("task", true, "Task metadata loaded")
+    check("risk_profile", true, "#{@risk_profile['selected_profile']} profile selected from #{@risk_profile['selection_source']}")
     validate_dependencies
     validate_sources
     validate_changed_paths
@@ -349,22 +362,19 @@ class TaskLifecycle
   end
 
   def validate_changed_paths
-    base = @task["base_sha"].to_s
-    base = @task["status_ref_sha"].to_s if base.empty?
-    return check("allowed_paths", true, "no Git base recorded; path check deferred") if base.empty?
+    changes = TaskRiskProfiles.git_change_set(@task, @target)
+    return check("allowed_paths", true, "non-Git project; path check uses compatibility mode") unless changes["repository"]
+    if changes["base"] && !changes["base_resolved"]
+      raise LifecycleError, "recorded Git base cannot be resolved: #{changes['base']}; refresh Task base metadata"
+    end
 
-    _resolved, _error, exists = Open3.capture3("git", "-C", @target, "cat-file", "-e", "#{base}^{commit}")
-    raise LifecycleError, "recorded Git base cannot be resolved: #{base}; refresh Task base metadata" unless exists.success?
-
-    output, error, status = Open3.capture3("git", "-C", @target, "diff", "--name-only", base, "--")
-    raise LifecycleError, "cannot inspect changed paths: #{error.strip}" unless status.success?
-    changed = output.lines.map(&:strip).reject(&:empty?)
+    changed = changes["paths"]
     allowed = Array(@task["allowed_paths"]).map { |path| path.to_s.sub(%r{/+\z}, "") }.reject(&:empty?)
     outside = changed.reject do |path|
       path.start_with?(".ai_project/") || allowed.any? { |prefix| prefix == "." || path == prefix || path.start_with?("#{prefix}/") }
     end
     raise LifecycleError, "changed paths outside Task allowed_paths: #{outside.join(', ')}" unless outside.empty?
-    check("allowed_paths", true, "#{changed.length} tracked changed path(s) are within Task scope")
+    check("allowed_paths", true, "#{changed.length} changed path(s) are within Task scope")
   end
 
   def validate_lock
@@ -422,11 +432,14 @@ class TaskLifecycle
 
   def collect_evidence
     @evidence = @options[:evidence].dup
+    if @risk_profile["selected_profile"] == "light" && @from == "in_progress" && @evidence.empty? && @options[:validation_skip_reason].to_s.empty?
+      raise LifecycleError, "Light transition requires targeted validation evidence or --validation-skip-reason"
+    end
     required_path = case @from
                     when "in_progress" then @task["report_to"]
                     when "verification_in_progress" then @task["qa_to"]
                     end
-    if required_path && !required_path.to_s.empty?
+    if required_path && !required_path.to_s.empty? && @risk_profile["selected_profile"] != "light"
       if File.file?(File.join(@target, required_path.to_s))
         @evidence << required_path.to_s
       elsif @evidence.empty? && @options[:validation_skip_reason].to_s.empty?
@@ -470,6 +483,7 @@ class TaskLifecycle
     @receipt = {
       "schema" => "aiops.transition_receipt.v1",
       "task_id" => @task_id,
+      "profile" => @risk_profile["selected_profile"],
       "transition" => { "from" => @from, "to" => @to },
       "actor" => { "agent" => @actor_name, "role" => @actor_role },
       "next" => { "agent" => receipt_next_agent, "role" => receipt_next_role, "action" => @next_action },
@@ -491,6 +505,7 @@ class TaskLifecycle
       "check_only" => @options[:check],
       "ready" => true,
       "task_id" => @task_id,
+      "profile" => @risk_profile["selected_profile"],
       "transition" => @receipt["transition"],
       "actor" => @receipt["actor"],
       "next" => @receipt["next"],
@@ -612,6 +627,7 @@ class TaskLifecycle
 
     originals = {}
     staged = {}
+    tempfiles = []
     applied = []
     begin
       @writes.each do |path, content|
@@ -621,6 +637,7 @@ class TaskLifecycle
                             { content: File.binread(path), mode: stat.mode & 0o777, uid: stat.uid, gid: stat.gid }
                           end
         file = Tempfile.new([".aiops-lifecycle-", ".tmp"], File.dirname(path))
+        tempfiles << file
         file.binmode
         file.chmod(originals[path] ? originals[path][:mode] : 0o644)
         if originals[path]
@@ -657,6 +674,7 @@ class TaskLifecycle
       raise e
     ensure
       staged.each_value { |path| File.delete(path) if File.exist?(path) }
+      tempfiles.each { |file| file.close! rescue nil }
     end
   end
 

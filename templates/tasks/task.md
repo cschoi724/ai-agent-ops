@@ -6,6 +6,8 @@ status: proposed
 type: {{TASK_TYPE}}
 priority: {{PRIORITY}}
 priority_reason: {{PRIORITY_REASON}}
+risk_profile:
+risk_profile_reason:
 org_unit: {{ORG_UNIT}}
 team: {{TEAM}}
 team_lead: {{TEAM_LEAD}}

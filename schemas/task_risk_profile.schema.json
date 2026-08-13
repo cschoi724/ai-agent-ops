@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/task_risk_profile.schema.json",
+  "title": "AI Ops Task Risk Profile",
+  "description": "Risk-based workflow profile recommendation and operational requirements for one Task.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "generated_at",
+    "target",
+    "task_id",
+    "workflow",
+    "ready",
+    "recommended_profile",
+    "requested_profile",
+    "selected_profile",
+    "selection_source",
+    "classification",
+    "path_source",
+    "paths",
+    "signals",
+    "requirements",
+    "validation",
+    "blockers",
+    "metrics"
+  ],
+  "properties": {
+    "schema": { "const": "aiops.task_risk_profile.v1" },
+    "generated_at": { "type": "string", "minLength": 1 },
+    "target": { "type": "string", "minLength": 1 },
+    "task_id": { "type": "string", "pattern": "^T-[0-9]{8}-[0-9]{3,}$" },
+    "workflow": { "type": "string", "minLength": 1 },
+    "ready": { "type": "boolean" },
+    "recommended_profile": { "$ref": "#/$defs/profile" },
+    "requested_profile": {
+      "type": ["string", "null"],
+      "enum": [null, "light", "standard", "strict"]
+    },
+    "selected_profile": { "$ref": "#/$defs/profile" },
+    "selection_source": {
+      "type": "string",
+      "enum": ["automatic", "workflow_default", "task_override", "cli_override"]
+    },
+    "classification": {
+      "type": "string",
+      "enum": ["state_only", "docs_only", "product_code", "mixed", "unknown"]
+    },
+    "path_source": { "type": "string", "enum": ["git_changes", "task_scope"] },
+    "paths": { "$ref": "#/$defs/stringList" },
+    "signals": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "profile", "reason"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "profile": { "$ref": "#/$defs/profile" },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["roles", "independent_verification", "validation_scope", "report_mode", "ci_scope", "gates"],
+      "properties": {
+        "roles": { "$ref": "#/$defs/stringList" },
+        "independent_verification": { "type": "boolean" },
+        "validation_scope": { "type": "string", "enum": ["targeted", "relevant_full", "full_regression"] },
+        "report_mode": { "type": "string", "enum": ["compact_receipt", "compact_receipt_with_validation", "detailed_evidence"] },
+        "ci_scope": { "type": "string", "enum": ["targeted", "relevant", "full"] },
+        "gates": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "validation": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "phase", "command", "reason"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "phase": { "type": "string", "enum": ["task", "pre_completion", "pre_release"] },
+          "command": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "blockers": { "$ref": "#/$defs/stringList" },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["estimated_role_sessions", "validation_step_count", "report_mode"],
+      "properties": {
+        "estimated_role_sessions": { "type": "integer", "minimum": 1 },
+        "validation_step_count": { "type": "integer", "minimum": 1 },
+        "report_mode": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "profile": { "type": "string", "enum": ["light", "standard", "strict"] },
+    "stringList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

@@ -1,6 +1,7 @@
 {
   "schema": "aiops.transition_receipt.v1",
   "task_id": "T-{{DATE_COMPACT}}-001",
+  "profile": "standard",
   "transition": {
     "from": "{{FROM_STATUS}}",
     "to": "{{TO_STATUS}}"

@@ -132,7 +132,14 @@
         },
         "items": {
           "type": "array",
-          "items": { "type": "object" }
+          "items": {
+            "type": "object",
+            "properties": {
+              "risk_profile": { "type": "string", "enum": ["light", "standard", "strict", "invalid"] },
+              "recommended_risk_profile": { "type": "string", "enum": ["light", "standard", "strict"] },
+              "risk_profile_ready": { "type": "boolean" }
+            }
+          }
         }
       }
     },

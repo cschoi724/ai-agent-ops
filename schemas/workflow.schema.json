@@ -39,6 +39,14 @@
         "custom"
       ]
     },
+    "default_profile": {
+      "type": "string",
+      "enum": [
+        "light",
+        "standard",
+        "strict"
+      ]
+    },
     "states": {
       "type": "array",
       "items": {
@@ -127,6 +135,15 @@
         },
         "next_role": {
           "$ref": "#/$defs/roleName"
+        },
+        "profiles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["light", "standard", "strict"]
+          },
+          "minItems": 1,
+          "uniqueItems": true
         },
         "requires_approval": {
           "type": "boolean"

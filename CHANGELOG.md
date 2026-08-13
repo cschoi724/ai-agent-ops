@@ -12,18 +12,24 @@
 
 ### Added
 
+- Add `aiops task profile TASK_ID` with Light, Standard, and Strict workflow recommendations, risk signals, targeted validation argv, Role/report/CI requirements, and `aiops.task_risk_profile.v1` validation.
 - Add `aiops.transition_receipt.v1`, a compact Task transition receipt template, and `aiops validate transition-receipt FILE`.
 - Add `aiops task accept` and `aiops task advance` with dry-run readiness checks, automatic normal-path routing, compact receipts, cross-worktree locking, and rollback-safe Task/handoff/board updates.
 - Add `aiops.task_transition_plan.v1` JSON projection and `aiops validate task-transition-plan FILE`.
 
 ### Changed
 
+- Add optional Task `risk_profile` overrides and workflow `default_profile` values while preventing explicit overrides from lowering schema, security, migration, policy, CI, or release minimums.
+- Integrate calculated profiles into Task status, project snapshot, dashboard work views, and lifecycle routing; Light Tasks can move from Execution to Completion while Standard and Strict retain independent Verification.
 - Define one persistent Agent identity with registry roles interpreted as assigned roles and the current transition Role recorded as `active_role`.
 - Allow continuous same-Agent Role changes when workflow permits while keeping Execution and independent Verification separated by default.
 - Define sender and receiver readiness checks before lifecycle transitions and align Task, QA, and handoff reports around one compact receipt.
 
 ### Fixed
 
+- Keep base-less Task Profile recommendations scoped to Task-owned changes while lifecycle allowed-path checks continue to inspect and block unrelated worktree changes.
+- Enforce workflow Profile restrictions in low-level Task transitions and project context, include current staged, unstaged, and untracked paths when a Task has no Git base, and fail closed on out-of-scope changes.
+- Validate projected Task Profile field types in snapshot and dashboard schemas, cache repeated Git path lookups during snapshot generation, and retain staged lifecycle tempfiles through bundle validation.
 - Fail closed when a recorded Task Git base cannot be resolved, validate root-level source files, preserve rollback file modes, retain same-Agent multi-Role routing, and store immutable per-transition receipts referenced consistently by handoffs.
 - Make Role prompts prefer the Task's enabled `target_agent`, reject Role/ownership conflicts, and require explicit selection when multiple Agents share a Role.
 - Remove remaining workflow instructions that asked Agents to duplicate handoff content in Task files and final responses.

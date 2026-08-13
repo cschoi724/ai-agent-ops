@@ -59,6 +59,25 @@
         "null"
       ]
     },
+    "risk_profile": {
+      "description": "Optional explicit workflow risk profile. Automatic evaluation may raise but never lower this minimum.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "light",
+        "standard",
+        "strict"
+      ]
+    },
+    "risk_profile_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "org_unit": {
       "type": [
         "string",

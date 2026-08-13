@@ -1,6 +1,6 @@
 # Agent Operations Efficiency Improvement Plan
 
-상태: 1차 완료 / 2차 구현 완료·독립 검증 대기
+상태: 1차 완료 / 2차 완료 / 3차 구현 보완 완료·독립 재검증 대기
 대상: Role Session, Task 상태 전이, 보고, 검증, Git 정리, 모델 추천
 기준 버전: v0.14.0
 작성일: 2026-08-13
@@ -591,6 +591,8 @@ provider_model_map:
 
 ### 2차. Transition Automation
 
+구현 상태: 완료, 독립 검증 통과, PR #52로 main 반영
+
 목표:
 
 - 상태 전이와 handoff 생성을 한 명령으로 처리한다.
@@ -625,8 +627,11 @@ provider_model_map:
 - Git common directory의 Task lock으로 서로 다른 worktree와 프로세스의 동시 전이를 차단한다.
 - 기존 `task transition`과 기존 Task/Handoff/receipt schema는 호환 경로로 유지한다.
 - 정상 Execution -> Verification -> Completion, readiness 거부, write rollback, worktree 동시성, stale canonical, CookLog 실제 승인 Task dry run을 검증했다.
+- 독립 재검증에서 High/Medium/Low 이슈 없음과 릴리즈 차단 없음 판정을 받았고 PR #52, merge commit `509e4c8`로 `main`에 반영했다.
 
 ### 3차. Risk-based Workflow Profiles
+
+구현 상태: 구현 보완 완료, 독립 재검증 대기
 
 목표:
 
@@ -651,6 +656,19 @@ provider_model_map:
 - Standard/Strict 독립 검증 계약 유지
 - profile별 시간·명령 수 비교 기록
 - 독립 검증 후 다음 차수 진행
+
+구현 결과 (2026-08-13):
+
+- `aiops task profile TASK_ID [--profile ...] [--json]`과 `aiops.task_risk_profile.v1` schema를 추가했다.
+- Task scope와 `base_sha` 이후 Git 변경 경로를 state-only, docs-only, product-code, mixed로 분류하고 위험 신호별 최소 profile을 계산한다.
+- Task `risk_profile`, workflow `default_profile`, CLI override를 지원하되 명시 override가 자동 최소값보다 낮으면 차단한다.
+- profile별 필수 Role, 독립 검증 여부, report mode, CI scope, gate와 argv 기반 targeted validation 계획을 제공한다.
+- Light lifecycle은 `in_progress -> completion_review`로 직접 연결하고 Standard/Strict는 독립 Verification 흐름을 유지한다.
+- Task status, project snapshot, terminal/HTML dashboard 작업 표에 계산된 profile을 표시한다.
+- 기존 Task는 새 metadata를 필수로 요구하지 않으며 자동 추천을 사용한다.
+- 독립 검증에서 발견된 저수준 전이 Profile 우회와 base 없는 Task의 변경 누락을 차단했다. project context도 같은 Profile 조건을 사용하며 staged, unstaged, untracked 경로를 allowed-path guard에 포함한다.
+- Snapshot/dashboard Profile 필드 타입을 schema로 검증하고, snapshot 한 번 안에서 저장소·untracked·base별 Git 조회 결과를 재사용한다.
+- 병렬 dirty worktree의 무관한 변경이 base-less Task를 일괄 Strict로 올리지 않도록 추천 입력은 Task-owned 변경으로 제한하고, 범위 밖 변경 차단은 lifecycle guard에 유지한다.
 
 ### 4차. Safe Task Close and Branch Cleanup
 
@@ -784,7 +802,7 @@ bin/aiops release-check --strict --allow-pending-release
 
 ## 17. 권장 다음 단계
 
-Project Dashboard 1~9차는 v0.14.0으로 릴리스 및 Homebrew 배포가 완료됐다. 1차 `Unified Lifecycle Contract` 구현 후 독립 검증을 통과하면 2차 `Transition Automation`을 진행한다.
+Project Dashboard 1~9차는 v0.14.0으로 릴리스 및 Homebrew 배포가 완료됐고, 1차 `Unified Lifecycle Contract`와 2차 `Transition Automation`도 main 반영을 완료했다. 현재 3차 `Risk-based Workflow Profiles`의 독립 검증 지적사항을 보완하고 재검증을 준비한다.
 
 이유:
 
