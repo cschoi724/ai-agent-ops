@@ -10,12 +10,38 @@ Role은 AI Ops에서 누가 어떤 책임으로 판단하고 실행하는지를 
 
 Agent는 실행 주체이고, Role은 책임이다. 한 Agent가 여러 Role을 맡을 수 있지만 Task 상태 전이, 승인, 검증, 인계에서는 Role 책임을 분리해서 기록한다.
 
+한 Agent가 여러 Role을 맡아도 Agent 정체성이 여러 개로 나뉘지는 않는다. Agent registry의 `roles` 배열은 그 Agent의 `assigned_roles`이며, 현재 Task에서 실제로 행사하는 책임은 `active_role`이다.
+
+```yaml
+agent: Development Lead Agent
+assigned_roles:
+  - Lead Role
+  - Completion Role
+active_role: Completion Role
+```
+
+- `agent`: 하나의 지속되는 Agent 정체성
+- `assigned_roles`: registry의 `roles` 배열에 등록된 전체 책임 집합
+- `active_role`: 현재 행동과 상태 전이에 사용 중인 Role
+
+상태 전이와 결과 보고에는 Agent 이름과 `active_role`을 함께 남긴다. Role을 바꿔도 다른 Agent가 수행한 것처럼 기록하지 않는다.
+
+Role Session의 Agent 선택 우선순위:
+
+1. Task가 있으면 등록되고 활성화된 `target_agent`
+2. Task 소유권과 충돌하지 않는 명시적 `--agent`
+3. Task가 없고 해당 Role의 enabled 후보가 정확히 한 명일 때 그 Agent
+
+같은 Role 후보가 여러 명이면 첫 번째 Agent를 임의 선택하지 않는다. 후보를 표시하고 `--agent` 또는 `target_agent` 지정을 요구한다. Registry가 없을 때도 가상 기본 Agent 이름을 만들지 않으며 사용자가 Agent를 명시해야 한다.
+
 ## 2. 핵심 구분
 
 | 개념 | 의미 | 기록 위치 |
 |---|---|---|
 | Role | 책임과 권한 | `models/role_model.md`, Task metadata |
 | Agent | Role을 수행하는 세션 또는 도구 | `.ai_project/agent_registry.md` |
+| Assigned Roles | 한 Agent에게 등록된 전체 Role 집합 | `.ai_project/agent_registry.md`의 `roles` |
+| Active Role | 현재 Task 행동에 사용 중인 Role | Task 전이, receipt, handoff |
 | Capability | Agent가 수행 가능한 능력 | `models/capabilities.md`, Task metadata |
 | Team | Role이 작동하는 조직 단위 | `models/team_model.md`, `.ai_project/teams/` |
 
@@ -106,6 +132,8 @@ Verification Role은 구현자가 수행한 자체 테스트와 별개로 동작
 
 작은 프로젝트에서는 Lead Role이 Completion Role을 겸할 수 있다.
 
+Lead Role과 Completion Role이 같은 Agent에 배정된 경우 같은 세션에서 계속할 수 있다. 이때 Agent 이름은 유지하고 `active_role`만 Completion Role로 바꿔 기록한다.
+
 ## 10. Release Role
 
 Release Role은 실제 배포 책임이 있을 때만 활성화한다.
@@ -157,6 +185,7 @@ Ops Governance Role은 제품 방향을 대신 정하지 않는다.
 
 - Role과 Agent 이름을 같은 개념으로 취급하지 않는다.
 - Execution Role이 자기 작업을 최종 완료 승인하지 않는다.
+- Execution Role과 Verification Role은 기본적으로 서로 다른 Agent 또는 독립 Role Session에 배정한다.
 - Verification Role 없이 위험한 코드 변경을 done 처리하지 않는다.
 - Release 책임이 없는데 Release Role을 기본 활성화하지 않는다.
 - Ops Governance Role이 제품 결정을 임의로 확정하지 않는다.
@@ -167,3 +196,4 @@ Ops Governance Role은 제품 방향을 대신 정하지 않는다.
 |---|---|
 | 2026-07-10 | vNext Role 책임 모델 추가 |
 | 2026-07-27 | schema/runtime 중복 내용을 줄이고 slim reference로 압축 |
+| 2026-08-13 | 다중 Role Agent의 assigned_roles와 active_role 계약 추가 |

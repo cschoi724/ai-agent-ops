@@ -20,6 +20,8 @@ Task 파일은 Agent 실행 지시의 source of truth다. `task_board.md`, repor
 | `task.md` | 일반 Task 파일 템플릿 |
 | `handoff_message.md` | Role 전환 시 다음 Agent에게 전달할 말 템플릿 |
 
+상태 전이 결과는 `templates/reports/transition_receipt.json`을 공통 입력으로 사용한다. Task의 Handoff 섹션은 receipt를 요약하고, 다른 Agent 또는 독립 Role Session이 시작할 때만 receiver context를 추가한다.
+
 ## 3. 생성 위치
 
 새 Task는 아래 위치에 생성한다.

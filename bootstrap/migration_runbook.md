@@ -112,3 +112,20 @@ aiops migrate --target . --apply
 `AGENTS.md`와 `CLAUDE.md` adapter drift는 실패가 아니라 `needs_user_decision`으로 보고한다.
 
 검증 실패 시 제품 작업으로 넘어가지 않는다. Agent는 실패 원인, 수정된 운영 파일, 남은 사용자 결정 항목을 보고한다.
+
+## 6. Lifecycle contract compatibility
+
+`aiops.transition_receipt.v1` 도입은 기존 프로젝트의 Task, handoff, report, QA 파일을 자동 변환하지 않는다.
+
+- 기존 `aiops.handoff.v1` 파일은 계속 유효하다.
+- 기존 Task status와 workflow 상태를 추가하거나 변경하지 않는다.
+- 기존 report/QA 문서에 receipt 경로가 없어도 migration blocker로 판정하지 않는다.
+- 새 상태 전이부터 compact receipt를 채택할 수 있다.
+- 기존 handoff를 수정해야 하는 경우 사용자 결정 범위로 보고하며 일괄 보강하지 않는다.
+
+검토 시 보고할 영향:
+
+- receipt를 새로 저장할 프로젝트 경로
+- 기존 custom report/handoff template과의 필드 중복
+- Execution/Verification을 같은 Agent에 배정한 기존 registry
+- Lead/Completion을 별도 Agent처럼 운영하던 기존 세션 지침

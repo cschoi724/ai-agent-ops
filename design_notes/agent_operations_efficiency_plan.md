@@ -1,6 +1,6 @@
 # Agent Operations Efficiency Improvement Plan
 
-상태: 구현 계획 확정 / 구현 전
+상태: 1차 재작업 완료 / 독립 재검증 대기
 대상: Role Session, Task 상태 전이, 보고, 검증, Git 정리, 모델 추천
 기준 버전: v0.14.0
 작성일: 2026-08-13
@@ -260,13 +260,16 @@ Task: T-001
     "action": "독립 검증"
   },
   "result": "ready",
-  "evidence": [],
+  "summary": "구현 및 자체 검증 완료",
+  "evidence": [".ai_project/reports/T-20260813-001-task-report.md"],
   "risks": [],
   "blockers": []
 }
 ```
 
 Task report, QA report, handoff와 최종 채팅 보고는 이 receipt를 공통 입력으로 사용한다. 일반 Task에서는 compact receipt를 기본으로 하고, 감사·보안·배포·복잡한 재작업처럼 상세 근거가 필요한 경우에만 전체 보고서를 생성한다.
+
+`aiops.transition_receipt.v1`은 검증 근거가 하나 이상 있거나 `validation_skip_reason`이 있어야 한다. `next.agent` 또는 `next.role` 중 하나 이상과 한 문장의 `next.action`도 필수다.
 
 ## 9. 위험도 기반 운영 Profile
 
@@ -544,6 +547,8 @@ provider_model_map:
 
 ### 1차. Unified Lifecycle Contract
 
+구현 상태: 독립 검증 지적 반영 완료, 재검증 대기
+
 목표:
 
 - 다중 Role Agent 인식, 전이 readiness, compact receipt를 하나의 lifecycle 계약으로 확정한다.
@@ -556,6 +561,23 @@ provider_model_map:
 - `runtime/role_handoff.md`와 report template의 compact receipt 정렬
 - 중복 필드와 상충 문구 목록 작성 및 제거
 - 필요 시 `aiops.transition_receipt.v1` schema 초안
+
+반영 결과:
+
+- Agent registry의 기존 `roles` 배열을 `assigned_roles`로 해석하고 현재 행동 Role을 `active_role`로 분리했다.
+- Lead+Completion은 같은 Agent가 연속 수행할 수 있고, Execution+Verification은 기본 독립 분리하도록 상충 문구를 정리했다.
+- 송신·수신 readiness를 lifecycle 전이 전 확인 계약으로 추가했다.
+- `aiops.transition_receipt.v1`, JSON template, `aiops validate transition-receipt FILE`을 추가했다.
+- Task Report와 QA Report의 중복 `Next Handoff` 필드를 receipt 경로 참조로 축소했다.
+- Task/Handoff의 장문 상태 요약은 compact receipt와 receiver start context로 분리했다.
+- 기존 Task, `aiops.handoff.v1`, report, QA는 자동 변환하거나 새 필드를 필수화하지 않는다.
+- Role prompt는 Task의 enabled `target_agent`를 우선하고, Role 후보가 여러 명이면 임의 선택하지 않으며, Agent/Role/Task ownership 충돌을 거부한다.
+
+1차 결정:
+
+- Receipt 기본 저장 위치는 `.ai_project/reports/T-YYYYMMDD-NNN-transition-receipt.json`으로 둔다.
+- 상세 Task/QA report는 Strict 또는 예외 상황에서 유지하고 일반 전이는 receipt를 기본으로 한다.
+- 새 상태는 추가하지 않으며 atomic 전이 자동화는 2차 `task advance`에서 구현한다.
 
 검증:
 
@@ -738,12 +760,12 @@ bin/aiops release-check --strict --allow-pending-release
 
 ## 16. 구현 전 결정할 항목
 
-1. 같은 Agent가 연속 수행할 수 있는 Role 조합의 기본 allow/deny matrix
+1. 같은 Agent가 연속 수행할 수 있는 Role 조합의 기본 allow/deny matrix - 1차 결정 완료
 2. Light profile에서 Verification을 생략할 수 있는 정확한 조건
 3. `advance`가 기본적으로 바로 적용할지, 사용자 승인 대상 전이만 확인할지
 4. remote branch 삭제 승인을 Task 단위로 받을지 프로젝트 정책으로 위임할지
-5. transition receipt를 Task 파일에 내장할지 별도 handoff 파일로 둘지
-6. 기존 report template을 유지할지 receipt 기반 상세 report 생성기로 전환할지
+5. transition receipt를 Task 파일에 내장할지 별도 handoff 파일로 둘지 - 1차에서 별도 reports JSON으로 결정
+6. 기존 report template을 유지할지 receipt 기반 상세 report 생성기로 전환할지 - 1차에서 상세 report 유지 + receipt 참조로 결정
 7. built-in 실제 모델 추천표, provider adapter와 프로젝트 override의 우선순위
 8. 상태-only 변경의 canonical publish와 CI 실행 기준
 9. 일상 Task에서 floating alias를 사용할 범위와 Strict Task의 exact model pinning 기준
@@ -751,7 +773,7 @@ bin/aiops release-check --strict --allow-pending-release
 
 ## 17. 권장 다음 단계
 
-Project Dashboard 1~9차는 v0.14.0으로 릴리스 및 Homebrew 배포가 완료됐다. 다음 작업은 Dashboard 10차 SVG/PNG Export보다 이 계획의 1차 `Unified Lifecycle Contract`를 우선 진행한다.
+Project Dashboard 1~9차는 v0.14.0으로 릴리스 및 Homebrew 배포가 완료됐다. 1차 `Unified Lifecycle Contract` 구현 후 독립 검증을 통과하면 2차 `Transition Automation`을 진행한다.
 
 이유:
 

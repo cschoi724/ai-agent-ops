@@ -42,6 +42,35 @@ Need
 - 커밋, push, 배포, 외부 설정 변경은 사용자 승인 후 진행한다.
 - 민감정보를 로그, 문서, 보고서에 남기지 않는다.
 
+## 2.1 Lifecycle transition contract
+
+상태 전이는 현재 상태를 바꾸는 단일 행위가 아니라 송신 준비도, 수신 준비도, compact receipt를 함께 확인하는 lifecycle 경계다.
+
+송신 준비도:
+
+- 현재 Agent와 `active_role`이 전이를 수행할 권한이 있다.
+- 현재 상태에서 다음 상태로의 전이가 workflow에 존재한다.
+- 작업 결과 또는 검증 결과가 존재한다.
+- 필수 검증 근거가 있거나 생략 사유가 기록되어 있다.
+- 변경 경로가 `allowed_paths` 안에 있다.
+- lock, branch, worktree와 canonical status가 전이에 안전하다.
+- source of truth와 결과가 충돌하지 않는다.
+- 남은 risk와 blocker가 구분되어 있다.
+
+수신 준비도:
+
+- 다음 `target_agent` 또는 `target_role`이 등록되어 있다.
+- 다음 Agent가 필요한 Role과 capability를 보유한다.
+- 다음 상태를 해당 Role이 처리할 수 있다.
+- 필요한 source of truth, report, QA 경로가 존재한다.
+- 선행 dependency가 충족되어 있다.
+- canonical status가 허용 범위 안에서 최신이다.
+- 다음 행동이 한 문장으로 명확하다.
+
+둘 중 하나라도 준비되지 않으면 상태만 먼저 바꾸지 않는다. 기존 `aiops task transition`은 낮은 수준의 전이 명령으로 유지하며, 통합 readiness와 atomic update는 후속 `task advance` 단계에서 자동화한다.
+
+성공한 전이는 `aiops.transition_receipt.v1`으로 요약한다. receipt에는 Task ID, 이전/새 상태, 실제 Agent와 `active_role`, 다음 담당, 결과, 검증 근거 또는 생략 사유, risk, blocker, 다음 행동을 포함한다.
+
 ## 3. 중심 흐름
 
 vNext 기본 흐름은 아래 상태 전이를 따른다.
@@ -179,7 +208,7 @@ Execution Role은 `approved` Task를 처리한다.
 
 작업을 시작하면 lock을 획득하고 `in_progress`로 전환한다.
 
-작업 완료 후에는 작업 보고를 작성하고 `verification_ready`로 넘긴다. 이때 `.ai/runtime/role_handoff.md`의 Execution -> Verification 문구를 Task 파일과 최종 응답에 남긴다.
+작업 완료 후에는 작업 보고를 작성하고 `verification_ready`로 넘긴다. 이때 transition receipt를 생성하고 Task에는 receipt 경로를 연결하며, 최종 응답은 receipt에서 파생한 compact 요약만 표시한다.
 
 ### 5.6 Verification
 
@@ -202,7 +231,7 @@ Verification Role은 `verification_ready` Task를 검증한다.
 - 수정 필요: `rework_requested`
 - 외부 차단: `blocked`
 
-검증 후 다음 담당 Role이 바뀌면 `.ai/runtime/role_handoff.md`의 Verification -> Completion 또는 Verification / Completion -> Lead 문구를 남긴다.
+검증 후 다음 담당 Role이 바뀌면 transition receipt를 생성하고 Task에는 receipt 경로를 연결한다. 다른 Agent 또는 독립 Role Session으로 이동할 때만 `.ai/runtime/role_handoff.md`의 receiver start context를 추가한다.
 
 ### 5.7 Completion
 
