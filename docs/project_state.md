@@ -413,6 +413,29 @@ aiops.project_health.v1
 
 이 보호장치는 다중 worktree 환경에서 이미 완료된 Task를 다시 완료 처리하거나, 오래된 dependency 상태를 기준으로 작업을 진행하는 문제를 줄이기 위한 것이다.
 
+## 통합 상태 전이
+
+일반적인 작업 시작과 다음 Role 인계에는 저수준 `task transition` 대신 아래 순서를 사용한다.
+
+```sh
+aiops task accept TASK_ID --check
+aiops task accept TASK_ID
+
+aiops task advance TASK_ID --check
+aiops task advance TASK_ID --next-agent "QA Agent" --evidence .ai_project/reports/TASK_ID_task-report.md
+```
+
+`accept`는 `approved`, `verification_ready`, `verification_passed`에서 현재 배정된 Agent가 작업을 시작할 때 사용한다. `advance`는 현재 결과를 다음 Role로 넘기거나 Completion 검토에서 `done`으로 확정할 때 사용한다.
+
+두 명령은 workflow 전이, 실제 actor의 Role/capability, 다음 Agent의 등록 상태와 capability, dependency, source path, lock, canonical SHA, report/QA evidence를 먼저 확인한다. `--check`는 Task와 운영 문서를 변경하지 않는다. 적용 중 하나의 파일이라도 쓰지 못하면 이미 적용한 파일을 원래 내용으로 복원한다. 같은 Git repository의 다른 worktree가 동일 Task를 동시에 전이하려 하면 공유 lock으로 한쪽을 거부한다.
+
+Machine projection은 다음 명령으로 검증한다.
+
+```sh
+aiops task advance TASK_ID --check --json > /tmp/task-transition-plan.json
+aiops validate task-transition-plan /tmp/task-transition-plan.json
+```
+
 ## Workflow Catalog와 Checkpoint
 
 `runtime/workflows.json`은 workflow 상태와 checkpoint 정책을 기계가 읽을 수 있게 정리한 catalog다.

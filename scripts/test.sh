@@ -9,6 +9,9 @@ sh -n "$repo_root/bin/aiops"
 printf '%s\n' "== schema syntax =="
 if command -v ruby >/dev/null 2>&1; then
   ruby -rjson -e 'ARGV.each { |path| JSON.parse(File.read(path)); puts "ok: #{path}" }' "$repo_root"/schemas/*.schema.json
+  for ruby_file in "$repo_root"/runtime/*.rb; do
+    ruby -cw "$ruby_file"
+  done
 else
   printf '%s\n' "skip: ruby not found; schema syntax check skipped"
 fi

@@ -33,6 +33,7 @@ Usage:
   aiops validate task FILE [--strict]
   aiops validate handoff FILE [--strict]
   aiops validate transition-receipt FILE
+  aiops validate task-transition-plan FILE
   aiops validate policy-rules [--core DIR]
   aiops validate workflow-catalog [--target DIR|--core DIR]
   aiops validate project-snapshot FILE
@@ -42,6 +43,8 @@ Usage:
   aiops validate policy-evaluation FILE
   aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
   aiops task status TASK_ID [--target DIR] [--source local|canonical]
+  aiops task advance TASK_ID [--target DIR] [--by AGENT] [--role ROLE] [--next-agent AGENT] [--evidence PATH] [--check] [--json]
+  aiops task accept TASK_ID [--target DIR] [--by AGENT] [--role ROLE] [--check] [--json]
   aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT] [--blocker TEXT] [--next-decision TEXT]
   aiops task lock TASK_ID --by AGENT [--target DIR] [--role ROLE] [--session ID]
   aiops task unlock TASK_ID --by AGENT [--target DIR]
@@ -115,8 +118,11 @@ Examples:
   aiops validate dashboard-presets .ai_project/dashboard_presets.json
   aiops validate policy-evaluation /tmp/policy_evaluation.json
   aiops validate transition-receipt /tmp/transition_receipt.json
+  aiops validate task-transition-plan /tmp/task_transition_plan.json
   aiops task create --title "로그인 화면 구현" --workflow feature --role "Lead Role"
   aiops task status T-YYYYMMDD-001 --source canonical
+  aiops task accept T-YYYYMMDD-001 --check
+  aiops task advance T-YYYYMMDD-001 --next-agent "QA Agent" --evidence .ai_project/reports/T-YYYYMMDD-001_task-report.md
   aiops task transition T-YYYYMMDD-001 --to approved --role "Direction Role"
   aiops handoff create T-YYYYMMDD-001 --from "Execution Role" --to "Verification Role" --next-action "변경 결과 검증"
   aiops status-ref
@@ -8999,7 +9005,7 @@ cmd_validate() {
       ' "$catalog"
       info "ok: workflow catalog"
       ;;
-    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets|dashboard-locale|transition-receipt)
+    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets|dashboard-locale|transition-receipt|task-transition-plan)
       file=""
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -9045,6 +9051,10 @@ cmd_validate() {
         transition-receipt)
           schema="$core/schemas/transition_receipt.schema.json"
           label="transition receipt"
+          ;;
+        task-transition-plan)
+          schema="$core/schemas/task_transition_plan.schema.json"
+          label="task transition plan"
           ;;
       esac
       [ -f "$schema" ] || die "$label schema not found: $schema"
@@ -9248,7 +9258,7 @@ cmd_validate() {
 
 cmd_task() {
   action="${1:-}"
-  [ "$#" -gt 0 ] || die "task requires an action: create, status, transition, lock, unlock"
+  [ "$#" -gt 0 ] || die "task requires an action: create, status, advance, accept, transition, lock, unlock"
   shift
 
   case "$action" in
@@ -9496,6 +9506,14 @@ EOF
       for field in id title status workflow target_role target_agent locked_by lock_session updated_at; do
         info "$field: $(task_yaml_field "$task_file" "$field")"
       done
+      ;;
+
+    advance|accept)
+      core="$(default_core_dir)"
+      runtime="$core/runtime/task_lifecycle.rb"
+      [ -f "$runtime" ] || die "task lifecycle runtime missing: $runtime"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for task $action"
+      ruby "$runtime" "$action" "$@"
       ;;
 
     transition)
@@ -11856,6 +11874,7 @@ cmd_release_check() {
     "$core/schemas/workflow_catalog.schema.json" \
     "$core/schemas/handoff.schema.json" \
     "$core/schemas/transition_receipt.schema.json" \
+    "$core/schemas/task_transition_plan.schema.json" \
     "$core/schemas/agent_registry.schema.json" \
     "$core/schemas/operating_model.schema.json" \
     "$core/schemas/bootstrap_options.schema.json" \
@@ -11888,6 +11907,7 @@ cmd_release_check() {
     "$core/runtime/dashboard_server.rb" \
     "$core/runtime/dashboard_presets.rb" \
     "$core/runtime/github_release_status.rb" \
+    "$core/runtime/task_lifecycle.rb" \
     "$core/templates/reports/transition_receipt.json" \
     "$core/templates/ci/github-actions/aiops.yml" \
     "$core/templates/tool_adapters/codex/AGENTS.md" \

@@ -13,6 +13,8 @@
 ### Added
 
 - Add `aiops.transition_receipt.v1`, a compact Task transition receipt template, and `aiops validate transition-receipt FILE`.
+- Add `aiops task accept` and `aiops task advance` with dry-run readiness checks, automatic normal-path routing, compact receipts, cross-worktree locking, and rollback-safe Task/handoff/board updates.
+- Add `aiops.task_transition_plan.v1` JSON projection and `aiops validate task-transition-plan FILE`.
 
 ### Changed
 
