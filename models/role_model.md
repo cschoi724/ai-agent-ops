@@ -26,6 +26,14 @@ active_role: Completion Role
 
 상태 전이와 결과 보고에는 Agent 이름과 `active_role`을 함께 남긴다. Role을 바꿔도 다른 Agent가 수행한 것처럼 기록하지 않는다.
 
+Role Session의 Agent 선택 우선순위:
+
+1. Task가 있으면 등록되고 활성화된 `target_agent`
+2. Task 소유권과 충돌하지 않는 명시적 `--agent`
+3. Task가 없고 해당 Role의 enabled 후보가 정확히 한 명일 때 그 Agent
+
+같은 Role 후보가 여러 명이면 첫 번째 Agent를 임의 선택하지 않는다. 후보를 표시하고 `--agent` 또는 `target_agent` 지정을 요구한다. Registry가 없을 때도 가상 기본 Agent 이름을 만들지 않으며 사용자가 Agent를 명시해야 한다.
+
 ## 2. 핵심 구분
 
 | 개념 | 의미 | 기록 위치 |

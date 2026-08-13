@@ -1,6 +1,6 @@
 # Agent Operations Efficiency Improvement Plan
 
-상태: 1차 구현 완료 / 독립 검증 대기
+상태: 1차 재작업 완료 / 독립 재검증 대기
 대상: Role Session, Task 상태 전이, 보고, 검증, Git 정리, 모델 추천
 기준 버전: v0.14.0
 작성일: 2026-08-13
@@ -547,7 +547,7 @@ provider_model_map:
 
 ### 1차. Unified Lifecycle Contract
 
-구현 상태: 완료, 독립 검증 대기
+구현 상태: 독립 검증 지적 반영 완료, 재검증 대기
 
 목표:
 
@@ -571,6 +571,7 @@ provider_model_map:
 - Task Report와 QA Report의 중복 `Next Handoff` 필드를 receipt 경로 참조로 축소했다.
 - Task/Handoff의 장문 상태 요약은 compact receipt와 receiver start context로 분리했다.
 - 기존 Task, `aiops.handoff.v1`, report, QA는 자동 변환하거나 새 필드를 필수화하지 않는다.
+- Role prompt는 Task의 enabled `target_agent`를 우선하고, Role 후보가 여러 명이면 임의 선택하지 않으며, Agent/Role/Task ownership 충돌을 거부한다.
 
 1차 결정:
 

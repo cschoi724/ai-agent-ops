@@ -1895,20 +1895,6 @@ normalize_role_name() {
   esac
 }
 
-role_default_agent() {
-  role="$1"
-  case "$role" in
-    "Direction Role") printf '%s\n' "PM Agent" ;;
-    "Lead Role") printf '%s\n' "Lead Agent" ;;
-    "Execution Role") printf '%s\n' "Development Agent" ;;
-    "Verification Role") printf '%s\n' "QA Agent" ;;
-    "Completion Role") printf '%s\n' "Completion Agent" ;;
-    "Release Role") printf '%s\n' "Release Agent" ;;
-    "Ops Governance Role") printf '%s\n' "AI Ops Agent" ;;
-    *) printf '%s\n' "AI Agent" ;;
-  esac
-}
-
 role_responsibility_text() {
   role="$1"
   case "$role" in
@@ -3029,7 +3015,7 @@ print_agent_registry_rows() {
   ' "$file"
 }
 
-registry_agent_for_role() {
+registry_agents_for_role() {
   file="$1"
   role="$2"
   [ -f "$file" ] || return 1
@@ -3041,13 +3027,53 @@ registry_agent_for_role() {
     closing = lines[1..].find_index { |line| line.strip == "---" }
     exit 1 unless closing
     data = YAML.safe_load(lines[1..closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
-    agent = Array(data["agents"]).find do |entry|
+    agents = Array(data["agents"]).select do |entry|
       entry.is_a?(Hash) && entry["status"] == "enabled" && Array(entry["roles"]).include?(ARGV[1])
     end
-    name = agent && (agent["agent"] || agent["id"])
-    exit 1 if name.to_s.empty?
-    puts name
+    names = agents.map { |agent| agent["agent"] || agent["id"] }.compact.map(&:to_s).reject(&:empty?)
+    exit 1 if names.empty?
+    puts names
   ' "$file" "$role"
+}
+
+registry_agent_status() {
+  file="$1"
+  agent_name="$2"
+  [ -f "$file" ] || return 1
+  command -v ruby >/dev/null 2>&1 || return 1
+  ruby -ryaml -rdate -e '
+    text = File.read(ARGV[0])
+    exit 1 unless text.start_with?("---\n")
+    lines = text.lines
+    closing = lines[1..].find_index { |line| line.strip == "---" }
+    exit 1 unless closing
+    data = YAML.safe_load(lines[1..closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+    agent = Array(data["agents"]).find do |entry|
+      entry.is_a?(Hash) && (entry["agent"] || entry["id"]).to_s == ARGV[1]
+    end
+    exit 1 unless agent
+    puts agent["status"].to_s
+  ' "$file" "$agent_name"
+}
+
+registry_agent_has_role() {
+  file="$1"
+  agent_name="$2"
+  role="$3"
+  [ -f "$file" ] || return 1
+  command -v ruby >/dev/null 2>&1 || return 1
+  ruby -ryaml -rdate -e '
+    text = File.read(ARGV[0])
+    exit 1 unless text.start_with?("---\n")
+    lines = text.lines
+    closing = lines[1..].find_index { |line| line.strip == "---" }
+    exit 1 unless closing
+    data = YAML.safe_load(lines[1..closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+    agent = Array(data["agents"]).find do |entry|
+      entry.is_a?(Hash) && (entry["agent"] || entry["id"]).to_s == ARGV[1]
+    end
+    exit 1 unless agent && Array(agent["roles"]).include?(ARGV[2])
+  ' "$file" "$agent_name" "$role"
 }
 
 registry_assigned_roles() {
@@ -10941,16 +10967,56 @@ cmd_role() {
 
       target="$(abs_path "$target")"
       registry_file="$target/.ai_project/agent_registry.md"
-      if [ -z "$agent" ]; then
-        agent="$(registry_agent_for_role "$registry_file" "$role" 2>/dev/null || true)"
-      fi
-      [ -n "$agent" ] || agent="$(role_default_agent "$role")"
-      assigned_roles="$(registry_assigned_roles "$registry_file" "$agent" 2>/dev/null || true)"
-      [ -n "$assigned_roles" ] || assigned_roles="$role"
-
       task_file=""
       if [ -n "$task_id" ]; then
         task_file="$(task_find_file "$target" "$task_id")" || die "task not found: $task_id"
+      fi
+
+      task_target_agent=""
+      task_target_role=""
+      if [ -n "$task_file" ]; then
+        task_target_agent="$(task_yaml_field "$task_file" target_agent)"
+        task_target_role="$(task_yaml_field "$task_file" target_role)"
+        case "$task_target_agent" in null|~) task_target_agent="" ;; esac
+        case "$task_target_role" in null|~) task_target_role="" ;; esac
+        if [ -n "$task_target_role" ] && [ "$task_target_role" != "$role" ]; then
+          die "requested role $role does not match Task target_role $task_target_role"
+        fi
+        if [ -n "$agent" ] && [ -n "$task_target_agent" ] && [ "$agent" != "$task_target_agent" ]; then
+          die "--agent $agent does not match Task target_agent $task_target_agent"
+        fi
+      fi
+
+      if [ -z "$agent" ] && [ -n "$task_target_agent" ]; then
+        agent="$task_target_agent"
+      fi
+
+      if [ -z "$agent" ]; then
+        [ -f "$registry_file" ] || die "agent registry missing; specify --agent NAME"
+        role_candidates="$(registry_agents_for_role "$registry_file" "$role" 2>/dev/null || true)"
+        candidate_count="$(printf '%s\n' "$role_candidates" | awk 'NF { count += 1 } END { print count + 0 }')"
+        case "$candidate_count" in
+          0)
+            die "no enabled Agent is registered for $role"
+            ;;
+          1)
+            agent="$(printf '%s\n' "$role_candidates" | awk 'NF { print; exit }')"
+            ;;
+          *)
+            candidate_list="$(printf '%s\n' "$role_candidates" | awk 'NF { if (result != "") result = result ", "; result = result $0 } END { print result }')"
+            die "multiple enabled Agents are registered for $role: $candidate_list; specify --agent NAME or use a Task with target_agent"
+            ;;
+        esac
+      fi
+
+      if [ -f "$registry_file" ]; then
+        agent_status="$(registry_agent_status "$registry_file" "$agent" 2>/dev/null || true)"
+        [ -n "$agent_status" ] || die "agent not registered: $agent"
+        [ "$agent_status" = "enabled" ] || die "agent $agent is not enabled: $agent_status"
+        registry_agent_has_role "$registry_file" "$agent" "$role" 2>/dev/null || die "agent $agent is not assigned $role"
+        assigned_roles="$(registry_assigned_roles "$registry_file" "$agent" 2>/dev/null || true)"
+      else
+        assigned_roles="$role"
       fi
 
       info "AI Ops role prompt"

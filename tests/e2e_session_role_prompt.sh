@@ -73,6 +73,16 @@ agents:
       - Execution Role
     capabilities:
       - implementation
+  - agent: Product Lead Agent
+    status: enabled
+    team: Product Team
+    roles:
+      - Direction Role
+      - Lead Role
+      - Completion Role
+    capabilities:
+      - product_direction
+      - completion_review
   - agent: QA Agent
     status: enabled
     team: Product Team
@@ -105,6 +115,27 @@ EOF
   --created-by "Lead Agent" \
   >/tmp/aiops-e2e-session-task-create.out
 
+cat > "$tmpdir/.ai_project/tasks/active/T-20260727-021.md" <<'EOF'
+---
+schema: aiops.task.v1
+id: T-20260727-021
+title: Completion ownership validation
+status: verification_passed
+workflow: feature
+target_agent: Lead Agent
+target_role: Completion Role
+required_capabilities:
+  - completion_review
+allowed_paths:
+  - src/
+source_of_truth:
+  - .ai_project/source_of_truth.md
+locked_by: null
+---
+
+# Completion ownership validation
+EOF
+
 "$repo_root/bin/aiops" session-guide --target "$tmpdir" >/tmp/aiops-e2e-session-guide.out
 
 grep -q 'AI Ops session guide' /tmp/aiops-e2e-session-guide.out || {
@@ -130,7 +161,7 @@ grep -q 'Lead Agent: Lead Role / Completion Role (active / Product Team)' /tmp/a
 
 "$repo_root/bin/aiops" role prompt completion \
   --target "$tmpdir" \
-  --task T-20260727-020 \
+  --task T-20260727-021 \
   >/tmp/aiops-e2e-completion-role-prompt.out
 
 grep -q '^agent: Lead Agent$' /tmp/aiops-e2e-completion-role-prompt.out || {
@@ -156,6 +187,63 @@ grep -q '너의 Agent 정체성은 Lead Agent 하나다.' /tmp/aiops-e2e-complet
 
 grep -q 'Execution Role과 Verification Role처럼 독립 분리가 필요한 조합' /tmp/aiops-e2e-completion-role-prompt.out || {
   printf '%s\n' "role prompt did not preserve the execution and verification separation" >&2
+  exit 1
+}
+
+if "$repo_root/bin/aiops" role prompt completion --target "$tmpdir" >/tmp/aiops-e2e-role-prompt-ambiguous.out 2>&1; then
+  printf '%s\n' "role prompt should reject ambiguous role ownership" >&2
+  exit 1
+fi
+
+grep -q 'multiple enabled Agents are registered for Completion Role: Lead Agent, Product Lead Agent' /tmp/aiops-e2e-role-prompt-ambiguous.out || {
+  printf '%s\n' "ambiguous role prompt did not list candidates" >&2
+  cat /tmp/aiops-e2e-role-prompt-ambiguous.out >&2
+  exit 1
+}
+
+if "$repo_root/bin/aiops" role prompt completion --target "$tmpdir" --agent "Dev Agent" >/tmp/aiops-e2e-role-prompt-wrong-role.out 2>&1; then
+  printf '%s\n' "role prompt should reject an Agent without the requested role" >&2
+  exit 1
+fi
+
+grep -q 'agent Dev Agent is not assigned Completion Role' /tmp/aiops-e2e-role-prompt-wrong-role.out || {
+  printf '%s\n' "wrong-role Agent rejection was not explicit" >&2
+  exit 1
+}
+
+if "$repo_root/bin/aiops" role prompt completion --target "$tmpdir" --task T-20260727-021 --agent "Product Lead Agent" >/tmp/aiops-e2e-role-prompt-owner-conflict.out 2>&1; then
+  printf '%s\n' "role prompt should reject an Agent that conflicts with Task ownership" >&2
+  exit 1
+fi
+
+grep -q 'does not match Task target_agent Lead Agent' /tmp/aiops-e2e-role-prompt-owner-conflict.out || {
+  printf '%s\n' "Task ownership conflict was not explicit" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" role prompt verification --target "$tmpdir" \
+  >/tmp/aiops-e2e-role-prompt-single-candidate.out
+grep -q '^agent: QA Agent$' /tmp/aiops-e2e-role-prompt-single-candidate.out || {
+  printf '%s\n' "role prompt did not select the only enabled Role candidate" >&2
+  exit 1
+}
+
+no_registry="$tmpdir/no-registry"
+mkdir -p "$no_registry"
+if "$repo_root/bin/aiops" role prompt completion --target "$no_registry" >/tmp/aiops-e2e-role-prompt-no-registry.out 2>&1; then
+  printf '%s\n' "role prompt should not invent an Agent without a registry" >&2
+  exit 1
+fi
+
+grep -q 'agent registry missing; specify --agent NAME' /tmp/aiops-e2e-role-prompt-no-registry.out || {
+  printf '%s\n' "missing registry guidance was not explicit" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" role prompt completion --target "$no_registry" --agent "Explicit Completion Agent" \
+  >/tmp/aiops-e2e-role-prompt-explicit-no-registry.out
+grep -q '^agent: Explicit Completion Agent$' /tmp/aiops-e2e-role-prompt-explicit-no-registry.out || {
+  printf '%s\n' "explicit Agent should remain usable when no registry exists" >&2
   exit 1
 }
 

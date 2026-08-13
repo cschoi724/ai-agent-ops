@@ -208,7 +208,7 @@ Execution Role은 `approved` Task를 처리한다.
 
 작업을 시작하면 lock을 획득하고 `in_progress`로 전환한다.
 
-작업 완료 후에는 작업 보고를 작성하고 `verification_ready`로 넘긴다. 이때 `.ai/runtime/role_handoff.md`의 Execution -> Verification 문구를 Task 파일과 최종 응답에 남긴다.
+작업 완료 후에는 작업 보고를 작성하고 `verification_ready`로 넘긴다. 이때 transition receipt를 생성하고 Task에는 receipt 경로를 연결하며, 최종 응답은 receipt에서 파생한 compact 요약만 표시한다.
 
 ### 5.6 Verification
 
@@ -231,7 +231,7 @@ Verification Role은 `verification_ready` Task를 검증한다.
 - 수정 필요: `rework_requested`
 - 외부 차단: `blocked`
 
-검증 후 다음 담당 Role이 바뀌면 `.ai/runtime/role_handoff.md`의 Verification -> Completion 또는 Verification / Completion -> Lead 문구를 남긴다.
+검증 후 다음 담당 Role이 바뀌면 transition receipt를 생성하고 Task에는 receipt 경로를 연결한다. 다른 Agent 또는 독립 Role Session으로 이동할 때만 `.ai/runtime/role_handoff.md`의 receiver start context를 추가한다.
 
 ### 5.7 Completion
 
