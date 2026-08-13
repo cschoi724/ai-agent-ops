@@ -25,6 +25,7 @@
 
 ### Fixed
 
+- Strengthen dashboard visual CI to verify lazy Mermaid rendering and Explorer table/map synchronization, and capture exact-size full-page artifacts with all maps expanded.
 - Serialize initial and Explorer Mermaid rendering, lazily render collapsed maps, and wrap long project titles on narrow dashboard viewports.
 - Keep localized task tables inside a dedicated horizontal scroll region on narrow screens and preserve the existing Korean release-check label.
 - Validate dashboard schema `oneOf`, `$ref`, string patterns, property names, and collection bounds; reject invalid GitHub repository presets before execution; and suppress expected non-Git branch lookup errors.

@@ -222,7 +222,29 @@ render_case() {
     result = JSON.parse(File.read(result_path))
     abort("visual probe failed: #{result.inspect}") unless result["status"] == "ok"
     abort("locale mismatch: #{result.inspect}") unless result["lang"] == expected_locale
-    abort("Mermaid SVG count mismatch: #{result.inspect}") unless result["graph_count"].to_i >= 7 && result["svg_count"] == result["graph_count"]
+    abort("Mermaid graph count mismatch: #{result.inspect}") unless result["graph_count"] == 7
+    abort("Mermaid SVG count mismatch: #{result.inspect}") unless result["svg_count"] == 7
+    abort("initial open map count mismatch: #{result.inspect}") unless result["initial_open_count"] == 1
+    abort("initial SVG count mismatch: #{result.inspect}") unless result["initial_svg_count"] == 1
+    abort("initial map mismatch: #{result.inspect}") unless result["initial_open_maps"] == ["dependencies"] && result["initial_svg_maps"] == ["dependencies"]
+    abort("closed maps rendered eagerly: #{result.inspect}") unless result["closed_initially_rendered"].empty?
+    abort("closed maps did not render after expansion: #{result.inspect}") unless result["closed_rendered_after_expand"].length == 6
+    abort("visual artifact does not include all maps: #{result.inspect}") unless result["artifact_all_maps_open"]
+    expected_interactions = {
+      "initial" => %w[T-20260813-002 T-20260813-003 T-20260813-004],
+      "search" => %w[T-20260813-003],
+      "status" => %w[T-20260813-002],
+      "agent" => %w[T-20260813-002],
+      "role" => %w[T-20260813-003],
+      "workflow" => %w[T-20260813-003],
+      "focus_depth" => %w[T-20260813-002 T-20260813-003],
+      "reset" => %w[T-20260813-002 T-20260813-003 T-20260813-004]
+    }
+    expected_interactions.each do |name, ids|
+      interaction = result.fetch("explorer_interactions").fetch(name)
+      abort("#{name} table mismatch: #{result.inspect}") unless interaction["table_task_ids"] == ids
+      abort("#{name} dependency map mismatch: #{result.inspect}") unless interaction["dependency_task_ids"] == ids
+    end
     abort("page horizontal overflow: #{result.inspect}") unless result["page_scroll_width"] <= result["page_client_width"]
     abort("zoom control failed: #{result.inspect}") unless result["zoom_before"] == "1" && result["zoom_after"] == "1.15" && result["transform_after"] == "scale(1.15)"
     abort("map collapse/expand failed: #{result.inspect}") unless result["open_before"] && result["collapsed"] && result["expanded"]
@@ -236,7 +258,9 @@ render_case() {
     png = File.binread(png_path)
     abort("screenshot is not PNG") unless png.start_with?("\x89PNG\r\n\x1a\n".b)
     width, height = png.byteslice(16, 8).unpack("N2")
-    abort("screenshot dimensions invalid: #{width}x#{height}") unless width > 0 && height > 0
+    abort("screenshot mode mismatch: #{result.inspect}") unless result["screenshot_mode"] == "full_page"
+    abort("screenshot width mismatch: #{width}x#{height}") unless width == result["screenshot_expected_width"] && width == requested_width.to_i
+    abort("screenshot height mismatch: #{width}x#{height}") unless height == result["screenshot_expected_height"] && height > result["viewport_height"]
     puts "ok: #{expected_locale} #{requested_width}px dashboard visual (screenshot #{width}x#{height}, #{result["svg_count"]} maps)"
   ' "$locale" "$result" "$screenshot" "$width"
 }

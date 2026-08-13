@@ -182,7 +182,7 @@ aiops project dashboard --serve --locale en --refresh 10 --open
 
 Locale은 사용자용 CLI, HTML, Local Serve, 시각 맵의 표시 label에만 적용한다. `project dashboard --json`의 key/value, Task metadata, Mermaid 내부 node ID는 locale과 무관하게 유지된다. 미등록 label은 snake_case를 공백으로 바꾸는 readable fallback을 사용한다.
 
-브라우저 회귀 검증은 `tests/visual_dashboard.sh`로 실행한다. 이 테스트는 Google Chrome 또는 Chromium과 Mermaid CDN 접근이 필요하며, 한국어 desktop과 영어 narrow viewport를 실제 렌더링한다. Mermaid SVG, map 지연 렌더, 확대, 접기/펼치기, 문서 전체 overflow, 작업 표·맵 내부 스크롤, 주요 UI text 잘림, 브라우저 예외를 검사하고 HTML·PNG·측정 JSON을 artifact 디렉터리에 남긴다.
+브라우저 회귀 검증은 `tests/visual_dashboard.sh`로 실행한다. 이 테스트는 Google Chrome 또는 Chromium과 Mermaid CDN 접근이 필요하며, 한국어 desktop과 영어 narrow viewport를 실제 렌더링한다. 닫힌 map의 초기 SVG가 0개인지와 펼친 뒤 SVG가 생성되는지 확인하고, 검색·상태·Agent·Role·workflow·focus/depth 조작마다 작업 표와 dependency map의 Task ID가 일치하는지 검사한다. 확대, 접기/펼치기, 문서 전체 overflow, 작업 표·맵 내부 스크롤, 주요 UI text 잘림과 브라우저 예외도 검사한다. HTML, 모든 map을 펼친 full-page PNG, 측정 JSON을 artifact 디렉터리에 남긴다.
 
 ```sh
 AIOPS_VISUAL_ARTIFACT_DIR=/tmp/aiops-dashboard-visual tests/visual_dashboard.sh

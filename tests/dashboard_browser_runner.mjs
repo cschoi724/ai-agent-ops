@@ -177,10 +177,20 @@ try {
 
   const result = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
   result.browser_exceptions = exceptions;
+  const layout = await client.send("Page.getLayoutMetrics");
+  const contentSize = layout.cssContentSize || layout.contentSize;
+  const screenshotWidth = Math.ceil(contentSize.width);
+  const screenshotHeight = Math.ceil(contentSize.height);
+  result.screenshot_mode = "full_page";
+  result.screenshot_expected_width = screenshotWidth;
+  result.screenshot_expected_height = screenshotHeight;
+  result.viewport_width = width;
+  result.viewport_height = height;
   const screenshot = await client.send("Page.captureScreenshot", {
     format: "png",
-    captureBeyondViewport: false,
-    fromSurface: true
+    captureBeyondViewport: true,
+    fromSurface: true,
+    clip: {x: 0, y: 0, width: screenshotWidth, height: screenshotHeight, scale: 1}
   });
   await writeFile(options.screenshot, Buffer.from(screenshot.data, "base64"));
   await writeFile(options.result, `${JSON.stringify(result, null, 2)}\n`);
