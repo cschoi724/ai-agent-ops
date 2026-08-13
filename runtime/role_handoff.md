@@ -17,8 +17,9 @@ Agent 세션 분리와 보조 위임 기준은 `.ai/policies/session_orchestrati
 ## 2. 기본 원칙
 
 - Role 전환은 Task의 `status`, `target_agent`, `target_role` 변경으로 표현한다.
-- 다음 담당이 현재 세션 Role과 다르면 현재 Agent는 다음 단계까지 이어서 처리하지 않는다.
-- 다음 담당에게 넘길 말은 Task 파일의 `Next Agent Handoff` 섹션과 최종 응답에 같은 내용으로 남긴다.
+- 다음 담당이 다른 Agent이거나 독립 분리 Role이면 현재 Agent는 다음 단계까지 대신 처리하지 않는다.
+- 같은 Agent의 `assigned_roles` 안에서 허용된 Role로 이동하면 Agent 정체성을 유지하고 `active_role`만 바꿔 같은 세션에서 계속할 수 있다.
+- 상태 전이 결과는 compact receipt 하나를 공통 입력으로 사용하고, Task/report/handoff/최종 응답에 같은 값을 다시 손으로 입력하지 않는다.
 - 가능하면 `aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT`로 인계 파일을 만든다.
 - 다중 worktree 운영에서는 인계 전에 `aiops sync-status` 또는 동등한 fetch/SHA 확인을 수행하고 `status_ref`, `status_ref_sha`를 남긴다.
 - 인계 메시지는 Codex와 Claude 모두 이해할 수 있는 일반 문장과 Task metadata로 작성한다.
@@ -29,117 +30,100 @@ Agent 세션 분리와 보조 위임 기준은 `.ai/policies/session_orchestrati
 - 이 문서의 상태별 표준 문구와 다른 전이가 필요하면 필수 인계 필드는 유지하고 Role 이름, 상태, 다음 행동만 해당 workflow에 맞게 바꾼다.
 - 어떤 세션을 열지 모르면 먼저 `aiops session-guide`를 실행하고, 실제 첫 메시지는 `aiops role prompt ROLE --task TASK_ID`로 만든다.
 
-## 3. 필수 인계 필드
+## 3. Compact transition receipt
 
-Role이 바뀌는 상태 전이에서는 아래 항목을 채운다.
+모든 상태 전이는 아래 필드를 `aiops.transition_receipt.v1`으로 남긴다.
 
 ```text
-다음 Agent에게 전달할 말:
-
-너는 {{NEXT_AGENT}} / {{NEXT_ROLE}}이야.
-Task {{TASK_ID}}를 이어서 처리해줘.
-
-- 현재 상태: {{CURRENT_STATUS}}
-- 기준 상태 ref: {{STATUS_REF}}
-- 기준 상태 SHA: {{STATUS_REF_SHA}}
-- 다음에 해야 할 일: {{NEXT_ACTION}}
-- 기준 문서: {{SOURCE_OF_TRUTH}}
-- 허용 경로: {{ALLOWED_PATHS}}
-- 참고 산출물: {{REPORT_OR_QA_PATHS}}
-- 변경/검토 대상: {{CHANGED_OR_AFFECTED_PATHS}}
-- 남은 리스크: {{RISKS_OR_NONE}}
-- 차단/결정 필요: {{BLOCKERS_OR_DECISIONS_OR_NONE}}
-- 주의: 현재 Task의 workflow, status, target_agent, target_role이 네 Role과 맞는지 먼저 확인해줘.
+Task: {{TASK_ID}}
+상태: {{FROM_STATUS}} -> {{TO_STATUS}}
+처리: {{ACTOR_AGENT}} / {{ACTIVE_ROLE}}
+다음: {{NEXT_AGENT}} / {{NEXT_ROLE}}
+결과: {{RESULT_SUMMARY}}
+근거: {{EVIDENCE_OR_SKIP_REASON}}
+위험: {{RISKS_OR_NONE}}
+차단: {{BLOCKERS_OR_NONE}}
+다음 작업: {{NEXT_ACTION}}
 ```
 
-## 4. 기본 workflow 상태별 표준 문구
+`actor.role`은 registry의 전체 Role이 아니라 전이 시점의 `active_role`이다. `next.agent` 또는 `next.role` 중 하나 이상과 `next.action`은 반드시 있어야 한다. 검증을 실행하지 않았다면 빈 근거 대신 `validation_skip_reason`을 남긴다.
 
-### 4.1 Lead -> Execution
+## 4. Receiver start context
+
+Handoff는 receipt를 반복하는 보고서가 아니라 다음 담당이 시작하는 데 필요한 컨텍스트다. 기존 `aiops.handoff.v1`은 호환성을 위해 유지하며 아래 정보만 receipt에 덧붙인다.
+
+- receipt 경로 또는 receipt 내용
+- source of truth
+- allowed paths
+- report/QA 경로
+- changed/affected paths
+- canonical status ref/SHA와 worktree 정보
+
+Task report와 QA report는 상세 근거가 필요한 경우에만 위 정보를 확장한다. 최종 채팅 보고는 기본적으로 compact receipt만 보여준다.
+
+## 5. 기본 workflow 상태별 표준 문구
+
+### 5.1 Lead -> Execution
 
 사용 시점: `scoped` 또는 승인 이후 `approved` Task를 Execution Role로 넘길 때.
 
 ```text
-다음 Agent에게 전달할 말:
-
-너는 {{EXECUTION_AGENT}} / Execution Role이야.
-Task {{TASK_ID}}는 승인된 실행 Task야.
-
-- 현재 상태: approved
-- 다음에 해야 할 일: allowed_paths 안에서 작업을 수행하고, 자체 검증 후 task report를 작성해줘.
-- 기준 문서: {{SOURCE_OF_TRUTH}}
-- 허용 경로: {{ALLOWED_PATHS}}
-- 참고 산출물: {{TASK_FILE}}
-- 변경/검토 대상: {{AFFECTED_PATHS}}
-- 남은 리스크: {{RISKS_OR_NONE}}
-- 차단/결정 필요: {{BLOCKERS_OR_DECISIONS_OR_NONE}}
-- 완료 시: status를 verification_ready로 바꾸고 target_role을 Verification Role로 넘겨줘.
+Task: {{TASK_ID}}
+상태: scoped -> approved
+처리: {{LEAD_AGENT}} / Lead Role
+다음: {{EXECUTION_AGENT}} / Execution Role
+결과: 실행 범위와 승인 조건 확정
+근거: {{TASK_FILE}}
+위험/차단: {{RISKS_OR_BLOCKERS_OR_NONE}}
+다음 작업: allowed_paths 안에서 구현하고 자체 검증 결과를 남긴다.
 ```
 
-### 4.2 Execution -> Verification
+### 5.2 Execution -> Verification
 
 사용 시점: 실행 완료 후 `verification_ready`로 넘길 때.
 
 ```text
-다음 Agent에게 전달할 말:
-
-너는 {{VERIFICATION_AGENT}} / Verification Role이야.
-Task {{TASK_ID}}의 실행 결과를 독립적으로 검증해줘.
-
-- 현재 상태: verification_ready
-- 다음에 해야 할 일: task report, 변경 파일, source of truth를 기준으로 PASS/PASS_WITH_RISK/FAIL/BLOCKED를 판단해줘.
-- 기준 문서: {{SOURCE_OF_TRUTH}}
-- 허용 경로: {{ALLOWED_PATHS}}
-- 참고 산출물: {{TASK_REPORT_PATH}}
-- 변경/검토 대상: {{CHANGED_PATHS}}
-- 남은 리스크: {{RISKS_OR_NONE}}
-- 차단/결정 필요: {{BLOCKERS_OR_DECISIONS_OR_NONE}}
-- 통과 시: status를 verification_passed로 바꾸고 target_role을 Completion Role로 넘겨줘.
-- 수정 필요 시: status를 rework_requested로 바꾸고 수정 항목을 명확히 남겨줘.
+Task: {{TASK_ID}}
+상태: in_progress -> verification_ready
+처리: {{EXECUTION_AGENT}} / Execution Role
+다음: {{VERIFICATION_AGENT}} / Verification Role
+결과: 구현과 자체 검증 완료
+근거: {{TASK_REPORT_PATH}}
+위험/차단: {{RISKS_OR_BLOCKERS_OR_NONE}}
+다음 작업: 변경 결과를 독립 검증하고 PASS/PASS_WITH_RISK/FAIL/BLOCKED를 판단한다.
 ```
 
-### 4.3 Verification -> Completion
+### 5.3 Verification -> Completion
 
 사용 시점: 검증 통과 후 `verification_passed`로 넘길 때.
 
 ```text
-다음 Agent에게 전달할 말:
-
-너는 {{COMPLETION_AGENT}} / Completion Role이야.
-Task {{TASK_ID}}의 완료 확정 여부를 검토해줘.
-
-- 현재 상태: verification_passed
-- 다음에 해야 할 일: 검증 결과, 잔여 리스크, 후속 Task 필요 여부를 확인하고 done 처리 가능성을 판단해줘.
-- 기준 문서: {{SOURCE_OF_TRUTH}}
-- 허용 경로: {{ALLOWED_PATHS}}
-- 참고 산출물: {{QA_REPORT_PATH}}
-- 변경/검토 대상: {{CHANGED_OR_AFFECTED_PATHS}}
-- 남은 리스크: {{RISKS_OR_NONE}}
-- 차단/결정 필요: {{BLOCKERS_OR_DECISIONS_OR_NONE}}
-- 완료 가능 시: completion_review를 거쳐 done으로 전환하고 board를 갱신해줘.
+Task: {{TASK_ID}}
+상태: verification_in_progress -> verification_passed
+처리: {{VERIFICATION_AGENT}} / Verification Role
+다음: {{COMPLETION_AGENT}} / Completion Role
+결과: 독립 검증 통과
+근거: {{QA_REPORT_PATH}}
+위험/차단: {{RISKS_OR_BLOCKERS_OR_NONE}}
+다음 작업: 검증 결과와 잔여 리스크를 수용하고 done 가능 여부를 판단한다.
 ```
 
-### 4.4 Verification / Completion -> Lead
+### 5.4 Verification / Completion -> Lead
 
 사용 시점: `rework_requested` 또는 `blocked`로 되돌릴 때.
 
 ```text
-다음 Agent에게 전달할 말:
-
-너는 {{LEAD_AGENT}} / Lead Role이야.
-Task {{TASK_ID}}의 범위 또는 차단 상태를 다시 조율해줘.
-
-- 현재 상태: {{rework_requested_OR_blocked}}
-- 다음에 해야 할 일: 재작업 범위, ownership, source of truth, 승인 필요 여부를 다시 정리해줘.
-- 기준 문서: {{SOURCE_OF_TRUTH}}
-- 허용 경로: {{ALLOWED_PATHS}}
-- 참고 산출물: {{REPORT_OR_QA_PATHS}}
-- 변경/검토 대상: {{AFFECTED_PATHS}}
-- 남은 리스크: {{RISKS_OR_NONE}}
-- 차단/결정 필요: {{BLOCKERS_OR_DECISIONS}}
-- 재개 가능 시: scoped 또는 approved로 전환할지 사용자에게 확인해줘.
+Task: {{TASK_ID}}
+상태: {{FROM_STATUS}} -> {{rework_requested_OR_blocked}}
+처리: {{ACTOR_AGENT}} / {{ACTIVE_ROLE}}
+다음: {{LEAD_AGENT}} / Lead Role
+결과: 완료 조건 미충족
+근거: {{REPORT_OR_QA_PATHS}}
+위험/차단: {{RISKS_OR_BLOCKERS}}
+다음 작업: 재작업 범위, ownership, source of truth와 승인 필요 여부를 다시 정리한다.
 ```
 
-## 5. 금지사항
+## 6. 금지사항
 
 - 다음 Role의 검증, 완료, merge 판단을 현재 Role이 대신 수행하지 않는다.
 - 인계 메시지 없이 `target_role`만 바꾸지 않는다.

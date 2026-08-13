@@ -1,0 +1,25 @@
+{
+  "schema": "aiops.transition_receipt.v1",
+  "task_id": "T-{{DATE_COMPACT}}-001",
+  "transition": {
+    "from": "{{FROM_STATUS}}",
+    "to": "{{TO_STATUS}}"
+  },
+  "actor": {
+    "agent": "{{ACTOR_AGENT}}",
+    "role": "{{ACTIVE_ROLE}}"
+  },
+  "next": {
+    "agent": "{{NEXT_AGENT}}",
+    "role": "{{NEXT_ROLE}}",
+    "action": "{{NEXT_ACTION}}"
+  },
+  "result": "ready",
+  "summary": "{{RESULT_SUMMARY}}",
+  "evidence": [
+    "{{VALIDATION_OR_REPORT_PATH}}"
+  ],
+  "risks": [],
+  "blockers": [],
+  "created_at": "{{DATE}}"
+}

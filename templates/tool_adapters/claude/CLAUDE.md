@@ -100,7 +100,7 @@ Migration은 Bootstrap이 아니다. `.ai_project/`가 없으면 bootstrap을 �
 | Verification Role | `.ai/models/role_model.md` |
 | Ops Governance Role | `.ai/models/role_model.md`, `.ai/agents/ai_ops_agent.md` |
 
-Agent Role은 사용자가 세션에 부여한다. PM/Development/QA/AI Ops는 기본 구성 예시이며, 프로젝트별 workflow에 따라 Role은 추가되거나 줄어들 수 있다.
+Agent Role은 사용자가 세션에 부여한다. PM/Development/QA/AI Ops는 기본 구성 예시이며, 프로젝트별 workflow에 따라 Role은 추가되거나 줄어들 수 있다. 한 Agent의 registry `roles`는 전체 `assigned_roles`이고 현재 Task에서 행사하는 책임만 `active_role`이다. 허용된 Lead/Completion 전환은 Agent 정체성을 유지한 채 같은 세션에서 계속할 수 있지만 Execution/Verification은 기본적으로 독립 분리한다.
 
 어떤 Role을 열지 불명확하면 `aiops session-guide`를 먼저 안내한다. 새 세션 첫 문구가 필요하면 `aiops role prompt ROLE`을 사용한다.
 
@@ -114,7 +114,7 @@ Agent Role은 사용자가 세션에 부여한다. PM/Development/QA/AI Ops는 �
 
 다중 worktree 환경에서는 현재 worktree의 `.ai_project/` 문서를 최신 공용 상태로 가정하지 않는다. 프로젝트에 `canonical_status_ref`가 있으면 작업 시작 전 `aiops status-ref`, `aiops sync-status`, 필요한 경우 `aiops task status TASK_ID --source canonical`로 기준 ref와 SHA를 확인하고 보고한다. `.ai_project/.runtime/status_ref`는 로컬 runtime cache이므로 commit/PR에 포함하지 않는다.
 
-상태 전이 후 `target_agent` 또는 `target_role`이 다른 Agent/Role로 바뀌면 `.ai/runtime/role_handoff.md` 기준으로 Task 파일과 최종 응답에 `다음 Agent에게 전달할 말`을 남긴다. 이 문구는 Claude 전용 명령이 아니라 Codex도 그대로 이해할 수 있는 Role 기반 지시로 작성한다.
+상태 전이에는 `.ai/runtime/role_handoff.md` 기준의 compact transition receipt를 남긴다. 다른 Agent 또는 독립 Role Session으로 책임이 이동할 때만 receiver start context를 추가한다. 이 기록은 Claude 전용 명령이 아니라 Codex도 그대로 이해할 수 있는 Role 기반 계약으로 작성한다.
 
 ## 5. 프로젝트 상태 확인
 

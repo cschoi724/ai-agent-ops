@@ -43,11 +43,9 @@ Active Capabilities: {{ACTIVE_CAPABILITIES}}
 
 - 
 
-## Next Handoff
+## Transition Receipt
 
-- 다음 status:
-- 다음 target_agent:
-- 다음 target_role:
-- merge 준비 여부:
-- 재작업 필요 여부:
-- 사용자 결정 필요 여부:
+검증 상태 전이 시 `templates/reports/transition_receipt.json` 형식의 receipt를 생성하고 아래에는 경로만 남긴다.
+
+- Receipt path:
+- PASS/PASS_WITH_RISK/FAIL/BLOCKED 근거는 위 검증 결과와 잔여 리스크를 receipt의 evidence에서 참조한다.

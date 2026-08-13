@@ -14,6 +14,7 @@
 | 파일 | 용도 |
 |---|---|
 | `task_report.md` | Role과 Agent에 관계없이 Task를 처리한 실행자가 작성하는 기본 작업 보고 |
+| `transition_receipt.json` | 상태 전이와 짧은 결과 보고가 공유하는 machine-readable receipt |
 
 ## 3. 파일명 규칙
 

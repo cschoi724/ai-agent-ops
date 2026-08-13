@@ -23,12 +23,32 @@ Role 모델은 책임을 정의하고, 이 문서는 그 책임을 한 세션에
 ## 3. 기본 원칙
 
 - 핵심 책임은 Role Session 기준으로 기록한다.
-- 한 세션이 여러 Role을 연속 수행하려면 workflow 또는 사용자 명시 승인이 필요하다.
-- Execution과 Verification은 가능하면 별도 세션으로 분리한다.
+- 한 Agent에 여러 Role이 등록되어 있고 workflow가 연속 수행을 허용하면 Agent 정체성을 유지한 채 `active_role`만 바꿔 같은 세션에서 계속할 수 있다.
+- Execution과 Verification은 기본적으로 별도 Agent 또는 독립 Role Session으로 분리한다.
 - Completion, merge, release 판단은 실행 세션이 대신하지 않는다.
 - 보조 작업자는 최종 책임자가 아니며, 최종 책임은 현재 Role Session이 가진다.
 - 세션 전환은 Task의 `status`, `target_agent`, `target_role`, lock, handoff로 기록한다.
 - 다중 worktree 운영에서는 세션 시작 시 `shared_status_policy.md` 기준으로 canonical status ref와 SHA를 확인한다.
+
+### 3.1 Continuous multi-role session
+
+기본 다중 Role 모드는 `continuous`다. 별도 설정 필드를 추가하지 않고 Agent registry의 `roles` 배열을 `assigned_roles`로 해석한다.
+
+같은 세션에서 Role을 바꿀 수 있는 조건:
+
+- 같은 Agent의 `assigned_roles`에 이전 Role과 다음 Role이 모두 등록되어 있다.
+- workflow와 프로젝트 override가 해당 전이를 허용한다.
+- 아래 독립 분리 조합에 해당하지 않는다.
+- 상태 전이와 receipt에 변경된 `active_role`을 기록한다.
+
+기본 독립 분리 조합:
+
+- Execution Role과 Verification Role
+- 변경 작성자와 보안·개인정보 독립 검증
+- 배포 실행과 최종 Release 승인
+- 변경 작성자와 독립 감사
+
+같은 Agent가 Lead Role에서 Completion Role로 이동하는 것은 허용할 수 있지만, 다른 Agent가 완료한 것처럼 이름을 바꾸거나 새 정체성을 만들지 않는다.
 
 ## 4. 별도 세션 권장 기준
 
@@ -63,7 +83,7 @@ Role 모델은 책임을 정의하고, 이 문서는 그 책임을 한 세션에
 
 ## 6. 세션 인계 기준
 
-Role Session이 바뀌면 `.ai/runtime/role_handoff.md`의 `다음 Agent에게 전달할 말`을 남긴다.
+다음 Agent 또는 독립 Role Session으로 책임이 이동하면 `.ai/runtime/role_handoff.md`의 compact receipt와 수신 컨텍스트를 남긴다. 같은 Agent가 허용된 Role로 연속 이동할 때도 receipt에는 `active_role` 변경을 기록하지만 새 세션 시작 문구는 생략할 수 있다.
 
 필요하면 아래 정보를 추가한다.
 
@@ -105,10 +125,12 @@ Delegation Record:
 - 같은 세션이 사용자 승인 없이 Execution과 Verification을 모두 수행하지 않는다.
 - 보조 작업 결과를 독립 검증으로 표기하지 않는다.
 - 다른 Role이 수행한 것처럼 상태 전이 기록을 작성하지 않는다.
-- 다음 Agent에게 넘겼다고 말하면서 같은 세션에서 다음 Role 작업을 계속하지 않는다.
+- 다음 책임이 다른 Agent 또는 독립 분리 Role인데 인계했다고 기록한 뒤 같은 세션에서 대신 수행하지 않는다.
+- 같은 Agent의 허용된 Role 이동을 다른 Agent에게 인계한 것처럼 기록하지 않는다.
 
 ## 9. 변경 이력
 
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-07-23 | Agent 세션 분리와 보조 위임 기준 추가 |
+| 2026-08-13 | continuous multi-role session과 독립 분리 조합 명시 |

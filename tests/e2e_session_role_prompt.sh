@@ -128,6 +128,37 @@ grep -q 'Lead Agent: Lead Role / Completion Role (active / Product Team)' /tmp/a
   exit 1
 }
 
+"$repo_root/bin/aiops" role prompt completion \
+  --target "$tmpdir" \
+  --task T-20260727-020 \
+  >/tmp/aiops-e2e-completion-role-prompt.out
+
+grep -q '^agent: Lead Agent$' /tmp/aiops-e2e-completion-role-prompt.out || {
+  printf '%s\n' "completion prompt did not preserve the multi-role Agent identity" >&2
+  cat /tmp/aiops-e2e-completion-role-prompt.out >&2
+  exit 1
+}
+
+grep -q '^assigned_roles: Lead Role / Completion Role$' /tmp/aiops-e2e-completion-role-prompt.out || {
+  printf '%s\n' "completion prompt did not include all assigned roles" >&2
+  exit 1
+}
+
+grep -q '^active_role: Completion Role$' /tmp/aiops-e2e-completion-role-prompt.out || {
+  printf '%s\n' "completion prompt did not identify the active role" >&2
+  exit 1
+}
+
+grep -q '너의 Agent 정체성은 Lead Agent 하나다.' /tmp/aiops-e2e-completion-role-prompt.out || {
+  printf '%s\n' "completion prompt split one multi-role Agent into separate identities" >&2
+  exit 1
+}
+
+grep -q 'Execution Role과 Verification Role처럼 독립 분리가 필요한 조합' /tmp/aiops-e2e-completion-role-prompt.out || {
+  printf '%s\n' "role prompt did not preserve the execution and verification separation" >&2
+  exit 1
+}
+
 grep -q 'Release Agent: Release Role (deferred / Product Team)' /tmp/aiops-e2e-session-guide.out || {
   printf '%s\n' "session-guide did not include deferred agent role mapping" >&2
   cat /tmp/aiops-e2e-session-guide.out >&2
@@ -187,8 +218,8 @@ grep -q 'blocked_actions가 있으면 작업하지 말고' /tmp/aiops-e2e-role-p
   exit 1
 }
 
-grep -q "다음 Agent에게 전달할 말" /tmp/aiops-e2e-role-prompt.out || {
-  printf '%s\n' "role prompt did not include handoff reminder" >&2
+grep -q "compact transition receipt" /tmp/aiops-e2e-role-prompt.out || {
+  printf '%s\n' "role prompt did not include transition receipt reminder" >&2
   exit 1
 }
 

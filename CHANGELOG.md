@@ -10,6 +10,16 @@
 
 ## Unreleased
 
+### Added
+
+- Add `aiops.transition_receipt.v1`, a compact Task transition receipt template, and `aiops validate transition-receipt FILE`.
+
+### Changed
+
+- Define one persistent Agent identity with registry roles interpreted as assigned roles and the current transition Role recorded as `active_role`.
+- Allow continuous same-Agent Role changes when workflow permits while keeping Execution and independent Verification separated by default.
+- Define sender and receiver readiness checks before lifecycle transitions and align Task, QA, and handoff reports around one compact receipt.
+
 ## 0.14.0 - 2026-08-13
 
 ### Added

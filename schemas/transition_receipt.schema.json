@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/transition_receipt.schema.json",
+  "title": "AI Ops Transition Receipt",
+  "description": "Compact, machine-readable result of a Task lifecycle transition.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "task_id",
+    "transition",
+    "actor",
+    "next",
+    "result",
+    "summary",
+    "evidence",
+    "risks",
+    "blockers"
+  ],
+  "properties": {
+    "schema": {
+      "const": "aiops.transition_receipt.v1"
+    },
+    "task_id": {
+      "type": "string",
+      "pattern": "^T-[0-9]{8}-[0-9]{3,}$"
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "$ref": "#/$defs/taskStatus" },
+        "to": { "$ref": "#/$defs/taskStatus" }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "role"],
+      "properties": {
+        "agent": { "type": "string", "minLength": 1 },
+        "role": { "$ref": "#/$defs/roleName" }
+      }
+    },
+    "next": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": {
+        "agent": { "type": ["string", "null"], "minLength": 1 },
+        "role": {
+          "anyOf": [
+            { "$ref": "#/$defs/roleName" },
+            { "type": "null" }
+          ]
+        },
+        "action": { "type": "string", "minLength": 1 }
+      },
+      "anyOf": [
+        {
+          "required": ["agent"],
+          "properties": {
+            "agent": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "required": ["role"],
+          "properties": {
+            "role": { "$ref": "#/$defs/roleName" }
+          }
+        }
+      ]
+    },
+    "result": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "passed",
+        "pass_with_risk",
+        "failed",
+        "blocked",
+        "cancelled"
+      ]
+    },
+    "summary": { "type": "string", "minLength": 1 },
+    "evidence": { "$ref": "#/$defs/stringList" },
+    "validation_skip_reason": { "type": "string", "minLength": 1 },
+    "risks": { "$ref": "#/$defs/stringList" },
+    "blockers": { "$ref": "#/$defs/stringList" },
+    "receipt_path": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "minLength": 1 }
+  },
+  "anyOf": [
+    {
+      "properties": {
+        "evidence": { "type": "array", "minItems": 1 }
+      }
+    },
+    {
+      "required": ["validation_skip_reason"]
+    }
+  ],
+  "$defs": {
+    "taskStatus": {
+      "type": "string",
+      "enum": [
+        "proposed",
+        "scoped",
+        "approved",
+        "in_progress",
+        "verification_ready",
+        "verification_in_progress",
+        "verification_passed",
+        "completion_review",
+        "done",
+        "blocked",
+        "rework_requested",
+        "cancelled"
+      ]
+    },
+    "roleName": {
+      "type": "string",
+      "enum": [
+        "Direction Role",
+        "Lead Role",
+        "Execution Role",
+        "Verification Role",
+        "Completion Role",
+        "Release Role",
+        "Ops Governance Role",
+        "Product Owner"
+      ]
+    },
+    "stringList": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    }
+  }
+}
