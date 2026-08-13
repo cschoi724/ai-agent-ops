@@ -1,8 +1,8 @@
 # Agent Operations Efficiency Improvement Plan
 
-상태: 논의 초안 / 구현 전
+상태: 구현 계획 확정 / 구현 전
 대상: Role Session, Task 상태 전이, 보고, 검증, Git 정리, 모델 추천
-기준 버전: v0.13.0
+기준 버전: v0.14.0
 작성일: 2026-08-13
 
 ## 1. 목적
@@ -751,7 +751,7 @@ bin/aiops release-check --strict --allow-pending-release
 
 ## 17. 권장 다음 단계
 
-Project Dashboard 9차 독립 검증과 PR 반영을 먼저 마무리한다. 이후 Dashboard 10차 SVG/PNG Export보다 이 계획의 1차 `Unified Lifecycle Contract`를 우선 진행한다.
+Project Dashboard 1~9차는 v0.14.0으로 릴리스 및 Homebrew 배포가 완료됐다. 다음 작업은 Dashboard 10차 SVG/PNG Export보다 이 계획의 1차 `Unified Lifecycle Contract`를 우선 진행한다.
 
 이유:
 
