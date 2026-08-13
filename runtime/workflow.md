@@ -67,7 +67,7 @@ Need
 - canonical status가 허용 범위 안에서 최신이다.
 - 다음 행동이 한 문장으로 명확하다.
 
-둘 중 하나라도 준비되지 않으면 상태만 먼저 바꾸지 않는다. `aiops task accept TASK_ID --check`는 현재 담당자의 작업 시작 준비를, `aiops task advance TASK_ID --check`는 다음 Role로의 인계 준비를 파일 변경 없이 계산한다. 점검을 통과한 뒤 `--check`를 제외하면 Task, lock, receipt, 필요한 handoff와 board projection을 rollback 가능한 하나의 bundle로 적용한다. 기존 `aiops task transition`은 blocked, rework, cancelled 같은 예외를 명시적으로 처리하는 낮은 수준의 전이 명령으로 유지한다.
+둘 중 하나라도 준비되지 않으면 상태만 먼저 바꾸지 않는다. `aiops task accept TASK_ID --check`는 현재 담당자의 작업 시작 준비를, `aiops task advance TASK_ID --check`는 다음 Role로의 인계 준비를 파일 변경 없이 계산한다. 점검을 통과한 뒤 `--check`를 제외하면 Task, lock, receipt, 필요한 handoff와 board projection을 rollback 가능한 하나의 bundle로 적용한다. 기존 `aiops task transition`은 blocked, rework, cancelled 같은 예외를 명시적으로 처리하는 낮은 수준의 전이 명령으로 유지하지만 workflow의 Profile 제한을 우회할 수 없다.
 
 기본 정상 흐름에서 명령 경계는 다음과 같다.
 
@@ -84,7 +84,7 @@ completion_review --advance--> done
 
 성공한 전이는 `aiops.transition_receipt.v1`으로 요약한다. receipt에는 Task ID, 이전/새 상태, 실제 Agent와 `active_role`, 다음 담당, 결과, 검증 근거 또는 생략 사유, risk, blocker, 다음 행동을 포함한다.
 
-Task 수행 절차는 `aiops task profile TASK_ID`가 계산한 위험도 profile을 따른다. Light는 독립 Verification을 생략할 수 있지만 self-check와 canonical/allowed-path guard를 생략하지 않는다. Standard와 Strict는 Execution과 Verification을 분리하며, Strict는 scope review, 전체 회귀, 상세 근거와 release gate를 추가한다. Task 또는 workflow override는 자동 위험 신호가 요구하는 최소 profile보다 낮출 수 없다.
+Task 수행 절차는 `aiops task profile TASK_ID`가 계산한 위험도 profile을 따른다. Light는 독립 Verification을 생략할 수 있지만 self-check와 canonical/allowed-path guard를 생략하지 않는다. Standard와 Strict는 Execution과 Verification을 분리하며, Strict는 scope review, 전체 회귀, 상세 근거와 release gate를 추가한다. Task 또는 workflow override는 자동 위험 신호가 요구하는 최소 profile보다 낮출 수 없다. Git base가 없는 기존 Task도 현재 staged, unstaged, untracked 경로를 Task scope와 함께 평가하고 허용 범위 밖 변경을 차단한다. 비-Git 프로젝트에서만 path guard 호환 모드를 사용한다.
 
 ## 3. 중심 흐름
 

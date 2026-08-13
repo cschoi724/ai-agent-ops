@@ -362,22 +362,19 @@ class TaskLifecycle
   end
 
   def validate_changed_paths
-    base = @task["base_sha"].to_s
-    base = @task["status_ref_sha"].to_s if base.empty?
-    return check("allowed_paths", true, "no Git base recorded; path check deferred") if base.empty?
+    changes = TaskRiskProfiles.git_change_set(@task, @target)
+    return check("allowed_paths", true, "non-Git project; path check uses compatibility mode") unless changes["repository"]
+    if changes["base"] && !changes["base_resolved"]
+      raise LifecycleError, "recorded Git base cannot be resolved: #{changes['base']}; refresh Task base metadata"
+    end
 
-    _resolved, _error, exists = Open3.capture3("git", "-C", @target, "cat-file", "-e", "#{base}^{commit}")
-    raise LifecycleError, "recorded Git base cannot be resolved: #{base}; refresh Task base metadata" unless exists.success?
-
-    output, error, status = Open3.capture3("git", "-C", @target, "diff", "--name-only", base, "--")
-    raise LifecycleError, "cannot inspect changed paths: #{error.strip}" unless status.success?
-    changed = output.lines.map(&:strip).reject(&:empty?)
+    changed = changes["paths"]
     allowed = Array(@task["allowed_paths"]).map { |path| path.to_s.sub(%r{/+\z}, "") }.reject(&:empty?)
     outside = changed.reject do |path|
       path.start_with?(".ai_project/") || allowed.any? { |prefix| prefix == "." || path == prefix || path.start_with?("#{prefix}/") }
     end
     raise LifecycleError, "changed paths outside Task allowed_paths: #{outside.join(', ')}" unless outside.empty?
-    check("allowed_paths", true, "#{changed.length} tracked changed path(s) are within Task scope")
+    check("allowed_paths", true, "#{changed.length} changed path(s) are within Task scope")
   end
 
   def validate_lock
@@ -630,6 +627,7 @@ class TaskLifecycle
 
     originals = {}
     staged = {}
+    tempfiles = []
     applied = []
     begin
       @writes.each do |path, content|
@@ -639,6 +637,7 @@ class TaskLifecycle
                             { content: File.binread(path), mode: stat.mode & 0o777, uid: stat.uid, gid: stat.gid }
                           end
         file = Tempfile.new([".aiops-lifecycle-", ".tmp"], File.dirname(path))
+        tempfiles << file
         file.binmode
         file.chmod(originals[path] ? originals[path][:mode] : 0o644)
         if originals[path]
@@ -675,6 +674,7 @@ class TaskLifecycle
       raise e
     ensure
       staged.each_value { |path| File.delete(path) if File.exist?(path) }
+      tempfiles.each { |file| file.close! rescue nil }
     end
   end
 

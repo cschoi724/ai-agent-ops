@@ -1736,6 +1736,7 @@ task_transition_allowed() {
   from="$3"
   to="$4"
   role="$5"
+  profile="${6:-strict}"
 
   catalog="$(workflow_catalog_path "$target" "" 2>/dev/null || true)"
   [ -n "$catalog" ] || return 1
@@ -1747,6 +1748,7 @@ task_transition_allowed() {
     from = ARGV[2]
     to = ARGV[3]
     role = ARGV[4]
+    profile = ARGV[5]
     catalog = JSON.parse(File.read(catalog_path))
     workflows = catalog["workflows"] || {}
     default_workflow = catalog["default_workflow"]
@@ -1775,12 +1777,14 @@ task_transition_allowed() {
     transitions = entry["transitions"].is_a?(Array) ? entry["transitions"] : []
     allowed = transitions.any? do |transition|
       roles = transition["allowed_roles"].is_a?(Array) ? transition["allowed_roles"] : []
+      profiles = transition["profiles"].is_a?(Array) ? transition["profiles"] : []
       transition["from"] == from &&
         transition["to"] == to &&
-        (roles.include?(role) || roles.include?("any"))
+        (roles.include?(role) || roles.include?("any")) &&
+        (profiles.empty? || profiles.include?(profile))
     end
     exit(allowed ? 0 : 1)
-  ' "$catalog" "$workflow" "$from" "$to" "$role"
+  ' "$catalog" "$workflow" "$from" "$to" "$role" "$profile"
 }
 
 workflow_catalog_path() {
@@ -7004,6 +7008,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         risk_catalog_path = File.file?(File.join(target, ".ai", "runtime", "workflows.json")) ? File.join(target, ".ai", "runtime", "workflows.json") : File.join(core_dir, "runtime", "workflows.json")
         risk_catalog = JSON.parse(File.read(risk_catalog_path))
+        risk_git_cache = {}
         tasks = files_under(File.join(project_dir, "tasks")).map do |path|
           data = front_matter(path)
           relative = path.sub(%r{\A#{Regexp.escape(target)}/?}, "")
@@ -7013,7 +7018,7 @@ document.addEventListener("DOMContentLoaded", () => {
               "id" => data["id"] || File.basename(path, ".md"),
               "workflow" => data["workflow"] || legacy_field(path, "workflow") || risk_catalog["default_workflow"]
             )
-            TaskRiskProfiles.evaluate(task: profile_task, target: target, catalog: risk_catalog)
+            TaskRiskProfiles.evaluate(task: profile_task, target: target, catalog: risk_catalog, git_cache: risk_git_cache)
           rescue RiskProfileError, KeyError
             {"selected_profile" => "invalid", "recommended_profile" => "strict", "ready" => false}
           end
@@ -7878,6 +7883,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
       catalog="$(workflow_catalog_path "$target" "" 2>/dev/null || true)"
       command -v ruby >/dev/null 2>&1 || die "ruby is required for project context"
+      context_risk_profile="strict"
+      if [ -n "$task_file" ]; then
+        profile_runtime="$(default_core_dir)/runtime/task_risk_profile.rb"
+        if [ -f "$profile_runtime" ]; then
+          profile_json="$(ruby "$profile_runtime" "$task_id" --target "$target" --task-file "$task_file" --json 2>/dev/null || true)"
+          parsed_profile="$(printf '%s' "$profile_json" | ruby -rjson -e 'data = JSON.parse(STDIN.read); value = data["selected_profile"]; puts value if %w[light standard strict].include?(value)' 2>/dev/null || true)"
+          [ -z "$parsed_profile" ] || context_risk_profile="$parsed_profile"
+        fi
+      fi
 
       ruby -ryaml -rjson -rdate -ropen3 -rshellwords -e '
         target = ARGV[0]
@@ -7886,6 +7900,7 @@ document.addEventListener("DOMContentLoaded", () => {
         task_id = ARGV[3]
         catalog_path = ARGV[4]
         as_json = ARGV[5] == "yes"
+        risk_profile = ARGV[6]
 
         def scalar_string(value)
           return nil unless value.is_a?(String) || value.is_a?(Integer) || value.is_a?(Float) || value == true || value == false
@@ -8048,9 +8063,11 @@ document.addEventListener("DOMContentLoaded", () => {
           transitions = workflow_entry["transitions"].is_a?(Array) ? workflow_entry["transitions"] : []
           valid_next = transitions.select do |transition|
             roles = list(transition["allowed_roles"])
+            profiles = list(transition["profiles"])
             transition.is_a?(Hash) &&
               transition["from"] == status &&
-              (roles.include?(role) || roles.include?("any"))
+              (roles.include?(role) || roles.include?("any")) &&
+              (profiles.empty? || profiles.include?(risk_profile))
           end.map do |transition|
             to = transition["to"]
             meta = (workflow_entry["statuses"] || {})[to] || {}
@@ -8193,7 +8210,7 @@ document.addEventListener("DOMContentLoaded", () => {
         puts ""
         puts "recommended_checks:"
         contract["recommended_checks"].each { |check| puts "  - #{check}" }
-      ' "$target" "$role" "$task_file" "$task_id" "$catalog" "$json"
+      ' "$target" "$role" "$task_file" "$task_id" "$catalog" "$json" "$context_risk_profile"
       ;;
     health)
       target="$(pwd)"
@@ -9702,6 +9719,13 @@ EOF
       from_status="$(task_yaml_field "$task_file" status)"
       workflow="$(task_yaml_field "$task_file" workflow)"
       locked_by="$(task_yaml_field "$task_file" locked_by)"
+      risk_profile="strict"
+      profile_runtime="$(default_core_dir)/runtime/task_risk_profile.rb"
+      if [ -f "$profile_runtime" ] && command -v ruby >/dev/null 2>&1; then
+        profile_json="$(ruby "$profile_runtime" "$task_id" --target "$target" --task-file "$task_file" --json 2>/dev/null || true)"
+        parsed_profile="$(printf '%s' "$profile_json" | ruby -rjson -e 'data = JSON.parse(STDIN.read); value = data["selected_profile"]; puts value if %w[light standard strict].include?(value)' 2>/dev/null || true)"
+        [ -z "$parsed_profile" ] || risk_profile="$parsed_profile"
+      fi
       status_ref="$(canonical_status_ref_value "$target")"
       status_ref_sha=""
       canonical_status=""
@@ -9752,7 +9776,7 @@ EOF
         fi
       fi
 
-      if ! task_transition_allowed "$target" "$workflow" "$from_status" "$to_status" "$role"; then
+      if ! task_transition_allowed "$target" "$workflow" "$from_status" "$to_status" "$role" "$risk_profile"; then
         die "invalid transition: $from_status -> $to_status by $role"
       fi
 

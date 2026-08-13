@@ -31,6 +31,13 @@ EOF
 cat > "$project/.ai_project/task_board.md" <<'EOF'
 # Task Board
 EOF
+cat > "$project/.ai_project/operating_model.md" <<'EOF'
+---
+schema: aiops.operating_model.v1
+project: Risk Profile Fixture
+canonical_status_ref:
+---
+EOF
 cat > "$project/.ai_project/source_of_truth.md" <<'EOF'
 # Source
 EOF
@@ -153,6 +160,29 @@ ruby -rjson -e '
 "$repo_root/bin/aiops" task status T-20260813-101 --target "$project" > "$tmpdir/status.out"
 grep -q '^risk_profile: light$' "$tmpdir/status.out"
 
+"$repo_root/bin/aiops" task transition T-20260813-102 \
+  --target "$project" --to in_progress --role "Execution Role" --by "Lead Agent" \
+  > "$tmpdir/standard-progress.out"
+if "$repo_root/bin/aiops" task transition T-20260813-102 \
+  --target "$project" --to completion_review --role "Execution Role" --by "Lead Agent" \
+  > "$tmpdir/standard-direct-completion.out" 2>&1; then
+  printf '%s\n' "Standard task used the Light-only direct completion transition" >&2
+  exit 1
+fi
+grep -q 'invalid transition: in_progress -> completion_review' "$tmpdir/standard-direct-completion.out"
+
+"$repo_root/bin/aiops" project context --target "$project" --role execution \
+  --task T-20260813-102 --json > "$tmpdir/standard-context.json"
+"$repo_root/bin/aiops" project context --target "$project" --role execution \
+  --task T-20260813-105 --json > "$tmpdir/light-context.json"
+ruby -rjson -e '
+  standard = JSON.parse(File.read(ARGV[0]))
+  light = JSON.parse(File.read(ARGV[1]))
+  abort("Standard context exposed Light-only completion") if standard["valid_next_transitions"].any? { |item| item["to"] == "completion_review" }
+  abort("Standard context omitted verification") unless standard["valid_next_transitions"].any? { |item| item["to"] == "verification_ready" }
+  abort("Light context omitted direct completion") unless light["valid_next_transitions"].any? { |item| item["to"] == "completion_review" }
+' "$tmpdir/standard-context.json" "$tmpdir/light-context.json"
+
 if "$repo_root/bin/aiops" task advance T-20260813-105 --target "$project" --check --json > /dev/null 2> "$tmpdir/light-evidence.err"; then
   printf '%s\n' "Light transition without targeted evidence should fail" >&2
   exit 1
@@ -179,6 +209,27 @@ ruby -rjson -e '
   abort("dashboard profile missing") unless shown["risk_profile"] == "light"
 ' "$tmpdir/snapshot.json" "$tmpdir/dashboard.json"
 
+ruby -rjson -e '
+  dashboard = JSON.parse(File.read(ARGV[0]))
+  snapshot = JSON.parse(File.read(ARGV[1]))
+  [dashboard, snapshot].each do |data|
+    item = data.fetch("tasks").fetch("items").first
+    item["risk_profile"] = {"unexpected" => true}
+    item["recommended_risk_profile"] = 42
+    item["risk_profile_ready"] = "yes"
+  end
+  File.write(ARGV[2], JSON.pretty_generate(dashboard))
+  File.write(ARGV[3], JSON.pretty_generate(snapshot))
+' "$tmpdir/dashboard.json" "$tmpdir/snapshot.json" "$tmpdir/invalid-dashboard.json" "$tmpdir/invalid-snapshot.json"
+if "$repo_root/bin/aiops" validate project-dashboard "$tmpdir/invalid-dashboard.json" >/dev/null 2>&1; then
+  printf '%s\n' "dashboard accepted invalid risk profile field types" >&2
+  exit 1
+fi
+if "$repo_root/bin/aiops" validate project-snapshot "$tmpdir/invalid-snapshot.json" >/dev/null 2>&1; then
+  printf '%s\n' "snapshot accepted invalid risk profile field types" >&2
+  exit 1
+fi
+
 "$repo_root/bin/aiops" project dashboard --target "$project" --format html --output "$tmpdir/dashboard.html"
 grep -q '운영 프로필' "$tmpdir/dashboard.html"
 grep -q '>Light<' "$tmpdir/dashboard.html"
@@ -188,5 +239,55 @@ if "$repo_root/bin/aiops" task profile T-20260813-101 --target "$project" --prof
   exit 1
 fi
 grep -q 'supports: light, standard, strict' "$tmpdir/invalid-profile.err"
+
+git init -b main "$project" >/dev/null
+git -C "$project" config user.email "aiops@example.test"
+git -C "$project" config user.name "AI Ops Test"
+git -C "$project" add .
+git -C "$project" commit -m "seed base-less risk fixture" >/dev/null
+mkdir -p "$project/schemas"
+printf '{}\n' > "$project/schemas/payment.schema.json"
+
+if "$repo_root/bin/aiops" task profile T-20260813-105 --target "$project" --json \
+  > "$tmpdir/base-less-profile.json" 2> "$tmpdir/base-less-profile.err"; then
+  :
+fi
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  abort("base-less untracked schema must select Strict") unless data["selected_profile"] == "strict"
+  abort("untracked schema path missing") unless data["paths"].include?("schemas/payment.schema.json")
+  abort("Git changes should be reported as path source") unless data["path_source"] == "git_changes"
+' "$tmpdir/base-less-profile.json"
+ruby -ryaml -rjson -rdate -I"$repo_root/runtime" -rtask_risk_profile -e '
+  project = ARGV.fetch(0)
+  original = Open3.method(:capture3)
+  calls = []
+  Open3.define_singleton_method(:capture3) do |*args|
+    calls << args
+    original.call(*args)
+  end
+  read_task = lambda do |id|
+    text = File.read(File.join(project, ".ai_project", "tasks", "active", "#{id}.md"))
+    body = text.lines
+    closing = body[1..].find_index { |line| line.strip == "---" } + 1
+    YAML.safe_load(body[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true)
+  end
+  catalog = JSON.parse(File.read(File.join(project, ".ai", "runtime", "workflows.json")))
+  cache = {}
+  %w[T-20260813-101 T-20260813-105].each do |id|
+    TaskRiskProfiles.evaluate(task: read_task.call(id), target: project, catalog: catalog, git_cache: cache)
+  end
+  git_calls = calls.select { |args| args.first == "git" }
+  abort("repository lookup was not cached") unless git_calls.count { |args| args.include?("--is-inside-work-tree") } == 1
+  abort("untracked lookup was not cached") unless git_calls.count { |args| args.include?("--others") } == 1
+  abort("unstaged lookup was not cached") unless git_calls.count { |args| args.include?("diff") && !args.include?("--cached") } == 1
+  abort("staged lookup was not cached") unless git_calls.count { |args| args.include?("--cached") } == 1
+' "$project"
+if "$repo_root/bin/aiops" task advance T-20260813-105 --target "$project" --check --json \
+  --next-agent "QA Agent" --evidence docs/README.md > "$tmpdir/base-less-advance.out" 2>&1; then
+  printf '%s\n' "base-less Task ignored an untracked path outside allowed_paths" >&2
+  exit 1
+fi
+grep -q 'changed paths outside Task allowed_paths: schemas/payment.schema.json' "$tmpdir/base-less-advance.out"
 
 printf '%s\n' "ok: task risk profiles"

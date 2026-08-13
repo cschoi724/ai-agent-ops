@@ -1,6 +1,6 @@
 # Agent Operations Efficiency Improvement Plan
 
-상태: 1차 완료 / 2차 완료 / 3차 구현 완료·독립 검증 대기
+상태: 1차 완료 / 2차 완료 / 3차 구현 보완 완료·독립 재검증 대기
 대상: Role Session, Task 상태 전이, 보고, 검증, Git 정리, 모델 추천
 기준 버전: v0.14.0
 작성일: 2026-08-13
@@ -631,7 +631,7 @@ provider_model_map:
 
 ### 3차. Risk-based Workflow Profiles
 
-구현 상태: 구현 완료, 독립 검증 대기
+구현 상태: 구현 보완 완료, 독립 재검증 대기
 
 목표:
 
@@ -666,6 +666,8 @@ provider_model_map:
 - Light lifecycle은 `in_progress -> completion_review`로 직접 연결하고 Standard/Strict는 독립 Verification 흐름을 유지한다.
 - Task status, project snapshot, terminal/HTML dashboard 작업 표에 계산된 profile을 표시한다.
 - 기존 Task는 새 metadata를 필수로 요구하지 않으며 자동 추천을 사용한다.
+- 독립 검증에서 발견된 저수준 전이 Profile 우회와 base 없는 Task의 변경 누락을 차단했다. project context도 같은 Profile 조건을 사용하며 staged, unstaged, untracked 경로를 allowed-path guard에 포함한다.
+- Snapshot/dashboard Profile 필드 타입을 schema로 검증하고, snapshot 한 번 안에서 저장소·untracked·base별 Git 조회 결과를 재사용한다.
 
 ### 4차. Safe Task Close and Branch Cleanup
 
@@ -799,7 +801,7 @@ bin/aiops release-check --strict --allow-pending-release
 
 ## 17. 권장 다음 단계
 
-Project Dashboard 1~9차는 v0.14.0으로 릴리스 및 Homebrew 배포가 완료됐고, 1차 `Unified Lifecycle Contract`와 2차 `Transition Automation`도 main 반영을 완료했다. 현재 3차 `Risk-based Workflow Profiles` 구현 후 독립 검증을 진행한다.
+Project Dashboard 1~9차는 v0.14.0으로 릴리스 및 Homebrew 배포가 완료됐고, 1차 `Unified Lifecycle Contract`와 2차 `Transition Automation`도 main 반영을 완료했다. 현재 3차 `Risk-based Workflow Profiles`의 독립 검증 지적사항을 보완하고 재검증을 준비한다.
 
 이유:
 

@@ -27,6 +27,8 @@
 
 ### Fixed
 
+- Enforce workflow Profile restrictions in low-level Task transitions and project context, include current staged, unstaged, and untracked paths when a Task has no Git base, and fail closed on out-of-scope changes.
+- Validate projected Task Profile field types in snapshot and dashboard schemas, cache repeated Git path lookups during snapshot generation, and retain staged lifecycle tempfiles through bundle validation.
 - Fail closed when a recorded Task Git base cannot be resolved, validate root-level source files, preserve rollback file modes, retain same-Agent multi-Role routing, and store immutable per-transition receipts referenced consistently by handoffs.
 - Make Role prompts prefer the Task's enabled `target_agent`, reject Role/ownership conflicts, and require explicit selection when multiple Agents share a Role.
 - Remove remaining workflow instructions that asked Agents to duplicate handoff content in Task files and final responses.

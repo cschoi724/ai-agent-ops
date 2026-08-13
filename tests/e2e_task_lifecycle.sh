@@ -346,6 +346,7 @@ project: LifecycleCanonicalFixture
 canonical_status_ref: origin/main
 ---
 EOF
+printf '.ai_project/.runtime/\n' > "$canonical/.gitignore"
 cat > "$canonical/.ai_project/tasks/active/T-20260813-008.md" <<'EOF'
 ---
 schema: aiops.task.v1

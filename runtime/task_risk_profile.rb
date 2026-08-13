@@ -22,7 +22,7 @@ module TaskRiskProfiles
 
   module_function
 
-  def evaluate(task:, target:, catalog:, requested_profile: nil)
+  def evaluate(task:, target:, catalog:, requested_profile: nil, git_cache: nil)
     workflow = resolve_workflow(catalog, task["workflow"])
     workflow_profile = workflow["default_profile"].to_s
     workflow_profile = nil unless LEVELS.key?(workflow_profile)
@@ -33,7 +33,7 @@ module TaskRiskProfiles
       raise RiskProfileError, "--profile supports: light, standard, strict"
     end
 
-    paths, path_source = relevant_paths(task, target)
+    paths, path_source = relevant_paths(task, target, git_cache: git_cache)
     classification = classify_paths(paths)
     signals = risk_signals(task, paths, classification)
     signal_profile = signals.map { |signal| signal["profile"] }.max_by { |profile| LEVELS.fetch(profile) } || "light"
@@ -95,20 +95,73 @@ module TaskRiskProfiles
     end
   end
 
-  def relevant_paths(task, target)
+  def relevant_paths(task, target, git_cache: nil)
+    planned = (Array(task["allowed_paths"]) + Array(task.dig("ownership", "paths"))).map(&:to_s).reject(&:empty?).uniq.sort
+    changes = git_change_set(task, target, cache: git_cache)
+    return [planned, "task_scope"] unless changes["repository"]
+
+    changed = changes["paths"]
+    unless changed.empty?
+      paths = changes["base"] ? changed : (planned + changed).uniq.sort
+      return [paths, "git_changes"]
+    end
+
+    [planned, "task_scope"]
+  end
+
+  def git_change_set(task, target, cache: nil)
     base = task["base_sha"].to_s
     base = task["status_ref_sha"].to_s if base.empty?
-    if !base.empty?
-      _out, _err, exists = Open3.capture3("git", "-C", target, "cat-file", "-e", "#{base}^{commit}")
-      if exists.success?
-        changed, = Open3.capture3("git", "-C", target, "diff", "--name-only", base, "--")
-        untracked, = Open3.capture3("git", "-C", target, "ls-files", "--others", "--exclude-standard")
-        paths = (changed.lines + untracked.lines).map(&:strip).reject(&:empty?).uniq.sort
-        return [paths, "git_changes"] unless paths.empty?
-      end
+    repository = cached(cache, ["repository", target]) do
+      _output, _error, status = Open3.capture3("git", "-C", target, "rev-parse", "--is-inside-work-tree")
+      status.success?
     end
-    planned = (Array(task["allowed_paths"]) + Array(task.dig("ownership", "paths"))).map(&:to_s).reject(&:empty?).uniq.sort
-    [planned, "task_scope"]
+    return {"repository" => false, "base" => base, "base_resolved" => false, "paths" => []} unless repository
+
+    untracked = cached_git_lines(cache, ["untracked", target], target, "ls-files", "--others", "--exclude-standard")
+    if base.empty?
+      unstaged = cached_git_lines(cache, ["unstaged", target], target, "diff", "--name-only", "--")
+      staged = cached_git_lines(cache, ["staged", target], target, "diff", "--cached", "--name-only", "--")
+      return {
+        "repository" => true,
+        "base" => nil,
+        "base_resolved" => false,
+        "paths" => (unstaged + staged + untracked).uniq.sort
+      }
+    end
+
+    resolved = cached(cache, ["base_resolved", target, base]) do
+      _output, _error, status = Open3.capture3("git", "-C", target, "cat-file", "-e", "#{base}^{commit}")
+      status.success?
+    end
+    changed = if resolved
+                cached_git_lines(cache, ["base_diff", target, base], target, "diff", "--name-only", base, "--")
+              else
+                []
+              end
+    {
+      "repository" => true,
+      "base" => base,
+      "base_resolved" => resolved,
+      "paths" => (changed + untracked).uniq.sort
+    }
+  end
+
+  def cached(cache, key)
+    return cache[key] if cache&.key?(key)
+
+    value = yield
+    cache[key] = value if cache
+    value
+  end
+
+  def cached_git_lines(cache, key, target, *args)
+    cached(cache, key) do
+      output, error, status = Open3.capture3("git", "-C", target, *args)
+      raise RiskProfileError, "cannot inspect Git changes: #{error.strip}" unless status.success?
+
+      output.lines.map(&:strip).reject(&:empty?).uniq.sort
+    end
   end
 
   def classify_paths(paths)
