@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+## 0.14.0 - 2026-08-13
+
 ### Added
 
 - Headless Chrome dashboard visual regression for Korean desktop and English narrow viewports, with Mermaid, interaction, overflow, browser-error checks, and CI screenshot artifacts.
