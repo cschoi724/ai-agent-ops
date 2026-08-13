@@ -143,7 +143,8 @@ grep -q '^status: in_progress$' "$task_file"
 grep -q '^locked_by: Dev Agent$' "$task_file"
 grep -q 'aiops:lifecycle T-20260813-001' "$project/.ai_project/task_board.md"
 "$repo_root/bin/aiops" validate task-transition-plan "$tmpdir/accept.json" >/dev/null
-"$repo_root/bin/aiops" validate transition-receipt "$project/.ai_project/reports/$task_id-transition-receipt.json" >/dev/null
+accept_receipt="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).dig("receipt", "receipt_path")' "$tmpdir/accept.json")"
+"$repo_root/bin/aiops" validate transition-receipt "$project/$accept_receipt" >/dev/null
 
 cat > "$project/.ai_project/reports/${task_id}_task-report.md" <<'EOF'
 # Task Report
@@ -169,6 +170,10 @@ grep -q 'next Agent is not registered' "$tmpdir/unknown-receiver.out"
   --next-agent "QA Agent" \
   --summary "Implementation ready for verification" \
   --json > "$tmpdir/verification-ready.json"
+verification_receipt="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).dig("receipt", "receipt_path")' "$tmpdir/verification-ready.json")"
+[ "$accept_receipt" != "$verification_receipt" ]
+[ -f "$project/$accept_receipt" ]
+[ -f "$project/$verification_receipt" ]
 grep -q '^status: verification_ready$' "$task_file"
 grep -q '^target_agent: QA Agent$' "$task_file"
 grep -q '^target_role: Verification Role$' "$task_file"
@@ -176,10 +181,28 @@ grep -q '^locked_by:$' "$task_file"
 handoff="$project/.ai_project/handoffs/${task_id}_execution_to_verification.md"
 [ -f "$handoff" ]
 "$repo_root/bin/aiops" validate handoff "$handoff" --strict >/dev/null
+handoff_receipt="$(ruby -ryaml -rdate -e '
+  text = File.read(ARGV[0]); lines = text.lines
+  closing = lines[1..].find_index { |line| line.strip == "---" } + 1
+  data = YAML.safe_load(lines[1...closing].join, permitted_classes: [Date, Time, Symbol], aliases: true)
+  puts data["transition_receipt_path"]
+' "$handoff")"
+[ "$handoff_receipt" = "$verification_receipt" ]
+cp "$project/$verification_receipt" "$tmpdir/verification-receipt.before"
+cp "$handoff" "$tmpdir/mismatched-handoff.md"
+perl -0pi -e 's/current_status: verification_ready/current_status: approved/' "$tmpdir/mismatched-handoff.md"
+if "$repo_root/bin/aiops" handoff validate "$tmpdir/mismatched-handoff.md" \
+  --target "$project" --strict >"$tmpdir/mismatched-handoff.out" 2>&1; then
+  printf '%s\n' "handoff with mismatched receipt status should fail" >&2
+  exit 1
+fi
+grep -q 'transition receipt status does not match handoff current_status' "$tmpdir/mismatched-handoff.out"
 
 "$repo_root/bin/aiops" task accept "$task_id" --target "$project" >/dev/null
 grep -q '^status: verification_in_progress$' "$task_file"
 grep -q '^locked_by: QA Agent$' "$task_file"
+cmp -s "$project/$verification_receipt" "$tmpdir/verification-receipt.before"
+"$repo_root/bin/aiops" validate handoff "$handoff" --strict >/dev/null
 
 cat > "$project/.ai_project/qa/${task_id}_qa-report.md" <<'EOF'
 # QA Report
@@ -208,6 +231,18 @@ if "$repo_root/bin/aiops" task advance T-20260813-002 --target "$project" --next
 fi
 grep -q 'source_of_truth path missing' "$tmpdir/missing-source.out"
 
+write_task T-20260813-012 approved "Dev Agent" "Execution Role" MISSING.md
+if "$repo_root/bin/aiops" task accept T-20260813-012 --target "$project" --check >"$tmpdir/missing-root-source.out" 2>&1; then
+  printf '%s\n' "missing root source file should block task accept" >&2
+  exit 1
+fi
+grep -q 'source_of_truth path missing: MISSING.md' "$tmpdir/missing-root-source.out"
+
+write_task T-20260813-013 proposed "Lead Agent" "Lead Role" .ai_project/source_of_truth.md
+"$repo_root/bin/aiops" task advance T-20260813-013 --target "$project" --check --json >"$tmpdir/same-agent-role.json"
+grep -q '"agent": "Lead Agent"' "$tmpdir/same-agent-role.json"
+grep -q '"role": "Direction Role"' "$tmpdir/same-agent-role.json"
+
 write_task T-20260813-003 in_progress "Dev Agent" "Execution Role" .ai_project/source_of_truth.md
 cat > "$project/.ai_project/reports/T-20260813-003_task-report.md" <<'EOF'
 # Task Report
@@ -231,6 +266,8 @@ rollback_task="$project/.ai_project/tasks/active/T-20260813-006.md"
 rollback_board="$project/.ai_project/task_board.md"
 cp "$rollback_task" "$tmpdir/rollback-task.before"
 cp "$rollback_board" "$tmpdir/rollback-board.before"
+chmod 0640 "$rollback_task"
+rollback_mode_before="$(ruby -e 'printf "%04o", File.stat(ARGV[0]).mode & 0777' "$rollback_task")"
 if AIOPS_TEST_LIFECYCLE_FAIL=after_first_write \
   "$repo_root/bin/aiops" task accept T-20260813-006 --target "$project" >"$tmpdir/rollback.out" 2>&1; then
   printf '%s\n' "injected write failure should fail" >&2
@@ -238,7 +275,9 @@ if AIOPS_TEST_LIFECYCLE_FAIL=after_first_write \
 fi
 cmp -s "$rollback_task" "$tmpdir/rollback-task.before"
 cmp -s "$rollback_board" "$tmpdir/rollback-board.before"
-[ ! -f "$project/.ai_project/reports/T-20260813-006-transition-receipt.json" ]
+rollback_mode_after="$(ruby -e 'printf "%04o", File.stat(ARGV[0]).mode & 0777' "$rollback_task")"
+[ "$rollback_mode_before" = "$rollback_mode_after" ]
+[ -z "$(find "$project/.ai_project/reports" -name 'T-20260813-006_*-transition-receipt.json' -print -quit)" ]
 
 write_task T-20260813-007 approved "Dev Agent" "Execution Role" .ai_project/source_of_truth.md
 git init -b main "$project" >/dev/null
@@ -277,6 +316,15 @@ if "$repo_root/bin/aiops" task accept T-20260813-009 \
   exit 1
 fi
 grep -q 'changed paths outside Task allowed_paths: outside.txt' "$tmpdir/outside-path.out"
+
+write_task T-20260813-010 approved "Dev Agent" "Execution Role" .ai_project/source_of_truth.md
+perl -0pi -e 's/base_sha:/base_sha: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef/' "$project/.ai_project/tasks/active/T-20260813-010.md"
+if "$repo_root/bin/aiops" task accept T-20260813-010 \
+  --target "$project" --check >"$tmpdir/invalid-base.out" 2>&1; then
+  printf '%s\n' "unresolvable recorded base should block task accept" >&2
+  exit 1
+fi
+grep -q 'recorded Git base cannot be resolved' "$tmpdir/invalid-base.out"
 
 canonical="$tmpdir/canonical-project"
 remote="$tmpdir/canonical.git"

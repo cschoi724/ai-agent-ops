@@ -24,6 +24,7 @@
 
 ### Fixed
 
+- Fail closed when a recorded Task Git base cannot be resolved, validate root-level source files, preserve rollback file modes, retain same-Agent multi-Role routing, and store immutable per-transition receipts referenced consistently by handoffs.
 - Make Role prompts prefer the Task's enabled `target_agent`, reject Role/ownership conflicts, and require explicit selection when multiple Agents share a Role.
 - Remove remaining workflow instructions that asked Agents to duplicate handoff content in Task files and final responses.
 

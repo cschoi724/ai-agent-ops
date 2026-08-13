@@ -429,6 +429,8 @@ aiops task advance TASK_ID --next-agent "QA Agent" --evidence .ai_project/report
 
 두 명령은 workflow 전이, 실제 actor의 Role/capability, 다음 Agent의 등록 상태와 capability, dependency, source path, lock, canonical SHA, report/QA evidence를 먼저 확인한다. `--check`는 Task와 운영 문서를 변경하지 않는다. 적용 중 하나의 파일이라도 쓰지 못하면 이미 적용한 파일을 원래 내용으로 복원한다. 같은 Git repository의 다른 worktree가 동일 Task를 동시에 전이하려 하면 공유 lock으로 한쪽을 거부한다.
 
+각 전이는 timestamp가 포함된 별도 receipt 파일을 생성한다. Task의 `transition_receipt_path`는 최신 receipt를 가리키고, Role handoff의 경로는 생성 당시 receipt에 고정된다. strict handoff 검증은 참조 receipt의 Task ID와 도착 상태도 함께 확인한다. 원자적 교체와 rollback은 기존 파일의 POSIX mode를 보존하며, 운영체제별 extended attribute 보존은 보장하지 않는다.
+
 Machine projection은 다음 명령으로 검증한다.
 
 ```sh

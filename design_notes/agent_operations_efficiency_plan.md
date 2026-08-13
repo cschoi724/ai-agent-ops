@@ -576,7 +576,7 @@ provider_model_map:
 
 1차 결정:
 
-- Receipt 기본 저장 위치는 `.ai_project/reports/T-YYYYMMDD-NNN-transition-receipt.json`으로 둔다.
+- Receipt는 `.ai_project/reports/TASK_ID_FROM_to_TO_TIMESTAMP-transition-receipt.json` 형식의 전이별 불변 파일로 저장한다. Task는 최신 receipt를, handoff는 생성 당시 receipt를 가리킨다.
 - 상세 Task/QA report는 Strict 또는 예외 상황에서 유지하고 일반 전이는 receipt를 기본으로 한다.
 - 새 상태는 추가하지 않으며 atomic 전이 자동화는 2차 `task advance`에서 구현한다.
 

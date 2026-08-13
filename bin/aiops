@@ -1887,6 +1887,49 @@ handoff_find_file() {
   printf '%s\n' "$found"
 }
 
+validate_handoff_receipt_reference() {
+  handoff_file="$1"
+  fallback_target="$2"
+  ruby -ryaml -rjson -rdate -e '
+    handoff_path = ARGV[0]
+    fallback_target = File.expand_path(ARGV[1])
+
+    def front_matter(path)
+      text = File.read(path)
+      lines = text.lines
+      closing = lines[1..]&.find_index { |line| line.strip == "---" }
+      abort("handoff_error: YAML front matter missing: #{path}") unless closing
+      YAML.safe_load(lines[1...(closing + 1)].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+    end
+
+    begin
+      handoff = front_matter(handoff_path)
+      receipt_relative = handoff["transition_receipt_path"].to_s
+      exit 0 if receipt_relative.empty?
+      abort("handoff_error: transition receipt path must be project-relative") if receipt_relative.start_with?("/")
+
+      worktree = handoff["worktree_path"].to_s
+      root = File.directory?(worktree) ? File.expand_path(worktree) : fallback_target
+      receipt_path = File.expand_path(receipt_relative, root)
+      unless receipt_path.start_with?("#{root}/")
+        abort("handoff_error: transition receipt path escapes project: #{receipt_relative}")
+      end
+      abort("handoff_error: transition receipt missing: #{receipt_relative}") unless File.file?(receipt_path)
+
+      receipt = JSON.parse(File.read(receipt_path))
+      abort("handoff_error: transition receipt Task ID mismatch") unless receipt["task_id"] == handoff["task_id"]
+      unless receipt.dig("transition", "to") == handoff["current_status"]
+        abort("handoff_error: transition receipt status does not match handoff current_status")
+      end
+      puts "ok: handoff transition receipt"
+    rescue JSON::ParserError => error
+      abort("handoff_error: invalid transition receipt JSON: #{error.message}")
+    rescue Psych::SyntaxError => error
+      abort("handoff_error: invalid handoff YAML: #{error.message}")
+    end
+  ' "$handoff_file" "$fallback_target"
+}
+
 normalize_role_name() {
   role="$(printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[ _-]/ /g; s/[[:space:]]\{1,\}/ /g; s/^ //; s/ $//')"
   case "$role" in
@@ -8728,6 +8771,9 @@ cmd_validate() {
       info "AI Ops handoff validate"
       info "handoff: $file"
       validate_front_matter handoff "$file" "$strict"
+      if [ "$strict" = "yes" ] && [ "${AIOPS_SCHEMA_ONLY_HANDOFF:-0}" != "1" ]; then
+        validate_handoff_receipt_reference "$file" "$(pwd)"
+      fi
       info "ok: handoff metadata"
       ;;
     policy-rules)
@@ -10611,6 +10657,9 @@ $qa_report"
       info "AI Ops handoff validate"
       info "handoff: ${handoff_file#$target/}"
       validate_front_matter handoff "$handoff_file" "$strict"
+      if [ "$strict" = "yes" ] && [ "${AIOPS_SCHEMA_ONLY_HANDOFF:-0}" != "1" ]; then
+        validate_handoff_receipt_reference "$handoff_file" "$target"
+      fi
       info "ok: handoff metadata"
       ;;
 

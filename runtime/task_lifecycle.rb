@@ -250,7 +250,8 @@ class TaskLifecycle
       raise LifecycleError, "next Agent is not registered: #{@options[:next_agent]}" unless @next_agent
       @next_agent_name = agent_name(@next_agent)
     else
-      candidates = eligible_agents(@next_role).reject { |agent| agent_name(agent) == @actor_name }
+      candidates = eligible_agents(@next_role)
+      candidates = candidates.reject { |agent| agent_name(agent) == @actor_name } if separation_required?
       @next_agent = choose_receiver(candidates)
       unless @next_agent
         names = candidates.map { |agent| agent_name(agent) }.join(", ")
@@ -338,7 +339,9 @@ class TaskLifecycle
     raise LifecycleError, "Task source_of_truth is missing" if sources.empty?
     missing = sources.select do |source|
       next false if source.match?(%r{\Ahttps?://})
-      path_like = source.start_with?(".") || source.match?(%r{\A[[:alnum:]_.-]+/[^ ]+\z})
+      path_like = source.start_with?(".") ||
+        source.match?(%r{\A[[:alnum:]_.-]+/[^ ]+\z}) ||
+        source.match?(/\A[^[:space:]\/]+\.(?:md|markdown|json|ya?ml|toml|txt|csv|xml|html?|pdf)\z/i)
       path_like && !File.exist?(project_path(source, "source_of_truth"))
     end
     raise LifecycleError, "source_of_truth path missing: #{missing.join(', ')}" unless missing.empty?
@@ -351,7 +354,7 @@ class TaskLifecycle
     return check("allowed_paths", true, "no Git base recorded; path check deferred") if base.empty?
 
     _resolved, _error, exists = Open3.capture3("git", "-C", @target, "cat-file", "-e", "#{base}^{commit}")
-    return check("allowed_paths", true, "recorded Git base is unavailable; path check deferred") unless exists.success?
+    raise LifecycleError, "recorded Git base cannot be resolved: #{base}; refresh Task base metadata" unless exists.success?
 
     output, error, status = Open3.capture3("git", "-C", @target, "diff", "--name-only", base, "--")
     raise LifecycleError, "cannot inspect changed paths: #{error.strip}" unless status.success?
@@ -450,10 +453,13 @@ class TaskLifecycle
   end
 
   def build_outputs
-    @date = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = Time.now.utc
+    @date = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     @date_only = @date[0, 10]
-    @receipt_relative = ".ai_project/reports/#{@task_id}-transition-receipt.json"
+    receipt_stamp = now.strftime("%Y%m%dT%H%M%S%6N")
+    @receipt_relative = ".ai_project/reports/#{@task_id}_#{@from}_to_#{@to}_#{receipt_stamp}-transition-receipt.json"
     @receipt_path = File.join(@target, @receipt_relative)
+    raise LifecycleError, "transition receipt already exists: #{@receipt_relative}" if File.exist?(@receipt_path)
     @next_action = @options[:next_action] || default_next_action
     @summary = @options[:summary] || "#{@from}에서 #{@to} 상태로 전이 준비 완료"
     @result = @options[:risks].empty? ? "ready" : "pass_with_risk"
@@ -610,10 +616,20 @@ class TaskLifecycle
     begin
       @writes.each do |path, content|
         FileUtils.mkdir_p(File.dirname(path))
-        originals[path] = File.exist?(path) ? File.binread(path) : nil
+        originals[path] = if File.exist?(path)
+                            stat = File.stat(path)
+                            { content: File.binread(path), mode: stat.mode & 0o777, uid: stat.uid, gid: stat.gid }
+                          end
         file = Tempfile.new([".aiops-lifecycle-", ".tmp"], File.dirname(path))
         file.binmode
-        file.chmod(File.exist?(path) ? File.stat(path).mode & 0o777 : 0o644)
+        file.chmod(originals[path] ? originals[path][:mode] : 0o644)
+        if originals[path]
+          begin
+            file.chown(originals[path][:uid], originals[path][:gid])
+          rescue Errno::EPERM
+            # Existing ownership is normally the current user; privileged ownership is not required.
+          end
+        end
         file.write(content)
         file.flush
         file.fsync
@@ -655,20 +671,43 @@ class TaskLifecycle
                   [cli, "validate", "handoff", staged_path, "--strict"]
                 end
       next unless command
-      output, error, status = Open3.capture3(*command)
+      environment = destination.include?("/.ai_project/handoffs/") ? { "AIOPS_SCHEMA_ONLY_HANDOFF" => "1" } : {}
+      output, error, status = Open3.capture3(environment, *command)
       detail = error.strip.empty? ? output.lines.last.to_s.strip : error.strip
       raise LifecycleError, "staged #{relative(destination)} failed validation: #{detail}" unless status.success?
     end
+    validate_staged_handoff_receipt!(staged)
   end
 
-  def restore_atomic(path, content)
+  def validate_staged_handoff_receipt!(staged)
+    receipt_staged = staged[@receipt_path]
+    return unless receipt_staged
+    receipt = JSON.parse(File.read(receipt_staged))
+    staged.each do |destination, staged_path|
+      next unless destination.include?("/.ai_project/handoffs/")
+      handoff, = read_front_matter(staged_path)
+      unless handoff["transition_receipt_path"] == @receipt_relative &&
+             handoff["task_id"] == receipt["task_id"] &&
+             handoff["current_status"] == receipt.dig("transition", "to")
+        raise LifecycleError, "staged handoff does not match its transition receipt: #{relative(destination)}"
+      end
+    end
+  end
+
+  def restore_atomic(path, original)
     file = Tempfile.new([".aiops-rollback-", ".tmp"], File.dirname(path))
     file.binmode
-    file.write(content)
+    file.chmod(original[:mode])
+    file.write(original[:content])
     file.flush
     file.fsync
     file.close
     File.rename(file.path, path)
+    begin
+      File.chown(original[:uid], original[:gid], path)
+    rescue Errno::EPERM
+      # The file remains owned by the current process user when ownership restoration is not permitted.
+    end
   ensure
     file&.close!
   end
