@@ -954,6 +954,13 @@ ruby -rjson -e '
   abort("explorer table and task data differ") unless row_ids == task_ids
   abort("explorer focus bypasses filters") if html.include?("return matches || (focus && task.id === focus)")
   abort("explorer Mermaid render queue missing") unless html.include?("let renderQueue = Promise.resolve()")
+  abort("initial Mermaid render promise missing") unless html.include?("window.aiopsMermaidReady=(async()=>")
+  abort("initial Mermaid nodes are not limited to open maps") unless html.include?(".map-panel[open] .mermaid")
+  abort("lazy Mermaid map renderer missing") unless html.include?("window.aiopsMermaidRenderGraph") && html.include?("document.addEventListener(\"toggle\"")
+  abort("Explorer did not await initial Mermaid render") unless html.include?("await window.aiopsMermaidReady")
+  await_index = html.index("await window.aiopsMermaidReady")
+  reset_index = html.index(%q{graph.removeAttribute("data-processed")})
+  abort("Explorer resets Mermaid DOM before initial render completes") unless await_index && reset_index && await_index < reset_index
 ' /tmp/aiops-e2e-project-dashboard.html
 ruby -rjson -e '
   html = File.read(ARGV[0])

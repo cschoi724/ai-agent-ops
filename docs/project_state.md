@@ -182,6 +182,14 @@ aiops project dashboard --serve --locale en --refresh 10 --open
 
 Locale은 사용자용 CLI, HTML, Local Serve, 시각 맵의 표시 label에만 적용한다. `project dashboard --json`의 key/value, Task metadata, Mermaid 내부 node ID는 locale과 무관하게 유지된다. 미등록 label은 snake_case를 공백으로 바꾸는 readable fallback을 사용한다.
 
+브라우저 회귀 검증은 `tests/visual_dashboard.sh`로 실행한다. 이 테스트는 Google Chrome 또는 Chromium과 Mermaid CDN 접근이 필요하며, 한국어 desktop과 영어 narrow viewport를 실제 렌더링한다. Mermaid SVG, map 지연 렌더, 확대, 접기/펼치기, 문서 전체 overflow, 작업 표·맵 내부 스크롤, 주요 UI text 잘림, 브라우저 예외를 검사하고 HTML·PNG·측정 JSON을 artifact 디렉터리에 남긴다.
+
+```sh
+AIOPS_VISUAL_ARTIFACT_DIR=/tmp/aiops-dashboard-visual tests/visual_dashboard.sh
+```
+
+기본 `scripts/test.sh`는 Chrome/CDN에 종속되지 않도록 visual test를 포함하지 않는다. GitHub Actions에서는 별도 `dashboard browser visual` job이 이를 실행하고 결과 artifact를 14일 보관한다.
+
 HTML의 `일감 탐색` 패널은 브라우저 안에서 ID/제목 검색, 상태 toggle, 담당자/역할/workflow 필터, 중심 일감과 연결 깊이 1~4단계 선택을 제공한다. 필터는 작업 표와 dependency map에 함께 적용되며, 결과가 큰 경우 중심 일감으로 범위를 줄이라는 안내를 표시한다. 필터용 task/edge 데이터는 생성된 HTML 안에서만 사용하고 target project나 dashboard JSON projection을 수정하지 않는다. `--filter-*` 옵션은 HTML이 처음 열릴 때 적용할 필터를 지정하며 다른 format과 함께 사용하면 오류가 난다.
 
 중심 일감은 dependency 연결 범위만 제한하며 상태·담당자·역할·workflow·검색 필터를 우회하지 않는다. `--filter-agent`, `--filter-role`, `--filter-workflow`에 현재 일감 데이터에 없는 값을 지정하면 전체 선택으로 조용히 전환하지 않고 오류로 종료한다. Agent 필터에는 locale 설명이 아니라 프로젝트에 등록된 고유 이름을 표시한다.
