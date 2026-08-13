@@ -11,6 +11,7 @@
     "check_only",
     "ready",
     "task_id",
+    "profile",
     "transition",
     "actor",
     "next",
@@ -24,6 +25,7 @@
     "check_only": { "type": "boolean" },
     "ready": { "const": true },
     "task_id": { "type": "string", "pattern": "^T-[0-9]{8}-[0-9]{3,}$" },
+    "profile": { "type": "string", "enum": ["light", "standard", "strict"] },
     "transition": { "$ref": "#/$defs/transition" },
     "actor": { "$ref": "#/$defs/actor" },
     "next": { "$ref": "#/$defs/next" },
@@ -120,6 +122,7 @@
       "properties": {
         "schema": { "const": "aiops.transition_receipt.v1" },
         "task_id": { "type": "string", "pattern": "^T-[0-9]{8}-[0-9]{3,}$" },
+        "profile": { "type": "string", "enum": ["light", "standard", "strict"] },
         "transition": { "$ref": "#/$defs/transition" },
         "actor": { "$ref": "#/$defs/actor" },
         "next": { "$ref": "#/$defs/next" },

@@ -25,6 +25,10 @@
       "type": "string",
       "pattern": "^T-[0-9]{8}-[0-9]{3,}$"
     },
+    "profile": {
+      "type": "string",
+      "enum": ["light", "standard", "strict"]
+    },
     "transition": {
       "type": "object",
       "additionalProperties": false,

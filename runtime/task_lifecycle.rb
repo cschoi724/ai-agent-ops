@@ -11,6 +11,7 @@ require "pathname"
 require "tempfile"
 require "tmpdir"
 require "yaml"
+require_relative "task_risk_profile"
 
 class LifecycleError < StandardError; end
 
@@ -153,6 +154,10 @@ class TaskLifecycle
     @catalog = JSON.parse(File.read(catalog_path))
     @workflow = resolve_workflow(@task["workflow"])
     raise LifecycleError, "workflow not found: #{@task['workflow']}" if @workflow.empty?
+    @risk_profile = TaskRiskProfiles.evaluate(task: @task, target: @target, catalog: @catalog)
+    unless @risk_profile["ready"]
+      raise LifecycleError, "risk profile is not ready: #{@risk_profile['blockers'].join('; ')}"
+    end
   end
 
   def read_front_matter(path)
@@ -180,7 +185,11 @@ class TaskLifecycle
 
   def resolve_transition
     @from = @task["status"].to_s
-    @to = HAPPY_PATH[@from]
+    @to = if @command == "advance" && @from == "in_progress" && @risk_profile["selected_profile"] == "light"
+            "completion_review"
+          else
+            HAPPY_PATH[@from]
+          end
     raise LifecycleError, "no automatic #{@command} transition from #{@from}" unless @to
 
     if @command == "accept" && !ACCEPT_FROM.include?(@from)
@@ -191,7 +200,10 @@ class TaskLifecycle
     end
 
     transitions = Array(@workflow["transitions"])
-    @transition = transitions.find { |entry| entry["from"] == @from && entry["to"] == @to }
+    @transition = transitions.find do |entry|
+      profiles = Array(entry["profiles"])
+      entry["from"] == @from && entry["to"] == @to && (profiles.empty? || profiles.include?(@risk_profile["selected_profile"]))
+    end
     raise LifecycleError, "workflow does not allow automatic transition: #{@from} -> #{@to}" unless @transition
 
     @actor_role = (@options[:role] || @task["target_role"]).to_s
@@ -310,6 +322,7 @@ class TaskLifecycle
 
   def validate_readiness
     check("task", true, "Task metadata loaded")
+    check("risk_profile", true, "#{@risk_profile['selected_profile']} profile selected from #{@risk_profile['selection_source']}")
     validate_dependencies
     validate_sources
     validate_changed_paths
@@ -422,11 +435,14 @@ class TaskLifecycle
 
   def collect_evidence
     @evidence = @options[:evidence].dup
+    if @risk_profile["selected_profile"] == "light" && @from == "in_progress" && @evidence.empty? && @options[:validation_skip_reason].to_s.empty?
+      raise LifecycleError, "Light transition requires targeted validation evidence or --validation-skip-reason"
+    end
     required_path = case @from
                     when "in_progress" then @task["report_to"]
                     when "verification_in_progress" then @task["qa_to"]
                     end
-    if required_path && !required_path.to_s.empty?
+    if required_path && !required_path.to_s.empty? && @risk_profile["selected_profile"] != "light"
       if File.file?(File.join(@target, required_path.to_s))
         @evidence << required_path.to_s
       elsif @evidence.empty? && @options[:validation_skip_reason].to_s.empty?
@@ -470,6 +486,7 @@ class TaskLifecycle
     @receipt = {
       "schema" => "aiops.transition_receipt.v1",
       "task_id" => @task_id,
+      "profile" => @risk_profile["selected_profile"],
       "transition" => { "from" => @from, "to" => @to },
       "actor" => { "agent" => @actor_name, "role" => @actor_role },
       "next" => { "agent" => receipt_next_agent, "role" => receipt_next_role, "action" => @next_action },
@@ -491,6 +508,7 @@ class TaskLifecycle
       "check_only" => @options[:check],
       "ready" => true,
       "task_id" => @task_id,
+      "profile" => @risk_profile["selected_profile"],
       "transition" => @receipt["transition"],
       "actor" => @receipt["actor"],
       "next" => @receipt["next"],

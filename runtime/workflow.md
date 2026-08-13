@@ -84,6 +84,8 @@ completion_review --advance--> done
 
 성공한 전이는 `aiops.transition_receipt.v1`으로 요약한다. receipt에는 Task ID, 이전/새 상태, 실제 Agent와 `active_role`, 다음 담당, 결과, 검증 근거 또는 생략 사유, risk, blocker, 다음 행동을 포함한다.
 
+Task 수행 절차는 `aiops task profile TASK_ID`가 계산한 위험도 profile을 따른다. Light는 독립 Verification을 생략할 수 있지만 self-check와 canonical/allowed-path guard를 생략하지 않는다. Standard와 Strict는 Execution과 Verification을 분리하며, Strict는 scope review, 전체 회귀, 상세 근거와 release gate를 추가한다. Task 또는 workflow override는 자동 위험 신호가 요구하는 최소 profile보다 낮출 수 없다.
+
 ## 3. 중심 흐름
 
 vNext 기본 흐름은 아래 상태 전이를 따른다.
