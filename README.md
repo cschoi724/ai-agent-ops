@@ -109,6 +109,8 @@ YourProject/
 
 사용자용 dashboard와 HTML은 한국어가 기본이다. 영어 표시는 `aiops status --locale en` 또는 `aiops project dashboard --format html --locale en --output dashboard.html`로 선택한다. 프로젝트별 표시 용어는 검증된 `aiops.dashboard_locale.v1` 파일을 `--locale-file`로 지정한다.
 
+`tests/visual_dashboard.sh`와 CI의 `dashboard browser visual` job은 locale별 HTML, Mermaid 지연 렌더, Explorer 필터 동기화, 반응형 layout과 주요 상호작용을 실제 Chrome에서 검증하고 full-page PNG를 남긴다.
+
 ## Safety Rules
 
 - `.ai/`는 일반 사용자가 직접 수정하지 않는다.

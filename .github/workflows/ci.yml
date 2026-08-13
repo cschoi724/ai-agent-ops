@@ -59,3 +59,26 @@ jobs:
           bin/aiops validate --target "$tmpdir" --strict
           bin/aiops migrate --target "$tmpdir" --plan
           bin/aiops knowledge lint --target "$tmpdir"
+
+  dashboard-visual:
+    name: dashboard browser visual
+    runs-on: macos-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run dashboard visual regression
+        env:
+          AIOPS_VISUAL_ARTIFACT_DIR: ${{ runner.temp }}/dashboard-visual
+        run: tests/visual_dashboard.sh
+
+      - name: Upload dashboard visual artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-visual
+          path: ${{ runner.temp }}/dashboard-visual
+          if-no-files-found: warn
+          retention-days: 14

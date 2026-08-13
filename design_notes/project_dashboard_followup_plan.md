@@ -1,6 +1,6 @@
 # Project Dashboard Follow-up Implementation Plan
 
-상태: 진행 중 / 1~8차 main 반영 완료
+상태: 진행 중 / 1~8차 main 반영 완료 / 9차 구현·내부 검증 완료
 대상: `aiops project dashboard` HTML/CLI 사용성 확장
 기준 버전: v0.13.0
 작성일: 2026-08-10
@@ -15,6 +15,7 @@
 - 6차 Dashboard Presets: 구현·독립 검증 완료, PR #40으로 main 반영 완료
 - 7차 GitHub PR / CI Release View: 구현·독립 검증 완료, PR #42로 main 반영 완료
 - 8차 Locale Extension: 구현·독립 검증 완료, PR #44로 main 반영 완료
+- 9차 HTML Visual Regression: 구현·내부 검증 완료, 독립 검증 대기
 
 이 문서는 v0.13.0에서 완료된 Project Dashboard의 후속 개선 후보를 실제 구현 가능한 차수로 정리한다.
 
@@ -49,7 +50,7 @@ v0.13.0의 목표는 dashboard/work map을 사용할 수 있는 형태로 완성
 - 자주 쓰는 dashboard 조합을 매번 긴 명령으로 입력해야 한다.
 - release view는 로컬 상태 중심이며 GitHub PR/CI 상태를 직접 읽지 않는다.
 - locale catalog는 내부 기본값 중심이고 외부 확장 지점이 약하다.
-- HTML 시각 배치는 E2E 계약 검증 위주이며 브라우저 visual regression은 없다.
+- HTML 시각 배치는 E2E 계약 검증 위주여서 실제 브라우저 visual regression 보강이 필요했다.
 - Mermaid map을 이미지 파일로 바로 공유할 수 없다.
 
 ## 우선순위
@@ -578,11 +579,14 @@ aiops project dashboard --locale-file .ai_project/dashboard_labels.ko.json
 
 구현 범위:
 
-- Playwright 또는 lightweight browser smoke test 검토
-- fixture HTML 생성
-- desktop/mobile viewport screenshot
-- Mermaid rendered node 존재 확인
-- 주요 UI text overflow 확인
+- npm dependency가 없는 Chrome DevTools Protocol browser runner
+- 전용 fixture에서 한국어 desktop·영어 narrow HTML 생성
+- viewport별 HTML·PNG·측정 JSON artifact 생성
+- Mermaid 7개 map의 초기·지연 SVG 렌더 확인
+- zoom button과 map collapse/expand interaction smoke
+- 문서 overflow, 표·map 내부 스크롤, 주요 UI text clipping 확인
+- 브라우저 JavaScript 예외 감지
+- GitHub Actions 별도 job과 14일 artifact 보관
 
 비범위:
 
@@ -591,11 +595,13 @@ aiops project dashboard --locale-file .ai_project/dashboard_labels.ko.json
 
 검증:
 
-- HTML 렌더링 후 Mermaid SVG 존재
-- zoom button 동작 smoke
-- collapse/expand smoke
-- screenshot artifact 생성
-- CI 비용 증가가 과하면 optional job으로 분리
+- 한국어 1440x1200, 영어 390x844 PNG 생성
+- 7개 Mermaid SVG와 lazy map rendering 통과
+- zoom `1.0 -> 1.15`, collapse/expand 통과
+- document `scrollWidth <= clientWidth`
+- narrow table/map은 각 viewport 내부에서만 scroll
+- 주요 control/text clipping과 browser exception 없음
+- visual test 전후 target fixture hash 동일
 
 ## 10차. SVG / PNG Export
 
@@ -674,9 +680,9 @@ Dashboard 변경 차수는 추가로 아래를 확인한다.
 
 ## 추천 다음 단계
 
-8차 `Locale Extension`은 PR #44로 main에 반영됐다. 다음 작업은 9차 `HTML Visual Regression`이다.
+9차 `HTML Visual Regression`은 구현과 내부 검증이 완료됐다. 다음 순서는 독립 검증 후 PR에 반영하고, 이후 10차 `SVG / PNG Export`를 진행하는 것이다.
 
 이유:
 
-- 8차는 기본 한국어를 유지하면서 영어와 프로젝트별 용어 override를 사용자 표시 계층에만 추가했고, 좁은 화면의 작업 표를 내부 스크롤 영역으로 격리했다.
-- 9차는 locale별 HTML이 실제 브라우저 viewport와 Mermaid 렌더링에서 깨지지 않는지 자동 검증하는 단계다.
+- 9차는 locale별 HTML을 실제 Chrome viewport에서 렌더링하고 Mermaid, 반응형 layout, 확대·접기 interaction, overflow와 browser exception을 자동 검증한다.
+- 10차는 검증된 map 렌더링 경로를 사용해 PR·문서·회의에 첨부할 SVG/PNG 산출물을 제공한다.
