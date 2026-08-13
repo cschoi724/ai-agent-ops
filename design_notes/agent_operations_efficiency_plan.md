@@ -1,6 +1,6 @@
 # Agent Operations Efficiency Improvement Plan
 
-상태: 1차 완료 / 2차 구현 대기
+상태: 1차 완료 / 2차 구현 완료·독립 검증 대기
 대상: Role Session, Task 상태 전이, 보고, 검증, Git 정리, 모델 추천
 기준 버전: v0.14.0
 작성일: 2026-08-13
@@ -576,7 +576,7 @@ provider_model_map:
 
 1차 결정:
 
-- Receipt 기본 저장 위치는 `.ai_project/reports/T-YYYYMMDD-NNN-transition-receipt.json`으로 둔다.
+- Receipt는 `.ai_project/reports/TASK_ID_FROM_to_TO_TIMESTAMP-transition-receipt.json` 형식의 전이별 불변 파일로 저장한다. Task는 최신 receipt를, handoff는 생성 당시 receipt를 가리킨다.
 - 상세 Task/QA report는 Strict 또는 예외 상황에서 유지하고 일반 전이는 receipt를 기본으로 한다.
 - 새 상태는 추가하지 않으며 atomic 전이 자동화는 2차 `task advance`에서 구현한다.
 
@@ -615,6 +615,16 @@ provider_model_map:
 - 다른 worktree에서 동시 전이할 때 충돌 감지
 - CookLog 실제 Task fixture dry run
 - 독립 검증 후 다음 차수 진행
+
+구현 결과 (2026-08-13):
+
+- `task accept`를 담당자가 시작 상태로 진입하는 명령, `task advance`를 다음 Role 인계 또는 완료 확정 명령으로 분리했다.
+- `--check`와 `aiops.task_transition_plan.v1` JSON은 실제 적용 전에 sender/receiver, dependency, source, allowed path, lock, canonical, evidence readiness와 예상 write set을 제공한다.
+- Task의 실제 `target_agent`와 `target_role`을 actor 기준으로 사용하고, 다음 Agent는 enabled Role/capability와 Task team/domain 신호로 단일 후보일 때만 자동 선택한다. 모호하면 `--next-agent`를 요구한다.
+- Task, lock, compact receipt, Role handoff, board projection은 임시 파일과 rollback을 사용하는 하나의 write bundle로 적용한다.
+- Git common directory의 Task lock으로 서로 다른 worktree와 프로세스의 동시 전이를 차단한다.
+- 기존 `task transition`과 기존 Task/Handoff/receipt schema는 호환 경로로 유지한다.
+- 정상 Execution -> Verification -> Completion, readiness 거부, write rollback, worktree 동시성, stale canonical, CookLog 실제 승인 Task dry run을 검증했다.
 
 ### 3차. Risk-based Workflow Profiles
 

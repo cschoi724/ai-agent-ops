@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/task_transition_plan.schema.json",
+  "title": "AI Ops Task Transition Plan",
+  "description": "Readiness and write projection for task advance and task accept.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "command",
+    "check_only",
+    "ready",
+    "task_id",
+    "transition",
+    "actor",
+    "next",
+    "checks",
+    "writes",
+    "receipt"
+  ],
+  "properties": {
+    "schema": { "const": "aiops.task_transition_plan.v1" },
+    "command": { "type": "string", "enum": ["advance", "accept"] },
+    "check_only": { "type": "boolean" },
+    "ready": { "const": true },
+    "task_id": { "type": "string", "pattern": "^T-[0-9]{8}-[0-9]{3,}$" },
+    "transition": { "$ref": "#/$defs/transition" },
+    "actor": { "$ref": "#/$defs/actor" },
+    "next": { "$ref": "#/$defs/next" },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "ready", "message"],
+        "properties": {
+          "code": { "type": "string", "minLength": 1 },
+          "ready": { "type": "boolean" },
+          "message": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "writes": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "receipt": { "$ref": "#/$defs/receipt" }
+  },
+  "$defs": {
+    "taskStatus": {
+      "type": "string",
+      "enum": [
+        "proposed",
+        "scoped",
+        "approved",
+        "in_progress",
+        "verification_ready",
+        "verification_in_progress",
+        "verification_passed",
+        "completion_review",
+        "done",
+        "blocked",
+        "rework_requested",
+        "cancelled"
+      ]
+    },
+    "roleName": {
+      "type": "string",
+      "enum": [
+        "Direction Role",
+        "Lead Role",
+        "Execution Role",
+        "Verification Role",
+        "Completion Role",
+        "Release Role",
+        "Ops Governance Role",
+        "Product Owner"
+      ]
+    },
+    "stringList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "$ref": "#/$defs/taskStatus" },
+        "to": { "$ref": "#/$defs/taskStatus" }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "role"],
+      "properties": {
+        "agent": { "type": "string", "minLength": 1 },
+        "role": { "$ref": "#/$defs/roleName" }
+      }
+    },
+    "next": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "role", "action"],
+      "properties": {
+        "agent": { "type": "string", "minLength": 1 },
+        "role": { "$ref": "#/$defs/roleName" },
+        "action": { "type": "string", "minLength": 1 }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "task_id", "transition", "actor", "next", "result", "summary", "evidence", "risks", "blockers"],
+      "properties": {
+        "schema": { "const": "aiops.transition_receipt.v1" },
+        "task_id": { "type": "string", "pattern": "^T-[0-9]{8}-[0-9]{3,}$" },
+        "transition": { "$ref": "#/$defs/transition" },
+        "actor": { "$ref": "#/$defs/actor" },
+        "next": { "$ref": "#/$defs/next" },
+        "result": { "type": "string", "enum": ["ready", "passed", "pass_with_risk", "failed", "blocked", "cancelled"] },
+        "summary": { "type": "string", "minLength": 1 },
+        "evidence": { "$ref": "#/$defs/stringList" },
+        "validation_skip_reason": { "type": "string", "minLength": 1 },
+        "risks": { "$ref": "#/$defs/stringList" },
+        "blockers": { "$ref": "#/$defs/stringList" },
+        "receipt_path": { "type": "string", "minLength": 1 },
+        "created_at": { "type": "string", "minLength": 1 }
+      },
+      "anyOf": [
+        { "properties": { "evidence": { "type": "array", "minItems": 1 } } },
+        { "required": ["validation_skip_reason"] }
+      ]
+    }
+  }
+}

@@ -67,7 +67,20 @@ Need
 - canonical status가 허용 범위 안에서 최신이다.
 - 다음 행동이 한 문장으로 명확하다.
 
-둘 중 하나라도 준비되지 않으면 상태만 먼저 바꾸지 않는다. 기존 `aiops task transition`은 낮은 수준의 전이 명령으로 유지하며, 통합 readiness와 atomic update는 후속 `task advance` 단계에서 자동화한다.
+둘 중 하나라도 준비되지 않으면 상태만 먼저 바꾸지 않는다. `aiops task accept TASK_ID --check`는 현재 담당자의 작업 시작 준비를, `aiops task advance TASK_ID --check`는 다음 Role로의 인계 준비를 파일 변경 없이 계산한다. 점검을 통과한 뒤 `--check`를 제외하면 Task, lock, receipt, 필요한 handoff와 board projection을 rollback 가능한 하나의 bundle로 적용한다. 기존 `aiops task transition`은 blocked, rework, cancelled 같은 예외를 명시적으로 처리하는 낮은 수준의 전이 명령으로 유지한다.
+
+기본 정상 흐름에서 명령 경계는 다음과 같다.
+
+```text
+approved --accept--> in_progress
+in_progress --advance--> verification_ready
+verification_ready --accept--> verification_in_progress
+verification_in_progress --advance--> verification_passed
+verification_passed --accept--> completion_review
+completion_review --advance--> done
+```
+
+다음 Role 후보가 하나로 결정되지 않으면 자동으로 첫 Agent를 선택하지 않는다. Task의 team/domain 신호로 단일 후보를 판별할 수 없는 경우 `--next-agent`로 명시해야 한다. Execution과 Verification은 서로 다른 Agent여야 한다.
 
 성공한 전이는 `aiops.transition_receipt.v1`으로 요약한다. receipt에는 Task ID, 이전/새 상태, 실제 Agent와 `active_role`, 다음 담당, 결과, 검증 근거 또는 생략 사유, risk, blocker, 다음 행동을 포함한다.
 

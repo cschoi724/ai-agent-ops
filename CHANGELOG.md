@@ -13,6 +13,8 @@
 ### Added
 
 - Add `aiops.transition_receipt.v1`, a compact Task transition receipt template, and `aiops validate transition-receipt FILE`.
+- Add `aiops task accept` and `aiops task advance` with dry-run readiness checks, automatic normal-path routing, compact receipts, cross-worktree locking, and rollback-safe Task/handoff/board updates.
+- Add `aiops.task_transition_plan.v1` JSON projection and `aiops validate task-transition-plan FILE`.
 
 ### Changed
 
@@ -22,6 +24,7 @@
 
 ### Fixed
 
+- Fail closed when a recorded Task Git base cannot be resolved, validate root-level source files, preserve rollback file modes, retain same-Agent multi-Role routing, and store immutable per-transition receipts referenced consistently by handoffs.
 - Make Role prompts prefer the Task's enabled `target_agent`, reject Role/ownership conflicts, and require explicit selection when multiple Agents share a Role.
 - Remove remaining workflow instructions that asked Agents to duplicate handoff content in Task files and final responses.
 

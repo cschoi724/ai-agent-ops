@@ -33,6 +33,7 @@ Usage:
   aiops validate task FILE [--strict]
   aiops validate handoff FILE [--strict]
   aiops validate transition-receipt FILE
+  aiops validate task-transition-plan FILE
   aiops validate policy-rules [--core DIR]
   aiops validate workflow-catalog [--target DIR|--core DIR]
   aiops validate project-snapshot FILE
@@ -42,6 +43,8 @@ Usage:
   aiops validate policy-evaluation FILE
   aiops task create --title TITLE [--target DIR] [--workflow NAME] [--role ROLE] [--capability NAME]
   aiops task status TASK_ID [--target DIR] [--source local|canonical]
+  aiops task advance TASK_ID [--target DIR] [--by AGENT] [--role ROLE] [--next-agent AGENT] [--evidence PATH] [--check] [--json]
+  aiops task accept TASK_ID [--target DIR] [--by AGENT] [--role ROLE] [--check] [--json]
   aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT] [--blocker TEXT] [--next-decision TEXT]
   aiops task lock TASK_ID --by AGENT [--target DIR] [--role ROLE] [--session ID]
   aiops task unlock TASK_ID --by AGENT [--target DIR]
@@ -115,8 +118,11 @@ Examples:
   aiops validate dashboard-presets .ai_project/dashboard_presets.json
   aiops validate policy-evaluation /tmp/policy_evaluation.json
   aiops validate transition-receipt /tmp/transition_receipt.json
+  aiops validate task-transition-plan /tmp/task_transition_plan.json
   aiops task create --title "로그인 화면 구현" --workflow feature --role "Lead Role"
   aiops task status T-YYYYMMDD-001 --source canonical
+  aiops task accept T-YYYYMMDD-001 --check
+  aiops task advance T-YYYYMMDD-001 --next-agent "QA Agent" --evidence .ai_project/reports/T-YYYYMMDD-001_task-report.md
   aiops task transition T-YYYYMMDD-001 --to approved --role "Direction Role"
   aiops handoff create T-YYYYMMDD-001 --from "Execution Role" --to "Verification Role" --next-action "변경 결과 검증"
   aiops status-ref
@@ -1879,6 +1885,49 @@ handoff_find_file() {
   found="$(find "$handoff_dir" -type f -name "$value*.md" | sort | tail -n 1 || true)"
   [ -n "$found" ] || return 1
   printf '%s\n' "$found"
+}
+
+validate_handoff_receipt_reference() {
+  handoff_file="$1"
+  fallback_target="$2"
+  ruby -ryaml -rjson -rdate -e '
+    handoff_path = ARGV[0]
+    fallback_target = File.expand_path(ARGV[1])
+
+    def front_matter(path)
+      text = File.read(path)
+      lines = text.lines
+      closing = lines[1..]&.find_index { |line| line.strip == "---" }
+      abort("handoff_error: YAML front matter missing: #{path}") unless closing
+      YAML.safe_load(lines[1...(closing + 1)].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+    end
+
+    begin
+      handoff = front_matter(handoff_path)
+      receipt_relative = handoff["transition_receipt_path"].to_s
+      exit 0 if receipt_relative.empty?
+      abort("handoff_error: transition receipt path must be project-relative") if receipt_relative.start_with?("/")
+
+      worktree = handoff["worktree_path"].to_s
+      root = File.directory?(worktree) ? File.expand_path(worktree) : fallback_target
+      receipt_path = File.expand_path(receipt_relative, root)
+      unless receipt_path.start_with?("#{root}/")
+        abort("handoff_error: transition receipt path escapes project: #{receipt_relative}")
+      end
+      abort("handoff_error: transition receipt missing: #{receipt_relative}") unless File.file?(receipt_path)
+
+      receipt = JSON.parse(File.read(receipt_path))
+      abort("handoff_error: transition receipt Task ID mismatch") unless receipt["task_id"] == handoff["task_id"]
+      unless receipt.dig("transition", "to") == handoff["current_status"]
+        abort("handoff_error: transition receipt status does not match handoff current_status")
+      end
+      puts "ok: handoff transition receipt"
+    rescue JSON::ParserError => error
+      abort("handoff_error: invalid transition receipt JSON: #{error.message}")
+    rescue Psych::SyntaxError => error
+      abort("handoff_error: invalid handoff YAML: #{error.message}")
+    end
+  ' "$handoff_file" "$fallback_target"
 }
 
 normalize_role_name() {
@@ -8722,6 +8771,9 @@ cmd_validate() {
       info "AI Ops handoff validate"
       info "handoff: $file"
       validate_front_matter handoff "$file" "$strict"
+      if [ "$strict" = "yes" ] && [ "${AIOPS_SCHEMA_ONLY_HANDOFF:-0}" != "1" ]; then
+        validate_handoff_receipt_reference "$file" "$(pwd)"
+      fi
       info "ok: handoff metadata"
       ;;
     policy-rules)
@@ -8999,7 +9051,7 @@ cmd_validate() {
       ' "$catalog"
       info "ok: workflow catalog"
       ;;
-    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets|dashboard-locale|transition-receipt)
+    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets|dashboard-locale|transition-receipt|task-transition-plan)
       file=""
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -9045,6 +9097,10 @@ cmd_validate() {
         transition-receipt)
           schema="$core/schemas/transition_receipt.schema.json"
           label="transition receipt"
+          ;;
+        task-transition-plan)
+          schema="$core/schemas/task_transition_plan.schema.json"
+          label="task transition plan"
           ;;
       esac
       [ -f "$schema" ] || die "$label schema not found: $schema"
@@ -9248,7 +9304,7 @@ cmd_validate() {
 
 cmd_task() {
   action="${1:-}"
-  [ "$#" -gt 0 ] || die "task requires an action: create, status, transition, lock, unlock"
+  [ "$#" -gt 0 ] || die "task requires an action: create, status, advance, accept, transition, lock, unlock"
   shift
 
   case "$action" in
@@ -9496,6 +9552,14 @@ EOF
       for field in id title status workflow target_role target_agent locked_by lock_session updated_at; do
         info "$field: $(task_yaml_field "$task_file" "$field")"
       done
+      ;;
+
+    advance|accept)
+      core="$(default_core_dir)"
+      runtime="$core/runtime/task_lifecycle.rb"
+      [ -f "$runtime" ] || die "task lifecycle runtime missing: $runtime"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for task $action"
+      ruby "$runtime" "$action" "$@"
       ;;
 
     transition)
@@ -10593,6 +10657,9 @@ $qa_report"
       info "AI Ops handoff validate"
       info "handoff: ${handoff_file#$target/}"
       validate_front_matter handoff "$handoff_file" "$strict"
+      if [ "$strict" = "yes" ] && [ "${AIOPS_SCHEMA_ONLY_HANDOFF:-0}" != "1" ]; then
+        validate_handoff_receipt_reference "$handoff_file" "$target"
+      fi
       info "ok: handoff metadata"
       ;;
 
@@ -11856,6 +11923,7 @@ cmd_release_check() {
     "$core/schemas/workflow_catalog.schema.json" \
     "$core/schemas/handoff.schema.json" \
     "$core/schemas/transition_receipt.schema.json" \
+    "$core/schemas/task_transition_plan.schema.json" \
     "$core/schemas/agent_registry.schema.json" \
     "$core/schemas/operating_model.schema.json" \
     "$core/schemas/bootstrap_options.schema.json" \
@@ -11888,6 +11956,7 @@ cmd_release_check() {
     "$core/runtime/dashboard_server.rb" \
     "$core/runtime/dashboard_presets.rb" \
     "$core/runtime/github_release_status.rb" \
+    "$core/runtime/task_lifecycle.rb" \
     "$core/templates/reports/transition_receipt.json" \
     "$core/templates/ci/github-actions/aiops.yml" \
     "$core/templates/tool_adapters/codex/AGENTS.md" \

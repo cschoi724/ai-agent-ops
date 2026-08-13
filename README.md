@@ -99,7 +99,9 @@ YourProject/
 | `aiops sync-status` | canonical ref fetch/SHA 기록 |
 | `aiops task status TASK_ID --source canonical` | 최신 공용 ref 기준 Task 상태 확인 |
 | `aiops worktree doctor` | 다중 worktree 상태 진단 |
-| `aiops task transition TASK_ID --to STATUS --role ROLE` | 상태 전이 |
+| `aiops task accept TASK_ID --check` | 현재 담당자의 작업 수락 가능 여부 확인 |
+| `aiops task advance TASK_ID --check` | 다음 상태와 담당자, 송수신 준비도 확인 |
+| `aiops task transition TASK_ID --to STATUS --role ROLE` | 예외 처리용 저수준 상태 전이 |
 | `aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT` | Role 인계 |
 | `aiops knowledge init --mode minimal` | `.ai_knowledge/` 생성 |
 | `aiops ci init` | 프로젝트용 GitHub Actions 생성 |
