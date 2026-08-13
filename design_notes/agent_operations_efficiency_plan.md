@@ -1,0 +1,638 @@
+# Agent Operations Efficiency Improvement Plan
+
+상태: 논의 초안 / 구현 전
+대상: Role Session, Task 상태 전이, 보고, 검증, Git 정리, 모델 추천
+기준 버전: v0.13.0
+작성일: 2026-08-13
+
+## 1. 목적
+
+이 계획은 AI Agent 운영의 정확성을 유지하면서 실제 작업 외 절차에 드는 시간과 비용을 줄이는 것을 목표로 한다.
+
+핵심 문제는 규칙이 전혀 없는 것이 아니다. Role, workflow, handoff, report, branch 정책이 여러 문서에 존재하지만 Agent가 매번 이를 직접 조합해야 하며, 같은 정보를 여러 위치에 반복해서 기록한다. 그 결과 상태 전이와 검증이 실제 구현보다 오래 걸리고, 보내는 쪽과 받는 쪽의 준비 상태가 맞지 않는 경우가 생긴다.
+
+개선 목표는 다음과 같다.
+
+1. 완료된 Task의 불필요한 branch와 worktree를 안전하게 정리한다.
+2. 한 Agent가 여러 Role을 맡을 때 하나의 Agent 정체성과 복수 책임을 함께 인식한다.
+3. 상태 전이 전에 보내는 쪽과 받는 쪽의 준비도를 함께 검증한다.
+4. Role Session 유지용 모델과 실제 Task 수행용 모델을 구분해 추천한다.
+5. 상태 전이와 결과 보고에 짧고 일관된 필수 양식을 제공한다.
+6. Task 위험도에 따라 절차와 검증 강도를 조절해 운영 속도를 높인다.
+
+## 2. 현재 상태와 공백
+
+| 영역 | 현재 존재하는 기준 | 운영 공백 |
+|---|---|---|
+| Branch 정리 | `delete_branch_after_merge: true`, `done` 이후 정리 가능 | merge, local/remote branch, worktree 정리를 실제로 수행하는 통합 절차가 없음 |
+| 다중 Role | 한 Agent가 여러 Role을 맡을 수 있음 | Agent가 자신의 복수 Role을 하나의 정체성으로 인식하는 세션 계약이 없음 |
+| 상태 전이 | workflow, handoff, 상태별 담당 Role 정의 | 송신 준비도와 수신 준비도를 한 번에 검사하지 않음 |
+| 모델 선택 | Role과 capability 정의 | 상시 세션과 Task별 모델 추천 기준 및 provider mapping이 없음 |
+| 결과 보고 | Task Report, QA Report, Handoff template | 채팅과 상태 전이에 사용할 짧은 공통 receipt가 없음 |
+| 운영 속도 | fast track과 lightweight CI 논의 | Task 위험도에 따라 실제 절차를 줄이는 실행 profile이 없음 |
+
+## 3. 설계 원칙
+
+- 기존 상태를 더 늘리기보다 전이 검증과 자동화를 강화한다.
+- Agent 정체성과 현재 행동 Role을 분리한다.
+- 같은 정보를 Task, report, handoff, 최종 응답에 반복 입력하지 않는다.
+- 하나의 구조화된 transition receipt에서 사람용 요약과 machine JSON을 함께 생성한다.
+- 낮은 위험 Task에는 낮은 운영 비용을, 높은 위험 Task에는 독립 검증과 상세 근거를 적용한다.
+- 안전 검사는 생략하지 않고 변경 범위와 위험도에 맞게 축소한다.
+- 삭제, push, merge와 같은 외부 변경은 프로젝트 정책과 사용자 승인 범위를 유지한다.
+- 기존 `project dashboard`, snapshot, Task metadata의 machine contract를 불필요하게 변경하지 않는다.
+- 새 정책 문서를 계속 추가하지 않는다. 구현 시 기존 workflow, session orchestration, branch policy와 template을 갱신하고 중복 내용을 제거한다.
+- 사용자용 출력은 짧고 이해하기 쉽게, Agent/자동화용 출력은 구조화된 원본 계약으로 제공한다.
+
+## 4. 목표 Lifecycle
+
+```text
+Task 승인
+  -> 시작: 현재 Agent와 보유 Role, 행동 Role, 권장 모델 확인
+  -> 실행: 위험도에 맞는 검증 수행
+  -> 전이: 송신·수신 준비도 동시 검사와 compact receipt 생성
+  -> 수락: 다음 Agent가 변경된 조건만 확인
+  -> 검증/완료: profile에 따라 독립 검증 또는 단축 흐름 적용
+  -> 종료: merge와 canonical 반영 확인 후 branch/worktree 정리
+```
+
+사용자가 기억해야 할 lifecycle 명령 후보는 다음 세 개로 제한한다.
+
+```sh
+aiops task advance T-001
+aiops task accept T-001
+aiops task close T-001
+```
+
+세부 검사와 machine contract 명령은 Agent/자동화 계층에 유지한다.
+
+## 5. Branch 종료 자동화
+
+### 5.1 목표
+
+완료된 Task가 local branch, remote branch, 불필요한 worktree를 남기지 않도록 Task 완료 절차와 Git 정리를 연결한다.
+
+### 5.2 후보 명령
+
+```sh
+aiops task close T-001
+aiops task close T-001 --check
+aiops task close T-001 --json
+```
+
+`--check`는 삭제 없이 정리 가능 여부만 보여준다. 실제 삭제는 프로젝트의 승인 정책을 따른다.
+
+### 5.3 내부 동작
+
+1. Task workflow와 완료 조건 확인
+2. PR merge 또는 동등한 canonical 반영 확인
+3. canonical branch에 Task 결과가 포함됐는지 확인
+4. Task branch의 미병합 commit 확인
+5. 현재 checkout branch와 연결 worktree 확인
+6. dirty worktree와 lock owner 확인
+7. 안전한 local/remote task branch 삭제
+8. 사용하지 않는 worktree 정리 및 prune
+9. Task `done`, board, archive 정합성 확인
+10. branch cleanup 결과를 transition receipt로 보고
+
+### 5.4 자동 삭제 금지 조건
+
+- 미병합 commit 존재
+- 현재 checkout된 branch
+- 다른 worktree에서 사용 중
+- dirty worktree 존재
+- 보호 branch 또는 canonical branch
+- Task와 branch 소유 관계가 불명확
+- 다른 active Task가 같은 branch를 참조
+- push/delete 권한이 승인되지 않음
+
+이 경우 `close`는 Task를 임의로 완료하거나 branch를 강제 삭제하지 않고 복구 가능한 안내를 반환한다.
+
+## 6. 다중 Role Agent 계약
+
+### 6.1 목표
+
+한 Agent가 여러 Role을 맡을 때 Role마다 다른 Agent인 것처럼 행동하지 않고, 하나의 Agent가 복수 책임을 보유한다는 사실을 명시적으로 인식한다.
+
+개념 모델:
+
+```yaml
+agent: Development Lead Agent
+assigned_roles:
+  - Lead Role
+  - Completion Role
+active_role: Completion Role
+```
+
+세션 안내 예시:
+
+```text
+나는 Development Lead Agent다.
+이 프로젝트에서 Lead Role과 Completion Role을 함께 맡는다.
+현재 Task에서는 Completion Role 권한으로 행동한다.
+```
+
+### 6.2 핵심 규칙
+
+- Agent 정체성은 하나다.
+- `assigned_roles`는 해당 Agent가 수행할 수 있는 전체 책임 집합이다.
+- `active_role`은 현재 Task 상태에서 실제로 행사하는 책임이다.
+- 상태 전이 기록에는 `active_role`을 남긴다.
+- 허용된 Role 사이의 이동은 같은 세션에서 계속할 수 있다.
+- 같은 Agent가 Role을 바꿔도 다른 Agent가 수행한 것처럼 보고하지 않는다.
+- Role 경계는 유지하지만 불필요한 세션 재시작을 강제하지 않는다.
+
+### 6.3 독립 분리가 필요한 조합
+
+다음 조합은 기본적으로 같은 Agent 또는 같은 세션의 연속 수행을 허용하지 않는다.
+
+- Execution Role과 Verification Role
+- 구현 책임과 보안·개인정보 독립 검증
+- 배포 실행 책임과 최종 Release 승인
+- 변경 작성자와 독립 감사 책임
+
+프로젝트 설정 후보:
+
+```yaml
+multi_role_mode: continuous
+role_separation_required:
+  - [Execution Role, Verification Role]
+  - [Release Role, Release Approval Role]
+```
+
+기존 Agent registry의 Role 배열을 우선 재사용하고, 새 필드는 실제 machine contract 필요성이 확인될 때만 추가한다.
+
+## 7. 양방향 상태 전이 준비도
+
+### 7.1 목표
+
+상태를 보내는 쪽만 완료했다고 판단하거나, 받는 쪽이 필요한 정보 없이 Task를 받는 문제를 전이 전에 차단한다.
+
+### 7.2 후보 명령
+
+```sh
+aiops task advance T-001
+aiops task advance T-001 --check
+aiops task accept T-001
+```
+
+`advance`는 현재 workflow에서 허용되는 다음 상태와 담당자를 계산한다. `accept`는 전이 이후 변경된 조건만 다시 확인한다.
+
+### 7.3 송신 준비도
+
+- 현재 Agent와 `active_role`이 전이 권한을 가짐
+- 현재 상태에서 다음 상태로 이동 가능
+- 작업 결과 또는 검증 결과 존재
+- 필수 검증과 생략 사유 기록
+- 변경 파일이 `allowed_paths` 안에 있음
+- lock, branch, worktree 상태 정상
+- source of truth와 결과가 충돌하지 않음
+- 남은 위험과 blocker가 구분되어 있음
+
+### 7.4 수신 준비도
+
+- 다음 `target_agent` 또는 `target_role`이 등록됨
+- 다음 Agent가 필요한 Role과 capability를 보유함
+- 다음 상태가 해당 Role에 의해 처리 가능함
+- 필요한 source of truth, report, QA 경로가 존재함
+- 선행 dependency가 충족됨
+- canonical status가 허용 범위 안에서 최신임
+- 다음 행동이 한 문장으로 명확함
+
+### 7.5 전이 원자성
+
+아래 값은 하나의 전이 작업으로 처리한다.
+
+- Task status
+- target Agent와 target Role
+- lock 해제 또는 이전
+- handoff metadata
+- transition receipt
+- 필요한 board projection
+
+중간 실패가 발생하면 일부 파일만 전이된 상태를 남기지 않는다. 적용 전 검증, 임시 파일, atomic rename 또는 동등한 안전한 저장 방식을 사용한다.
+
+새로운 `waiting_for_receiver` 같은 상태는 추가하지 않는다. 준비 여부는 status가 아니라 readiness projection으로 계산한다.
+
+## 8. Compact Transition Receipt
+
+### 8.1 사용자용 기본 양식
+
+```text
+Task: T-001
+상태: in_progress -> verification_ready
+처리: iOS Agent / Execution Role
+다음: iOS QA Agent / Verification Role
+결과: 구현 및 자체 검증 완료
+근거: task report, 테스트 12개 통과
+위험: 없음
+다음 작업: 독립 검증
+```
+
+필수 정보:
+
+- Task ID
+- 이전 상태와 새 상태
+- 처리 Agent와 행동 Role
+- 다음 Agent와 Role
+- 결과
+- 검증 근거 또는 생략 사유
+- 위험 또는 blocker
+- 다음 행동
+
+### 8.2 Machine 출력
+
+```json
+{
+  "schema": "aiops.transition_receipt.v1",
+  "task_id": "T-001",
+  "transition": {
+    "from": "in_progress",
+    "to": "verification_ready"
+  },
+  "actor": {
+    "agent": "iOS Agent",
+    "role": "Execution Role"
+  },
+  "next": {
+    "agent": "iOS QA Agent",
+    "role": "Verification Role",
+    "action": "독립 검증"
+  },
+  "result": "ready",
+  "evidence": [],
+  "risks": [],
+  "blockers": []
+}
+```
+
+Task report, QA report, handoff와 최종 채팅 보고는 이 receipt를 공통 입력으로 사용한다. 일반 Task에서는 compact receipt를 기본으로 하고, 감사·보안·배포·복잡한 재작업처럼 상세 근거가 필요한 경우에만 전체 보고서를 생성한다.
+
+## 9. 위험도 기반 운영 Profile
+
+### 9.1 목표
+
+모든 Task에 동일한 세션 수, 보고량, 테스트 범위를 적용하지 않는다. Task 변경 범위, 가역성, 사용자 영향, 데이터 위험을 바탕으로 운영 profile을 추천한다.
+
+### 9.2 Light
+
+대상:
+
+- 문구와 단순 문서 수정
+- 운영 metadata와 local cache 정리
+- 상태-only 변경
+- 안전 조건이 확인된 branch cleanup
+- 쉽게 되돌릴 수 있고 공유 계약을 바꾸지 않는 변경
+
+기본 흐름:
+
+```text
+Execution -> self-check -> Completion
+```
+
+규칙:
+
+- 별도 Verification 생략 가능
+- Lead와 Completion 겸임 가능
+- 변경 경로에 해당하는 검사만 실행
+- compact receipt만 필수
+- 독립성 또는 외부 승인 요구가 있으면 Standard로 승격
+
+### 9.3 Standard
+
+대상:
+
+- 일반 제품 코드 변경
+- 기능 구현과 제한된 리팩터링
+- 사용자 화면과 API 동작 변경
+
+기본 흐름:
+
+```text
+Execution -> independent Verification -> Completion
+```
+
+규칙:
+
+- Execution과 Verification 분리
+- 작업 중 관련 테스트, PR 전 전체 필요 테스트 실행
+- compact receipt와 검증 결과 기록
+- 상태 전이와 handoff를 `advance`로 통합
+
+### 9.4 Strict
+
+대상:
+
+- 보안, 개인정보, 결제
+- 데이터 migration과 삭제
+- 공용 schema, workflow, policy
+- 배포, release, rollback
+- 다중 프로젝트 또는 큰 구조 변경
+
+기본 흐름:
+
+```text
+Scope Review -> Execution -> Independent Verification -> Completion Review -> Release Gate
+```
+
+규칙:
+
+- 독립 Role Session 필수
+- 전체 회귀 검사와 상세 근거 필요
+- 잔여 위험의 명시적 수용 필요
+- branch/PR/release gate 생략 금지
+
+### 9.5 자동 추천과 수동 override
+
+Task 시작 시 다음 형태로 추천한다.
+
+```text
+운영 프로필: Standard
+근거: 제품 코드 변경, 단일 플랫폼, 데이터 migration 없음
+필수 단계: Execution -> Verification -> Completion
+생략 가능: 별도 Lead 재검토
+```
+
+최종 profile은 Task metadata, workflow override 또는 사용자 결정으로 확정한다. 자동 추천은 보수적으로 상향할 수 있지만 근거 없이 낮은 profile로 낮추지 않는다.
+
+## 10. Model Advisor
+
+### 10.1 목표
+
+Role Session을 계속 유지할 모델과 실제 Task를 처리할 모델을 구분해 추천한다. 특정 공급자의 모델명을 core 정책에 직접 고정하지 않는다.
+
+### 10.2 모델 Profile
+
+| Profile | 용도 |
+|---|---|
+| `fast` | 상태 확인, 검색, 단순 문서·metadata 수정, 반복 작업 |
+| `balanced` | 일반 Role Session, Task 조율, 보통 수준 구현 |
+| `deep` | 복잡한 설계, 대규모 구현, 어려운 장애 분석 |
+| `independent_review` | 독립 검증, 보안, 회귀, 계약 검토 |
+| `vision` | UI screenshot, 디자인 비교, 시각 QA |
+
+### 10.3 Role 기본 추천
+
+| Role | 상시 Session | 실제 Task 조건 |
+|---|---|---|
+| Direction Role | `balanced` | 정책 충돌과 복잡한 의사결정은 `deep` |
+| Lead Role | `balanced` | 복잡한 분해, ownership, architecture는 `deep` |
+| Execution Role | `balanced` | 단순 반복은 `fast`, 복잡 구현은 `deep` |
+| Verification Role | `independent_review` | UI 검증은 `vision` 병행 |
+| Completion Role | `balanced` | 고위험 수용과 release 판단은 `deep` |
+| Ops Governance Role | `balanced` | migration, schema, workflow 변경은 `deep` |
+
+Task projection 후보:
+
+```yaml
+model_profile:
+  session: balanced
+  task: deep
+  verification: independent_review
+model_reason: shared workflow contract and migration risk
+```
+
+표시 예시:
+
+```text
+권장 모델
+- 세션 유지: balanced
+- 이번 작업: deep
+- 독립 검증: independent_review
+- 이유: 공용 schema와 workflow 계약 변경
+```
+
+### 10.4 Provider mapping
+
+실제 모델명은 adapter 또는 사용자 설정에서 profile에 매핑한다.
+
+```yaml
+provider_model_map:
+  fast: provider/model-fast
+  balanced: provider/model-balanced
+  deep: provider/model-deep
+  independent_review: provider/model-review
+  vision: provider/model-vision
+```
+
+가용 모델은 변경될 수 있으므로 mapping은 core release와 분리한다. AI Ops는 모델을 강제로 전환하지 않고 추천 profile, 이유, 필요한 capability를 제공한다. adapter가 안전하게 전환을 지원하는 경우에만 실제 모델 선택을 자동화한다.
+
+보조 worker는 현재 Role Session의 profile을 무조건 상속하지 않는다. 위임 범위와 위험도에 따라 별도 추천하되, 최종 책임과 결과 검토는 원래 Role Session에 남는다.
+
+## 11. 속도 최적화 세부 원칙
+
+- 상태 전이마다 전체 `doctor`, health, strict validation을 반복하지 않는다.
+- 변경된 Task와 관련 schema, 경로, workflow만 먼저 검사한다.
+- canonical checkpoint에서만 전체 동기화와 공유 상태 검사를 수행한다.
+- `in_progress`, 임시 lock 같은 local 상태는 불필요한 상태-only PR을 만들지 않는다.
+- 상태-only 변경에는 제품 build/test CI를 실행하지 않는다.
+- 제품 코드가 바뀐 경우에만 해당 제품 CI를 실행한다.
+- Completion은 이미 통과한 검증을 다시 실행하지 않고 commit SHA, 결과 hash, evidence를 확인한다.
+- 같은 Agent의 허용된 Role 이동은 새 세션과 전체 context 재로딩을 강제하지 않는다.
+- 받는 Agent는 `accept` 시 전이 이후 달라진 조건만 검사한다.
+- 상세 보고서는 Strict 또는 예외 상황에만 요구한다.
+- 실행 중에는 관련 테스트, PR 또는 release gate에서 전체 테스트를 실행한다.
+
+## 12. 차수별 구현 계획
+
+### 1차. Unified Lifecycle Contract
+
+목표:
+
+- 다중 Role Agent 인식, 전이 readiness, compact receipt를 하나의 lifecycle 계약으로 확정한다.
+
+구현 범위:
+
+- `models/role_model.md`의 Agent identity / assigned roles / active role 정의
+- `policies/session_orchestration_policy.md`의 continuous multi-role session 기준
+- `runtime/workflow.md`의 송신·수신 readiness 기준
+- `runtime/role_handoff.md`와 report template의 compact receipt 정렬
+- 중복 필드와 상충 문구 목록 작성 및 제거
+- 필요 시 `aiops.transition_receipt.v1` schema 초안
+
+검증:
+
+- Lead+Completion 겸임 Agent가 하나의 Agent로 표시됨
+- 행동 기록에는 active Role이 남음
+- Execution+Verification 조합은 기본 분리됨
+- Task ID, status, actor, next owner가 없는 receipt 거부
+- 기존 Task/Handoff 문서 migration 영향 보고
+- 독립 검증 후 다음 차수 진행
+
+### 2차. Transition Automation
+
+목표:
+
+- 상태 전이와 handoff 생성을 한 명령으로 처리한다.
+
+구현 범위:
+
+- `aiops task advance TASK_ID`
+- `--check`, `--json`
+- 송신·수신 readiness projection
+- 다음 status/Agent/Role 자동 계산
+- Task, lock, handoff, board의 원자적 갱신
+- `aiops task accept TASK_ID`
+- compact receipt 렌더링
+
+검증:
+
+- 정상 Execution -> Verification -> Completion 흐름
+- 수신 Agent 미등록, capability 부족, source 누락 거부
+- stale canonical status와 dependency 미완료 처리
+- 중간 쓰기 실패 시 원본 파일 보존
+- transition 전후 machine contract와 status consistency
+- 다른 worktree에서 동시 전이할 때 충돌 감지
+- CookLog 실제 Task fixture dry run
+- 독립 검증 후 다음 차수 진행
+
+### 3차. Risk-based Workflow Profiles
+
+목표:
+
+- Light, Standard, Strict profile로 절차와 검증 비용을 조절한다.
+
+구현 범위:
+
+- profile 추천 규칙과 근거 projection
+- Task/workflow별 명시 override
+- profile별 필수 Role, 검증, 보고, CI gate
+- 변경 경로 기반 targeted validation
+- state-only와 product-code CI 분리 기준
+- dashboard와 `aiops task status`에 profile 표시
+
+검증:
+
+- 문서-only Task는 Light 추천
+- 일반 코드 Task는 Standard 추천
+- 보안, migration, schema, release Task는 Strict 추천
+- 위험 신호가 있으면 낮은 profile로 자동 하향되지 않음
+- Light에서 불필요한 독립 세션과 전체 CI가 생략됨
+- Standard/Strict 독립 검증 계약 유지
+- profile별 시간·명령 수 비교 기록
+- 독립 검증 후 다음 차수 진행
+
+### 4차. Safe Task Close and Branch Cleanup
+
+목표:
+
+- Task 완료, canonical 확인, branch/worktree 정리를 안전하게 자동화한다.
+
+구현 범위:
+
+- `aiops task close TASK_ID`
+- merge와 canonical 포함 여부 확인
+- local/remote branch 소유 관계 확인
+- dirty/unmerged/protected/current branch guard
+- worktree 사용 여부와 prune
+- 프로젝트 승인 정책 연결
+- cleanup receipt
+
+검증:
+
+- merge된 task branch local/remote 정리
+- 미병합 commit, dirty worktree, current branch 삭제 거부
+- 다른 Task가 공유하는 branch 삭제 거부
+- branch 삭제 실패 시 Task 완료 상태를 잘못 확정하지 않음
+- 반복 실행 idempotency
+- GitHub 보호 규칙과 PR squash merge 처리
+- 독립 검증 후 다음 차수 진행
+
+### 5차. Model Advisor
+
+목표:
+
+- Role과 Task 위험도에 맞는 session/task/verification 모델 profile을 추천한다.
+
+구현 범위:
+
+- provider-neutral model profile catalog
+- Role, workflow profile, capability 기반 추천
+- `role prompt`, `task start`, `session-guide` 표시
+- provider adapter mapping과 프로젝트 override
+- delegated worker 추천 규칙
+- 추천 이유와 fallback 표시
+
+검증:
+
+- 같은 Role에서도 단순/복잡 Task 추천이 달라짐
+- Verification은 구현과 독립된 review profile을 추천
+- vision 필요 Task에 시각 capability 표시
+- 미등록 provider mapping에서 안전한 profile fallback
+- 사용자 override 우선
+- JSON에는 profile과 reason을 구조적으로 제공
+- 특정 공급자 모델명이 core 정책에 하드코딩되지 않음
+- 독립 검증 후 계획 완료 판정
+
+## 13. 공통 검증 게이트
+
+각 차수는 최소 아래를 통과한다.
+
+```sh
+git diff --check
+sh scripts/test.sh
+bin/aiops release-check --strict --allow-pending-release
+```
+
+추가 공통 기준:
+
+- 정상 흐름, 거부 흐름, 중간 실패 E2E
+- 기존 project snapshot/dashboard JSON의 비의도 변경 없음
+- 기존 프로젝트 migration plan 제공
+- CookLog에서 실제 운영 시나리오 dry run
+- target project의 기존 변경과 untracked 파일 보존
+- 사용자용 compact 출력과 Agent용 JSON 의미 일치
+- 각 큰 차수 완료 후 별도 Agent 독립 검증
+- 독립 검증에서 Medium 이상 이슈가 있으면 다음 차수 진행 전 수정
+
+## 14. 성공 지표
+
+- 일반 상태 전이는 사용자 또는 Agent 명령 1회로 준비도 검사와 handoff까지 완료한다.
+- 받는 Agent는 전체 준비 절차를 반복하지 않고 변경 조건만 확인한다.
+- compact 보고에는 Task ID, 상태, 처리자, 다음 담당자, 근거, 위험, 다음 행동이 항상 포함된다.
+- 완료된 전용 Task branch와 worktree가 안전 조건 충족 후 남지 않는다.
+- 다중 Role Agent가 자신을 여러 Agent처럼 잘못 보고하지 않는다.
+- Light Task는 Standard 대비 세션 수, 전체 검사 횟수, 보고량이 감소한다.
+- Strict Task는 기존 독립 검증과 release 안전성을 유지한다.
+- 모델 추천에는 session/task/verification 구분과 추천 이유가 포함된다.
+
+구현 전 baseline과 각 차수 이후 아래 수치를 비교한다.
+
+- Task 전이당 실행 명령 수
+- Task 전이당 생성·수정 문서 수
+- 중복 검증 실행 횟수
+- 승인부터 verification ready까지 소요 시간
+- verification ready 이후 수신 준비 실패 횟수
+- merge 후 남은 task branch/worktree 수
+- Light/Standard/Strict profile별 평균 처리 시간
+
+## 15. 비범위
+
+- 모델 공급자 계정과 결제 자동 설정
+- 사용자 승인 없는 push, merge, deploy, remote branch 삭제
+- 독립 검증이 필요한 Task의 검증 책임 통합
+- 모든 기존 Task를 즉시 새 schema로 일괄 변환
+- 운영 효율을 이유로 보안, 개인정보, 데이터 migration gate 제거
+- Agent가 직접 판단한 profile로 사용자 정책을 우회하는 기능
+
+## 16. 구현 전 결정할 항목
+
+1. 같은 Agent가 연속 수행할 수 있는 Role 조합의 기본 allow/deny matrix
+2. Light profile에서 Verification을 생략할 수 있는 정확한 조건
+3. `advance`가 기본적으로 바로 적용할지, 사용자 승인 대상 전이만 확인할지
+4. remote branch 삭제 승인을 Task 단위로 받을지 프로젝트 정책으로 위임할지
+5. transition receipt를 Task 파일에 내장할지 별도 handoff 파일로 둘지
+6. 기존 report template을 유지할지 receipt 기반 상세 report 생성기로 전환할지
+7. model profile mapping을 adapter 설정과 프로젝트 설정 중 어디에 둘지
+8. 상태-only 변경의 canonical publish와 CI 실행 기준
+
+## 17. 권장 다음 단계
+
+Project Dashboard 9차 독립 검증과 PR 반영을 먼저 마무리한다. 이후 Dashboard 10차 SVG/PNG Export보다 이 계획의 1차 `Unified Lifecycle Contract`를 우선 진행한다.
+
+이유:
+
+- 현재 문제는 시각화 기능 부족보다 실제 Task 운영 시간과 반복 비용에 직접 영향을 준다.
+- 1차에서 계약을 먼저 통합해야 이후 명령 자동화가 기존 문서 중복을 확대하지 않는다.
+- 다중 Role과 상태 전이 준비도 기준이 확정되어야 위험도 profile과 branch cleanup을 안전하게 자동화할 수 있다.
+- 모델 추천은 Task 위험도와 Role continuity 정보가 마련된 뒤 연결해야 일관된 추천이 가능하다.
