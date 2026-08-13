@@ -100,13 +100,17 @@ module TaskRiskProfiles
     changes = git_change_set(task, target, cache: git_cache)
     return [planned, "task_scope"] unless changes["repository"]
 
-    changed = changes["paths"]
-    unless changed.empty?
-      paths = changes["base"] ? changed : (planned + changed).uniq.sort
-      return [paths, "git_changes"]
-    end
+    owned_changes = changes["paths"].select { |path| path_in_scope?(path, planned) }
+    return [(planned + owned_changes).uniq.sort, "git_changes"] unless owned_changes.empty?
 
     [planned, "task_scope"]
+  end
+
+  def path_in_scope?(path, scopes)
+    scopes.any? do |scope|
+      prefix = scope.to_s.sub(%r{/+\z}, "")
+      prefix == "." || path == prefix || path.start_with?("#{prefix}/")
+    end
   end
 
   def git_change_set(task, target, cache: nil)

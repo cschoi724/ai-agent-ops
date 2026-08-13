@@ -247,6 +247,7 @@ git -C "$project" add .
 git -C "$project" commit -m "seed base-less risk fixture" >/dev/null
 mkdir -p "$project/schemas"
 printf '{}\n' > "$project/schemas/payment.schema.json"
+printf '# Task-owned docs change\n' > "$project/docs/owned-note.md"
 
 if "$repo_root/bin/aiops" task profile T-20260813-105 --target "$project" --json \
   > "$tmpdir/base-less-profile.json" 2> "$tmpdir/base-less-profile.err"; then
@@ -254,9 +255,10 @@ if "$repo_root/bin/aiops" task profile T-20260813-105 --target "$project" --json
 fi
 ruby -rjson -e '
   data = JSON.parse(File.read(ARGV[0]))
-  abort("base-less untracked schema must select Strict") unless data["selected_profile"] == "strict"
-  abort("untracked schema path missing") unless data["paths"].include?("schemas/payment.schema.json")
-  abort("Git changes should be reported as path source") unless data["path_source"] == "git_changes"
+  abort("unrelated schema change contaminated docs profile") unless data["selected_profile"] == "light"
+  abort("Task-owned docs change missing") unless data["paths"].include?("docs/owned-note.md")
+  abort("out-of-scope schema leaked into profile paths") if data["paths"].include?("schemas/payment.schema.json")
+  abort("owned Git changes should be reported as path source") unless data["path_source"] == "git_changes"
 ' "$tmpdir/base-less-profile.json"
 ruby -ryaml -rjson -rdate -I"$repo_root/runtime" -rtask_risk_profile -e '
   project = ARGV.fetch(0)
@@ -284,7 +286,7 @@ ruby -ryaml -rjson -rdate -I"$repo_root/runtime" -rtask_risk_profile -e '
   abort("staged lookup was not cached") unless git_calls.count { |args| args.include?("--cached") } == 1
 ' "$project"
 if "$repo_root/bin/aiops" task advance T-20260813-105 --target "$project" --check --json \
-  --next-agent "QA Agent" --evidence docs/README.md > "$tmpdir/base-less-advance.out" 2>&1; then
+  --evidence docs/README.md > "$tmpdir/base-less-advance.out" 2>&1; then
   printf '%s\n' "base-less Task ignored an untracked path outside allowed_paths" >&2
   exit 1
 fi

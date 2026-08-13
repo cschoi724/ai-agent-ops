@@ -668,6 +668,7 @@ provider_model_map:
 - 기존 Task는 새 metadata를 필수로 요구하지 않으며 자동 추천을 사용한다.
 - 독립 검증에서 발견된 저수준 전이 Profile 우회와 base 없는 Task의 변경 누락을 차단했다. project context도 같은 Profile 조건을 사용하며 staged, unstaged, untracked 경로를 allowed-path guard에 포함한다.
 - Snapshot/dashboard Profile 필드 타입을 schema로 검증하고, snapshot 한 번 안에서 저장소·untracked·base별 Git 조회 결과를 재사용한다.
+- 병렬 dirty worktree의 무관한 변경이 base-less Task를 일괄 Strict로 올리지 않도록 추천 입력은 Task-owned 변경으로 제한하고, 범위 밖 변경 차단은 lifecycle guard에 유지한다.
 
 ### 4차. Safe Task Close and Branch Cleanup
 

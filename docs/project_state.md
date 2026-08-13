@@ -454,7 +454,7 @@ aiops validate task-risk-profile /tmp/task-risk-profile.json
 | Standard | Execution -> independent Verification -> Completion | 관련 전체 테스트와 required checks, 검증 근거가 있는 compact receipt |
 | Strict | Scope Review -> Execution -> independent Verification -> Completion -> Release Gate | 전체 회귀, 상세 근거, risk acceptance와 release gate |
 
-추천기는 Task의 workflow/type/priority/capability, `allowed_paths`, ownership path와 `base_sha` 이후 실제 Git 변경 경로를 읽는다. Git base가 없는 Task는 현재 staged, unstaged, untracked 경로를 Task scope에 합쳐 평가한다. 문서·상태-only 변경은 Light 후보, 일반 제품 코드는 Standard, 보안·개인정보·결제·migration·공용 schema·policy·CI·release는 Strict 최소값이다. Task의 선택적 `risk_profile`, workflow catalog의 `default_profile`, 명시적 `--profile`을 지원하지만 위험 신호가 요구하는 최소값보다 낮은 명시 override는 차단한다.
+추천기는 Task의 workflow/type/priority/capability, `allowed_paths`, ownership path와 `base_sha` 이후 실제 Git 변경 경로를 읽는다. Git base가 없는 Task는 현재 staged, unstaged, untracked 경로 중 Task 소유 범위에 속한 변경만 추천에 반영한다. 범위 밖 변경은 Profile을 오염시키지 않고 lifecycle allowed-path blocker로 처리한다. 문서·상태-only 변경은 Light 후보, 일반 제품 코드는 Standard, 보안·개인정보·결제·migration·공용 schema·policy·CI·release는 Strict 최소값이다. Task의 선택적 `risk_profile`, workflow catalog의 `default_profile`, 명시적 `--profile`을 지원하지만 위험 신호가 요구하는 최소값보다 낮은 명시 override는 차단한다.
 
 Light Task의 `in_progress -> completion_review`는 별도 Verification Role 없이 진행할 수 있다. Standard와 Strict는 기존 독립 Verification 전이를 유지한다. 고수준 lifecycle, 저수준 `task transition`, project context가 모두 같은 Profile 제한을 적용한다. 모든 profile은 canonical 상태와 allowed path 보호를 그대로 적용한다. JSON의 validation command는 shell 문자열이 아니라 argv 배열이며 자동 실행하지 않는다.
 

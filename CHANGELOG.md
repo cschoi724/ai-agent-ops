@@ -27,6 +27,7 @@
 
 ### Fixed
 
+- Keep base-less Task Profile recommendations scoped to Task-owned changes while lifecycle allowed-path checks continue to inspect and block unrelated worktree changes.
 - Enforce workflow Profile restrictions in low-level Task transitions and project context, include current staged, unstaged, and untracked paths when a Task has no Git base, and fail closed on out-of-scope changes.
 - Validate projected Task Profile field types in snapshot and dashboard schemas, cache repeated Git path lookups during snapshot generation, and retain staged lifecycle tempfiles through bundle validation.
 - Fail closed when a recorded Task Git base cannot be resolved, validate root-level source files, preserve rollback file modes, retain same-Agent multi-Role routing, and store immutable per-transition receipts referenced consistently by handoffs.
