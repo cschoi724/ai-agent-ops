@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+## 0.15.0 - 2026-08-14
+
 ### Added
 
 - Add provider-aware `aiops model recommend` for Codex, Claude Code, and custom providers with Role/Task risk mapping, session/task/verification/delegated-worker recommendations, effort clamping, alias resolution, allowlist fallback, and advisory-only launch argv.
