@@ -744,6 +744,7 @@ class TaskLifecycle
     puts "근거: #{@evidence.empty? ? @options[:validation_skip_reason] : @evidence.join(', ')}"
     puts "위험: #{@options[:risks].empty? ? '없음' : @options[:risks].join('; ')}"
     puts "다음 작업: #{@next_action}"
+    puts "모델 추천: aiops model recommend --role \"#{@actor_role}\" --target \"#{@target}\" --task #{@task_id}" if @command == "accept"
     puts "receipt: #{@receipt_relative}" unless @options[:check]
   end
 

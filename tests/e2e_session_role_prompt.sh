@@ -148,6 +148,11 @@ grep -q 'aiops role prompt execution' /tmp/aiops-e2e-session-guide.out || {
   exit 1
 }
 
+grep -q 'aiops model recommend --role execution' /tmp/aiops-e2e-session-guide.out || {
+  printf '%s\n' "session-guide did not include model recommendation command" >&2
+  exit 1
+}
+
 grep -q '선택 기준:' /tmp/aiops-e2e-session-guide.out || {
   printf '%s\n' "session-guide did not include role selection criteria" >&2
   exit 1
@@ -288,6 +293,16 @@ grep -q '너는 이 프로젝트의 Dev Agent / Execution Role 세션이야.' /t
 
 grep -q 'task_id: T-20260727-020' /tmp/aiops-e2e-role-prompt.out || {
   printf '%s\n' "role prompt did not include task id" >&2
+  exit 1
+}
+
+grep -q '^model_advisor: aiops model recommend --role "Execution Role".*--task T-20260727-020 --provider claude-code$' /tmp/aiops-e2e-role-prompt.out || {
+  printf '%s\n' "role prompt did not include provider-aware model recommendation" >&2
+  exit 1
+}
+
+grep -q '현재 세션 모델을 자동 변경하지 않는다' /tmp/aiops-e2e-role-prompt.out || {
+  printf '%s\n' "role prompt did not preserve the advisory-only model boundary" >&2
   exit 1
 }
 

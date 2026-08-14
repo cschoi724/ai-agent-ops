@@ -1,6 +1,6 @@
 # Agent Operations Efficiency Improvement Plan
 
-상태: 1차 완료 / 2차 완료 / 3차 완료 / 4차 완료 / 5차 구현 준비 완료
+상태: 1차 완료 / 2차 완료 / 3차 완료 / 4차 완료 / 5차 구현 완료·독립 검증 대기
 대상: Role Session, Task 상태 전이, 보고, 검증, Git 정리, 모델 추천
 기준 버전: v0.14.0
 작성일: 2026-08-13
@@ -714,7 +714,7 @@ provider_model_map:
 
 ### 5차. Model Advisor
 
-구현 상태: 준비 완료, 구현 대기
+구현 상태: 구현 완료, 자체 검증 통과·독립 검증 대기
 
 목표:
 
@@ -777,6 +777,16 @@ provider_model_map:
 5. `role prompt`, `task start`, `session-guide`의 비파괴적 추천 연결
 6. provider/allowlist/alias/effort/fallback mutation E2E와 CookLog read-only dry run
 7. 전체 machine contract 비교와 독립 검증
+
+구현 결과 (2026-08-14):
+
+- `runtime/model_catalog.json`과 provider-neutral `runtime/model_advisor.rb`를 추가하고 Codex, Claude Code, custom provider의 실제 모델·effort·fallback을 분리했다.
+- `aiops model recommend`는 Role, Task risk profile, workflow와 capability를 입력으로 session/task/independent verification/delegated worker 추천을 반환한다.
+- Codex의 현재 model/effort와 `[agents]` worker 기본값, Claude Code의 model/effort/availableModels/alias/worker 설정을 읽되 인증 정보는 수집하지 않는다.
+- managed/project/local allowlist 교집합, 명시 CLI override, alias resolution, unsupported effort 조정과 fallback을 적용하며 필수 모델이 없으면 fail-closed한다.
+- 기본 한국어 terminal과 locale 불변 `aiops.model_recommendation.v1` JSON을 제공하고, 모델 실행 방법은 shell 문자열이 아닌 argv 배열로 반환한다.
+- `session-guide`, `role prompt`, Task accept terminal에 비파괴적 추천 명령을 연결했으며 현재 세션 모델이나 Task를 자동 변경하지 않는다.
+- model catalog/project override/recommendation schema와 validator, provider/profile/allowlist/alias/effort/locale/security mutation E2E를 추가했다.
 
 ## 13. 공통 검증 게이트
 
@@ -844,11 +854,11 @@ bin/aiops release-check --strict --allow-pending-release
 
 ## 17. 권장 다음 단계
 
-Project Dashboard 1~9차는 v0.14.0으로 릴리스 및 Homebrew 배포가 완료됐고, 운영 효율 개선 1~4차도 독립 검증과 main 반영을 완료했다. 다음 작업은 마지막 5차 `Model Advisor` 구현이다.
+Project Dashboard 1~9차는 v0.14.0으로 릴리스 및 Homebrew 배포가 완료됐고, 운영 효율 개선 1~4차도 독립 검증과 main 반영을 완료했다. 마지막 5차 `Model Advisor` 구현과 자체 검증도 완료됐다. 다음 작업은 별도 Agent 독립 검증이며, 차단 이슈가 없으면 PR 병합 후 새 버전과 Homebrew 배포를 준비한다.
 
 이유:
 
 - 현재 문제는 시각화 기능 부족보다 실제 Task 운영 시간과 반복 비용에 직접 영향을 준다.
 - 1차에서 계약을 먼저 통합해야 이후 명령 자동화가 기존 문서 중복을 확대하지 않는다.
 - 다중 Role과 상태 전이 준비도 기준이 확정되어야 위험도 profile과 branch cleanup을 안전하게 자동화할 수 있다.
-- 1~4차에서 Task 위험도와 Role continuity 정보가 마련됐으므로 이제 provider-aware 모델 추천을 일관되게 연결할 수 있다.
+- 1~4차에서 마련된 Task 위험도와 Role continuity 정보가 provider-aware 모델 추천에 연결됐으므로, 독립 검증에서는 provider 설정·allowlist·fallback 안전성과 기존 machine contract 불변을 우선 확인한다.

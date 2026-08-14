@@ -27,6 +27,7 @@ Usage:
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
   aiops role prompt ROLE [--target DIR] [--task TASK_ID] [--adapter codex|claude|generic] [--agent NAME]
+  aiops model recommend --role ROLE [--target DIR] [--task TASK_ID] [--provider codex|claude-code|PROVIDER] [--model MODEL] [--effort EFFORT] [--locale ko|en] [--json]
   aiops action plan --role ROLE --task TASK_ID [--target DIR] [--intends LIST] [--paths LIST] --json
   aiops action validate FILE
   aiops validate [project] [--target DIR] [--strict]
@@ -35,6 +36,9 @@ Usage:
   aiops validate transition-receipt FILE
   aiops validate task-transition-plan FILE
   aiops validate task-risk-profile FILE
+  aiops validate model-catalog FILE
+  aiops validate model-overrides FILE
+  aiops validate model-recommendation FILE
   aiops validate task-cleanup-plan FILE
   aiops validate task-cleanup-receipt FILE
   aiops validate policy-rules [--core DIR]
@@ -147,6 +151,8 @@ Examples:
   aiops bootstrap-guide
   aiops session-guide
   aiops role prompt execution --task T-YYYYMMDD-001 --adapter codex
+  aiops model recommend --role execution --task T-YYYYMMDD-001
+  aiops model recommend --role verification --task T-YYYYMMDD-001 --provider claude-code --json
   aiops update --check
   aiops release-check --strict
 EOF
@@ -240,6 +246,7 @@ These commands expose machine-readable contracts or low-level workflow controls.
   aiops project context --role ROLE --task TASK_ID --json
   aiops policy evaluate --json
   aiops action plan --role ROLE --task TASK_ID --json
+  aiops model recommend --role ROLE --task TASK_ID --json
   aiops task close TASK_ID --check --json
   aiops validate project-dashboard FILE
   aiops validate project-snapshot FILE
@@ -247,6 +254,7 @@ These commands expose machine-readable contracts or low-level workflow controls.
   aiops validate transition-receipt FILE
   aiops validate task-cleanup-plan FILE
   aiops validate task-cleanup-receipt FILE
+  aiops validate model-recommendation FILE
 
 Use `aiops help all` for the complete command reference.
 EOF
@@ -262,6 +270,7 @@ Agent / 자동화용 명령
   aiops project context --role ROLE --task TASK_ID --json
   aiops policy evaluate --json
   aiops action plan --role ROLE --task TASK_ID --json
+  aiops model recommend --role ROLE --task TASK_ID --json
   aiops task close TASK_ID --check --json
   aiops validate project-dashboard FILE
   aiops validate project-snapshot FILE
@@ -269,6 +278,7 @@ Agent / 자동화용 명령
   aiops validate transition-receipt FILE
   aiops validate task-cleanup-plan FILE
   aiops validate task-cleanup-receipt FILE
+  aiops validate model-recommendation FILE
 
 전체 명령은 `aiops help all`에서 확인합니다.
 EOF
@@ -9117,7 +9127,7 @@ cmd_validate() {
       ' "$catalog"
       info "ok: workflow catalog"
       ;;
-    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets|dashboard-locale|transition-receipt|task-transition-plan|task-risk-profile|task-cleanup-plan|task-cleanup-receipt)
+    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets|dashboard-locale|transition-receipt|task-transition-plan|task-risk-profile|task-cleanup-plan|task-cleanup-receipt|model-catalog|model-overrides|model-recommendation)
       file=""
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -9179,6 +9189,18 @@ cmd_validate() {
         task-cleanup-receipt)
           schema="$core/schemas/task_cleanup_receipt.schema.json"
           label="task cleanup receipt"
+          ;;
+        model-catalog)
+          schema="$core/schemas/model_catalog.schema.json"
+          label="model catalog"
+          ;;
+        model-overrides)
+          schema="$core/schemas/model_overrides.schema.json"
+          label="model overrides"
+          ;;
+        model-recommendation)
+          schema="$core/schemas/model_recommendation.schema.json"
+          label="model recommendation"
           ;;
       esac
       [ -f "$schema" ] || die "$label schema not found: $schema"
@@ -9378,6 +9400,78 @@ cmd_validate() {
         presets_runtime="$core/runtime/dashboard_presets.rb"
         [ -f "$presets_runtime" ] || die "dashboard preset runtime not found: $presets_runtime"
         ruby "$presets_runtime" validate "$file"
+      fi
+      if [ "$subject" = "model-catalog" ]; then
+        ruby -rjson -e '
+          data = JSON.parse(File.read(ARGV[0]))
+          profiles = %w[fast balanced coding deep independent_review vision]
+          data.fetch("providers").each do |provider_id, provider|
+            models = provider.fetch("models")
+            profiles.each do |profile|
+              mapping = provider.fetch("profiles").fetch(profile)
+              %w[model fallback].each do |key|
+                model = mapping.fetch(key)
+                abort("schema_error: provider #{provider_id} profile #{profile} references unknown #{key} #{model}") unless models.key?(model)
+              end
+              allowed = models.fetch(mapping.fetch("model")).fetch("efforts")
+              effort = mapping.fetch("effort")
+              abort("schema_error: provider #{provider_id} profile #{profile} uses unsupported effort #{effort}") unless allowed.include?(effort)
+            end
+          end
+          known_profiles = profiles
+          data.fetch("role_profiles").each do |role, profile|
+            abort("schema_error: Role #{role} references unknown profile #{profile}") unless known_profiles.include?(profile)
+          end
+          puts "ok: model catalog semantics"
+        ' "$file"
+      fi
+      if [ "$subject" = "model-overrides" ]; then
+        ruby -rjson -e '
+          data = JSON.parse(File.read(ARGV[0]))
+          catalog = JSON.parse(File.read(ARGV[1]))
+          providers = catalog.fetch("providers")
+          overrides = data["providers"] || {}
+          merged_ids = providers.keys | overrides.keys
+          default_provider = data["default_provider"]
+          if default_provider && !merged_ids.include?(default_provider)
+            abort("schema_error: default_provider #{default_provider} is not configured")
+          end
+          profiles = %w[fast balanced coding deep independent_review vision]
+          overrides.each do |provider_id, override|
+            base = providers[provider_id] || {}
+            models = (base["models"] || {}).merge(override["models"] || {})
+            mappings = (base["profiles"] || {}).merge(override["profiles"] || {})
+            missing = profiles - mappings.keys
+            abort("schema_error: provider #{provider_id} missing profiles: #{missing.join(", ")}") unless missing.empty?
+            abort("schema_error: provider #{provider_id} command missing") if (override["command"] || base["command"]).to_s.empty?
+            profiles.each do |profile|
+              mapping = mappings.fetch(profile)
+              %w[model fallback].each do |key|
+                model = mapping.fetch(key)
+                abort("schema_error: provider #{provider_id} profile #{profile} references unknown #{key} #{model}") unless models.key?(model)
+              end
+              effort = mapping.fetch("effort")
+              allowed = models.fetch(mapping.fetch("model")).fetch("efforts")
+              abort("schema_error: provider #{provider_id} profile #{profile} uses unsupported effort #{effort}") unless allowed.include?(effort)
+            end
+          end
+          puts "ok: model override semantics"
+        ' "$file" "$core/runtime/model_catalog.json"
+      fi
+      if [ "$subject" = "model-recommendation" ]; then
+        ruby -rjson -e '
+          data = JSON.parse(File.read(ARGV[0]))
+          expected_ready = data.fetch("blockers").empty?
+          abort("schema_error: $.ready must match blocker presence") unless data.fetch("ready") == expected_ready
+          data.fetch("recommendations").each do |purpose, item|
+            if item.fetch("required") && !item.fetch("available") && data.fetch("blockers").empty?
+              abort("schema_error: unavailable required recommendation #{purpose} must produce a blocker")
+            end
+            command = item.fetch("launch_command")
+            abort("schema_error: unavailable recommendation #{purpose} must not have a launch command") if !item.fetch("available") && !command.empty?
+          end
+          puts "ok: model recommendation semantics"
+        ' "$file"
       fi
       info "ok: $label"
       ;;
@@ -10944,6 +11038,10 @@ cmd_session_guide() {
   info "Codex / Claude 지정 예시:"
   info "  aiops role prompt execution --adapter codex --task TASK_ID"
   info "  aiops role prompt verification --adapter claude --task TASK_ID"
+  info ""
+  info "Role/Task 모델 추천:"
+  info "  aiops model recommend --role execution --target \"$target\" --task TASK_ID --provider codex"
+  info "  aiops model recommend --role verification --target \"$target\" --task TASK_ID --provider claude-code"
 }
 
 cmd_policy() {
@@ -11138,6 +11236,27 @@ cmd_policy() {
   esac
 }
 
+cmd_model() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "model requires an action: recommend"
+  shift
+
+  case "$action" in
+    recommend)
+      advisor="$(default_core_dir)/runtime/model_advisor.rb"
+      [ -f "$advisor" ] || die "model advisor runtime not found: $advisor"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for model recommendations"
+      ruby "$advisor" "$@"
+      ;;
+    -h|--help)
+      ruby "$(default_core_dir)/runtime/model_advisor.rb" --help
+      ;;
+    *)
+      die "unknown model action: $action"
+      ;;
+  esac
+}
+
 cmd_role() {
   action="${1:-}"
   [ "$#" -gt 0 ] || die "role requires an action: prompt"
@@ -11252,6 +11371,14 @@ cmd_role() {
       info "assigned_roles: $assigned_roles"
       info "active_role: $role"
       [ -z "$task_file" ] || info "task: ${task_file#$target/}"
+      model_provider=""
+      case "$adapter" in
+        codex) model_provider=" --provider codex" ;;
+        claude) model_provider=" --provider claude-code" ;;
+      esac
+      model_task=""
+      [ -z "$task_id" ] || model_task=" --task $task_id"
+      info "model_advisor: aiops model recommend --role \"$role\" --target \"$target\"$model_task$model_provider"
       info ""
       info "아래 문구를 새 Agent 세션의 첫 메시지로 사용하세요."
       info ""
@@ -11280,6 +11407,7 @@ cmd_role() {
       info "- assigned_roles 안의 허용된 Role 전환은 Agent 정체성을 유지하고 active_role만 바꿔 같은 세션에서 계속할 수 있다."
       info "- Execution Role과 Verification Role처럼 독립 분리가 필요한 조합은 별도 Agent 또는 독립 Role Session으로 넘긴다."
       info "- delegated_worker를 사용할 수 있어도 독립 Role Session을 대체하지 않는다."
+      info "- 작업 모델은 model_advisor 명령으로 확인하되 현재 세션 모델을 자동 변경하지 않는다."
       info "- 상태 전이, lock, handoff는 aiops CLI 명령으로 처리한다."
       info "- 상태 전이에는 실제 Agent와 active_role을 compact transition receipt로 남긴다."
       info "- 다중 worktree 환경에서는 현재 worktree 문서를 최신 공용 상태로 가정하지 않는다."
@@ -12085,6 +12213,9 @@ cmd_release_check() {
     "$core/schemas/task_risk_profile.schema.json" \
     "$core/schemas/task_cleanup_plan.schema.json" \
     "$core/schemas/task_cleanup_receipt.schema.json" \
+    "$core/schemas/model_catalog.schema.json" \
+    "$core/schemas/model_overrides.schema.json" \
+    "$core/schemas/model_recommendation.schema.json" \
     "$core/schemas/agent_registry.schema.json" \
     "$core/schemas/operating_model.schema.json" \
     "$core/schemas/bootstrap_options.schema.json" \
@@ -12119,6 +12250,8 @@ cmd_release_check() {
     "$core/runtime/github_release_status.rb" \
     "$core/runtime/task_lifecycle.rb" \
     "$core/runtime/task_cleanup.rb" \
+    "$core/runtime/model_advisor.rb" \
+    "$core/runtime/model_catalog.json" \
     "$core/templates/reports/transition_receipt.json" \
     "$core/templates/reports/task_cleanup_receipt.json" \
     "$core/templates/ci/github-actions/aiops.yml" \
@@ -12196,6 +12329,10 @@ cmd_release_check() {
       "$core/bin/aiops" task profile "$risk_task_id" --target "$release_tmp" --json > "$release_tmp/task_risk_profile.json"
       "$core/bin/aiops" validate task-risk-profile "$release_tmp/task_risk_profile.json" >/dev/null
     fi
+    "$core/bin/aiops" validate model-catalog "$core/runtime/model_catalog.json" >/dev/null
+    printf '\n' > "$release_tmp/empty-codex-config.toml"
+    "$core/bin/aiops" model recommend --target "$release_tmp" --role "Lead Role" --provider codex --codex-config "$release_tmp/empty-codex-config.toml" --json > "$release_tmp/model_recommendation.json"
+    "$core/bin/aiops" validate model-recommendation "$release_tmp/model_recommendation.json" >/dev/null
     "$core/bin/aiops" policy evaluate --target "$release_tmp" --json > "$release_tmp/policy_evaluation.json"
     "$core/bin/aiops" validate policy-evaluation "$release_tmp/policy_evaluation.json" >/dev/null
     printf '{}\n' > "$release_tmp/invalid_project_snapshot.json"
@@ -12571,6 +12708,7 @@ main() {
     bootstrap-guide) cmd_bootstrap_guide "$@" ;;
     session-guide) cmd_session_guide "$@" ;;
     role) cmd_role "$@" ;;
+    model) cmd_model "$@" ;;
     policy) cmd_policy "$@" ;;
     action) cmd_action "$@" ;;
     validate) cmd_validate "$@" ;;
