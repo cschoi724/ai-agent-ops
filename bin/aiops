@@ -9432,12 +9432,17 @@ cmd_validate() {
           providers = catalog.fetch("providers")
           overrides = data["providers"] || {}
           merged_ids = providers.keys | overrides.keys
+          managed = data["managed_allowlist"] || {}
+          unknown_managed = managed.keys - merged_ids
+          abort("schema_error: managed_allowlist references unknown providers: #{unknown_managed.join(", ")}") unless unknown_managed.empty?
           default_provider = data["default_provider"]
           if default_provider && !merged_ids.include?(default_provider)
             abort("schema_error: default_provider #{default_provider} is not configured")
           end
           profiles = %w[fast balanced coding deep independent_review vision]
           overrides.each do |provider_id, override|
+            unknown_profiles = (override["profiles"] || {}).keys - profiles
+            abort("schema_error: provider #{provider_id} has unknown profiles: #{unknown_profiles.join(", ")}") unless unknown_profiles.empty?
             base = providers[provider_id] || {}
             models = (base["models"] || {}).merge(override["models"] || {})
             mappings = (base["profiles"] || {}).merge(override["profiles"] || {})
@@ -9463,12 +9468,27 @@ cmd_validate() {
           data = JSON.parse(File.read(ARGV[0]))
           expected_ready = data.fetch("blockers").empty?
           abort("schema_error: $.ready must match blocker presence") unless data.fetch("ready") == expected_ready
+          provider = data.fetch("provider")
+          provider_id = provider.fetch("id")
+          provider_command = provider.fetch("command")
           data.fetch("recommendations").each do |purpose, item|
             if item.fetch("required") && !item.fetch("available") && data.fetch("blockers").empty?
               abort("schema_error: unavailable required recommendation #{purpose} must produce a blocker")
             end
             command = item.fetch("launch_command")
             abort("schema_error: unavailable recommendation #{purpose} must not have a launch command") if !item.fetch("available") && !command.empty?
+            next unless item.fetch("available")
+            expected = [provider_command, "--model", item.fetch("requested_model")]
+            effort = item.fetch("effort")
+            unless effort == "auto"
+              expected += if provider_id == "codex"
+                            ["--config", "model_reasoning_effort=#{effort}"]
+                          else
+                            ["--effort", effort]
+                          end
+            end
+            abort("schema_error: launch command for #{purpose} does not match provider/model/effort") unless command == expected
+            abort("schema_error: launch command for #{purpose} contains control characters") if command.any? { |arg| arg.match?(/[\x00-\x1f\x7f]/) }
           end
           puts "ok: model recommendation semantics"
         ' "$file"

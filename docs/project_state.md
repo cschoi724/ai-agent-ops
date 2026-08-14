@@ -473,13 +473,13 @@ aiops validate model-recommendation /tmp/model-recommendation.json
 
 출력은 현재 세션 유지, 이번 Task, 독립 Verification, delegated worker를 나누어 실제 model ID 또는 alias, resolved model, effort, fallback, 새 세션 필요 여부와 launch argv를 제공한다. Task가 있으면 `task profile`의 Light/Standard/Strict, workflow, capability를 함께 사용한다. 시각 capability는 vision profile, 일반 구현은 coding, Strict 변경은 deep 추천으로 올린다.
 
-provider 선택은 명시적 `--provider`, Agent 도구 환경, `.ai_project/model_overrides.json`의 기본값, 설치된 CLI 순서로 해석한다. 둘 이상의 CLI가 감지되어 모호하면 임의 선택하지 않고 provider 지정을 요구한다. Codex는 `model`, `model_reasoning_effort`와 `[agents]` worker 기본값을, Claude Code는 `model`, `effortLevel`, `availableModels`, 공식 alias mapping과 `CLAUDE_CODE_SUBAGENT_MODEL`을 읽는다. 인증 token, endpoint secret과 계정 정보는 수집하거나 출력하지 않는다.
+provider 선택은 명시적 `--provider`, Agent 도구 환경, `.ai_project/model_overrides.json`의 기본값, 설치된 CLI 순서로 해석한다. 둘 이상의 CLI가 감지되어 모호하면 임의 선택하지 않고 provider 지정을 요구한다. Codex는 `model`, `model_reasoning_effort`와 `[agents]` worker 기본값을, Claude Code는 `model`, `effortLevel`, `availableModels`, 공식 alias mapping과 `CLAUDE_CODE_SUBAGENT_MODEL`을 읽는다. Claude Code의 full model ID, provider별 model ID와 `[1m]` suffix는 설정값을 그대로 보존한다. 인증 token, endpoint secret과 계정 정보는 수집하거나 출력하지 않는다.
 
-managed/project/local allowlist는 교집합으로 적용하므로 하위 설정이 상위 제한을 우회할 수 없다. 요청 모델을 쓸 수 없으면 허용된 fallback을 선택하고, 필수 목적에 사용할 모델이 없으면 `ready: false`로 종료한다. 모델과 command 값은 argv-safe 문자만 허용한다.
+managed/project/local allowlist는 교집합으로 적용하므로 하위 설정이 상위 제한을 우회할 수 없다. managed provider 이름과 profile 이름은 등록된 catalog/override 값에 대해 검증하며 오타를 무시하지 않는다. 요청 모델을 쓸 수 없으면 허용된 fallback 또는 설정된 exact session model을 선택하고, 필수 목적에 사용할 모델이 없으면 `ready: false`로 종료한다. 모델과 command 값은 argv-safe 문자만 허용하고 recommendation validator는 launch argv가 provider/model/effort와 정확히 일치하는지 검사한다.
 
 기본 terminal locale은 한국어지만 Codex, Claude Code, model ID, alias 같은 고유 이름은 번역하지 않는다. `--locale en`은 표시 문구만 바꾸며 JSON은 동일하다. Model Advisor는 추천만 제공하고 현재 세션 모델, provider 설정, Task 파일을 자동 변경하지 않는다.
 
-Built-in catalog 기준일과 공식 source는 `runtime/model_catalog.json`에 기록한다. 프로젝트별 custom provider나 허용 모델은 선택적 `.ai_project/model_overrides.json`에 두고 `aiops validate model-overrides FILE`로 검증한다.
+Built-in catalog 기준일과 공식 source는 `runtime/model_catalog.json`에 기록한다. floating alias는 provider가 실제 exact model을 결정하므로 resolver가 임의의 exact ID를 만들지 않고 capability 불확실성을 경고한다. 프로젝트별 custom provider나 허용 모델은 선택적 `.ai_project/model_overrides.json`에 두고 `aiops validate model-overrides FILE`로 검증한다.
 
 ## Safe Task Close
 

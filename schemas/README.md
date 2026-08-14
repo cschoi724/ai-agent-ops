@@ -96,7 +96,7 @@ Risk profile 단계 이후 `aiops task profile TASK_ID`는 Task scope와 실제 
 
 Safe Task Close 단계 이후 `aiops task close TASK_ID --check --json`은 canonical의 `done`, merge 증거, branch 소유권, worktree, 보호 규칙과 승인 정책을 파일 변경 없이 검사한다. `--apply`는 검증된 linked worktree와 local branch만 정리하며 `--delete-remote`가 있을 때만 SHA lease를 사용해 원격 branch를 삭제한다. cleanup receipt는 새 운영 commit을 요구하지 않도록 `.ai_project/.runtime/task_cleanup/`에 로컬 cache로 기록한다.
 
-Model Advisor 단계 이후 `runtime/model_catalog.json`은 Codex, Claude Code와 custom provider의 실제 모델·effort mapping을 제공한다. 선택적 `.ai_project/model_overrides.json`은 조직/project allowlist와 mapping만 덮어쓰며 인증 정보는 저장하지 않는다. `aiops.model_recommendation.v1`은 locale과 무관한 advisory-only projection이고 실행 명령은 shell 문자열이 아닌 argv 배열이다.
+Model Advisor 단계 이후 `runtime/model_catalog.json`은 Codex, Claude Code와 custom provider의 실제 모델·effort mapping을 제공한다. 선택적 `.ai_project/model_overrides.json`은 조직/project allowlist와 mapping만 덮어쓰며 인증 정보는 저장하지 않는다. `aiops.model_recommendation.v1`은 locale과 무관한 advisory-only projection이고 실행 명령은 shell 문자열이 아닌 argv 배열이다. provider command를 함께 기록해 validator가 model·effort와 argv 의미를 교차 검증한다.
 
 Dashboard JSON 단계 이후 `aiops project dashboard --json`은 사람이 보는 terminal/tree/Mermaid/HTML 출력과 같은 의미를 공유하는 projection 계약을 제공한다. Dashboard JSON은 source of truth가 아니며 `project snapshot --json`과 `project health --json`에서 파생된다. `maps.summary`, `maps.dependencies`, `maps.swimlane`, `maps.critical_path`는 큰 프로젝트를 요약/필터링해 보는 renderer가 쓰는 파생 데이터를 담고, `views.risk`, `views.agents`, `views.release`는 전문 dashboard view가 쓰는 파생 데이터를 담는다.
 

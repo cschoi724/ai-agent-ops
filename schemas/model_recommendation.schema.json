@@ -13,14 +13,15 @@
     "advisory_only": {"const": true},
     "provider": {
       "type": "object", "additionalProperties": false,
-      "required": ["id", "display_name", "detected_by", "configured_model", "configured_effort", "configured_worker_model", "configured_worker_effort", "allowlist_source"],
+      "required": ["id", "display_name", "command", "detected_by", "configured_model", "configured_effort", "configured_worker_model", "configured_worker_effort", "allowlist_source"],
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
         "display_name": {"type": "string", "minLength": 1},
+        "command": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
         "detected_by": {"enum": ["explicit", "environment", "project_override", "installed_cli"]},
-        "configured_model": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@-]*$"}]},
+        "configured_model": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"}]},
         "configured_effort": {"oneOf": [{"type": "null"}, {"enum": ["auto", "minimal", "low", "medium", "high", "xhigh", "max"]}]},
-        "configured_worker_model": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@-]*$"}]},
+        "configured_worker_model": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"}]},
         "configured_worker_effort": {"oneOf": [{"type": "null"}, {"enum": ["auto", "minimal", "low", "medium", "high", "xhigh", "max"]}]},
         "allowlist_source": {"type": ["string", "null"]}
       }
@@ -64,8 +65,8 @@
         "purpose": {"enum": ["session", "task", "independent_verification", "delegated_worker"]},
         "required": {"type": "boolean"},
         "profile": {"enum": ["fast", "balanced", "coding", "deep", "independent_review", "vision"]},
-        "requested_model": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@-]*$"},
-        "resolved_model": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@-]*$"}]},
+        "requested_model": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"},
+        "resolved_model": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"}]},
         "effort": {"enum": ["auto", "minimal", "low", "medium", "high", "xhigh", "max"]},
         "source": {"enum": ["configured_session", "configured_worker", "cli_override", "project_override", "built_in_catalog", "fallback"]},
         "reason": {"type": "string", "minLength": 1},
@@ -79,8 +80,8 @@
               "type": "object", "additionalProperties": false,
               "required": ["model", "resolved_model", "effort", "available"],
               "properties": {
-                "model": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@-]*$"},
-                "resolved_model": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@-]*$"}]},
+                "model": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"},
+                "resolved_model": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"}]},
                 "effort": {"enum": ["auto", "minimal", "low", "medium", "high", "xhigh", "max"]},
                 "available": {"type": "boolean"}
               }

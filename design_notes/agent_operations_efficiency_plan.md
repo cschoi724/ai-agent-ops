@@ -763,8 +763,8 @@ provider_model_map:
 - built-in catalog는 `runtime/model_catalog.json`, resolver는 `runtime/model_advisor.rb`, machine output은 `aiops.model_recommendation.v1`로 분리한다. project override는 선택 파일 `.ai_project/model_overrides.json`에서 읽는다.
 - adapter가 읽는 local config는 model ID, alias mapping, effort 지원 범위와 allowlist로 제한한다. 인증 token, endpoint secret, 계정 정보는 수집하거나 출력하지 않는다.
 - Codex adapter는 `model`, `model_reasoning_effort`, `agents.default_subagent_model`, `agents.default_subagent_reasoning_effort`를 인식하되 project-local config가 provider 설정을 바꿀 수 있다고 가정하지 않는다.
-- Claude Code adapter는 `model`, `availableModels`, provider별 alias override와 effort 지원 범위를 인식한다. `haiku`, `sonnet`, `opus`, `opusplan`은 alias로 기록하고 resolved model이 확인될 때만 별도 표시한다.
-- Strict Task의 exact pinning은 catalog에서 exact model이 확인되고 allowlist가 허용할 때만 사용한다. 확인할 수 없는 floating alias를 임의의 exact ID로 추정하지 않는다.
+- Claude Code adapter는 `model`, `availableModels`, provider별 alias override와 effort 지원 범위를 인식한다. `haiku`, `sonnet`, `opus`, `opusplan`, `[1m]` variant는 alias로 기록하고 resolved model이 확인될 때만 별도 표시한다. 설정된 full model ID와 provider별 ID는 유효한 exact candidate로 원문 보존한다.
+- Strict Task의 exact pinning은 catalog, provider 설정 또는 local allowlist에서 exact model이 확인되고 상위 allowlist가 허용할 때만 사용한다. 확인할 수 없는 floating alias를 임의의 exact ID로 추정하지 않고 capability 변동 가능성을 경고한다.
 - Verification 추천은 구현 모델과 purpose를 분리하고 독립 세션 필요 여부를 표시한다. delegated worker 추천은 주 세션의 책임이나 독립 Verification을 대체하지 않는다.
 - 공식 source URL, catalog 기준일과 resolver source를 JSON에 포함해 추천 시점의 근거를 추적한다.
 
@@ -783,8 +783,8 @@ provider_model_map:
 - `runtime/model_catalog.json`과 provider-neutral `runtime/model_advisor.rb`를 추가하고 Codex, Claude Code, custom provider의 실제 모델·effort·fallback을 분리했다.
 - `aiops model recommend`는 Role, Task risk profile, workflow와 capability를 입력으로 session/task/independent verification/delegated worker 추천을 반환한다.
 - Codex의 현재 model/effort와 `[agents]` worker 기본값, Claude Code의 model/effort/availableModels/alias/worker 설정을 읽되 인증 정보는 수집하지 않는다.
-- managed/project/local allowlist 교집합, 명시 CLI override, alias resolution, unsupported effort 조정과 fallback을 적용하며 필수 모델이 없으면 fail-closed한다.
-- 기본 한국어 terminal과 locale 불변 `aiops.model_recommendation.v1` JSON을 제공하고, 모델 실행 방법은 shell 문자열이 아닌 argv 배열로 반환한다.
+- managed/project/local allowlist 교집합, 명시 CLI override, exact model/1M alias resolution, unsupported effort 조정과 fallback을 적용하며 필수 모델이 없으면 fail-closed한다. provider/profile 오타와 malformed watched config는 추천 전에 거부한다.
+- 기본 한국어 terminal과 locale 불변 `aiops.model_recommendation.v1` JSON을 제공하고, 모델 실행 방법은 shell 문자열이 아닌 argv 배열로 반환한다. validator는 provider command, model과 effort에 대해 argv 의미를 교차 검증한다.
 - `session-guide`, `role prompt`, Task accept terminal에 비파괴적 추천 명령을 연결했으며 현재 세션 모델이나 Task를 자동 변경하지 않는다.
 - model catalog/project override/recommendation schema와 validator, provider/profile/allowlist/alias/effort/locale/security mutation E2E를 추가했다.
 

@@ -32,13 +32,15 @@ class ModelAdvisor
     "release" => "Release Role"
   }.freeze
   EFFORT_ORDER = %w[minimal low medium high xhigh max].freeze
+  MODEL_ID_PATTERN = /\A[A-Za-z0-9][A-Za-z0-9._:+\/@\[\]-]*\z/.freeze
 
   def initialize(argv)
+    @argv = argv.dup
     @options = {target: Dir.pwd, locale: "ko", json: false}
-    parse_options(argv)
   end
 
   def run
+    parse_options(@argv)
     @target = File.expand_path(@options[:target])
     @catalog = read_json(@options[:catalog] || File.join(__dir__, "model_catalog.json"), "model catalog")
     validate_catalog!
@@ -63,6 +65,7 @@ class ModelAdvisor
       "provider" => {
         "id" => @provider_id,
         "display_name" => @provider.fetch("display_name"),
+        "command" => @provider.fetch("command"),
         "detected_by" => detected_by,
         "configured_model" => @local["model"],
         "configured_effort" => @local["effort"],
@@ -135,7 +138,7 @@ class ModelAdvisor
   def model_id(value, label)
     raise ModelAdvisorError, "#{label} must be a string" unless value.is_a?(String)
     printable(value, label)
-    unless value.match?(/\A[A-Za-z0-9][A-Za-z0-9._:+\/@-]*\z/)
+    unless value.match?(MODEL_ID_PATTERN)
       raise ModelAdvisorError, "#{label} contains unsupported characters"
     end
     value
@@ -179,25 +182,68 @@ class ModelAdvisor
   end
 
   def validate_overrides!
+    raise ModelAdvisorError, "model overrides must be an object" unless @overrides.is_a?(Hash)
     raise ModelAdvisorError, "model overrides schema must be aiops.model_overrides.v1" unless @overrides["schema"] == "aiops.model_overrides.v1"
     unknown = @overrides.keys - %w[schema default_provider managed_allowlist providers role_profiles]
     raise ModelAdvisorError, "model overrides unknown keys: #{unknown.join(', ')}" unless unknown.empty?
-    (@overrides["managed_allowlist"] || {}).each_value do |models|
+    providers = @overrides["providers"] || {}
+    managed = @overrides["managed_allowlist"] || {}
+    role_profiles = @overrides["role_profiles"] || {}
+    raise ModelAdvisorError, "model override providers must be an object" unless providers.is_a?(Hash)
+    raise ModelAdvisorError, "managed model allowlist must be an object" unless managed.is_a?(Hash)
+    raise ModelAdvisorError, "model override role_profiles must be an object" unless role_profiles.is_a?(Hash)
+    known_provider_ids = @catalog.fetch("providers").keys | providers.keys
+    unknown_managed = managed.keys - known_provider_ids
+    raise ModelAdvisorError, "managed allowlist references unknown providers: #{unknown_managed.join(', ')}" unless unknown_managed.empty?
+    default_provider = @overrides["default_provider"]
+    if default_provider && !known_provider_ids.include?(default_provider)
+      raise ModelAdvisorError, "default_provider #{default_provider} is not configured"
+    end
+    managed.each_value do |models|
       raise ModelAdvisorError, "managed model allowlist must be a non-empty array" unless models.is_a?(Array) && !models.empty?
+      raise ModelAdvisorError, "managed model allowlist must contain unique models" unless models.uniq.length == models.length
       models.each { |model| model_id(model, "managed allowlist model") }
     end
-    (@overrides["providers"] || {}).each do |provider_id, provider|
+    role_profiles.each do |role, profile|
+      printable(role, "model override Role")
+      raise ModelAdvisorError, "model override Role #{role} uses unknown profile #{profile}" unless PROFILES.include?(profile)
+    end
+    providers.each do |provider_id, provider|
       raise ModelAdvisorError, "model override provider ID invalid: #{provider_id}" unless provider_id.is_a?(String) && provider_id.match?(/\A[a-z][a-z0-9_]*\z/)
       raise ModelAdvisorError, "model override provider #{provider_id} must be an object" unless provider.is_a?(Hash)
       provider_unknown = provider.keys - %w[display_name command allowlist aliases models profiles]
       raise ModelAdvisorError, "model override provider #{provider_id} unknown keys: #{provider_unknown.join(', ')}" unless provider_unknown.empty?
-      if provider["command"] && !provider["command"].match?(/\A[A-Za-z0-9._-]+\z/)
+      if provider["display_name"] && (!provider["display_name"].is_a?(String) || provider["display_name"].empty?)
+        raise ModelAdvisorError, "model override provider #{provider_id} display_name invalid"
+      end
+      if provider["command"] && (!provider["command"].is_a?(String) || !provider["command"].match?(/\A[A-Za-z0-9._-]+\z/))
         raise ModelAdvisorError, "model override provider #{provider_id} command invalid"
       end
-      (provider["models"] || {}).each_key { |model| model_id(model, "model override model") }
-      (provider["aliases"] || {}).each do |name, model|
+      %w[allowlist].each do |key|
+        next unless provider.key?(key)
+        values = provider[key]
+        raise ModelAdvisorError, "model override provider #{provider_id} #{key} must be a non-empty array" unless values.is_a?(Array) && !values.empty?
+        raise ModelAdvisorError, "model override provider #{provider_id} #{key} must be unique" unless values.uniq.length == values.length
+        values.each { |model| model_id(model, "model override #{key} model") }
+      end
+      models = provider["models"] || {}
+      aliases = provider["aliases"] || {}
+      profiles = provider["profiles"] || {}
+      raise ModelAdvisorError, "model override provider #{provider_id} models must be an object" unless models.is_a?(Hash)
+      raise ModelAdvisorError, "model override provider #{provider_id} aliases must be an object" unless aliases.is_a?(Hash)
+      raise ModelAdvisorError, "model override provider #{provider_id} profiles must be an object" unless profiles.is_a?(Hash)
+      unknown_profiles = profiles.keys - PROFILES
+      raise ModelAdvisorError, "model override provider #{provider_id} unknown profiles: #{unknown_profiles.join(', ')}" unless unknown_profiles.empty?
+      models.each do |model, definition|
+        model_id(model, "model override model")
+        raise ModelAdvisorError, "model override model #{model} must be an object" unless definition.is_a?(Hash)
+      end
+      aliases.each do |name, model|
         model_id(name, "model override alias")
         model_id(model, "model override alias target")
+      end
+      profiles.each do |profile, mapping|
+        raise ModelAdvisorError, "model override provider #{provider_id} profile #{profile} must be an object" unless mapping.is_a?(Hash)
       end
     end
   end
@@ -350,21 +396,34 @@ class ModelAdvisor
         section = match[1]
         next
       end
-      match = line.match(/\A([A-Za-z0-9_.-]+)\s*=\s*["']([^"']+)["']/)
-      next unless match
-      key = match[1]
-      value = match[2]
-      if section.empty? && key == "model"
-        values["model"] = value
-      elsif section.empty? && key == "model_reasoning_effort"
-        values["effort"] = value
-      elsif section == "agents" && key == "default_subagent_model"
-        values["worker_model"] = value
-      elsif section == "agents" && key == "default_subagent_reasoning_effort"
-        values["worker_effort"] = value
+      match = line.match(/\A([A-Za-z0-9_.-]+)\s*=\s*(.*)\z/)
+      watched = if section.empty?
+                  {"model" => "model", "model_reasoning_effort" => "effort"}
+                elsif section == "agents"
+                  {"default_subagent_model" => "worker_model", "default_subagent_reasoning_effort" => "worker_effort"}
+                else
+                  {}
+                end
+      if match && watched.key?(match[1])
+        values[watched.fetch(match[1])] = parse_toml_string(match[2], path, match[1])
+      elsif watched.keys.any? { |key| line.match?(/\A#{Regexp.escape(key)}\b/) }
+        raise ModelAdvisorError, "invalid Codex config #{path}: malformed #{line.split.first} assignment"
       end
     end
     values
+  end
+
+  def parse_toml_string(raw, path, key)
+    value = raw.strip
+    if (match = value.match(/\A"((?:\\.|[^"\\])*)"\s*(?:#.*)?\z/))
+      return JSON.parse(%("#{match[1]}"))
+    end
+    if (match = value.match(/\A'([^']*)'\s*(?:#.*)?\z/))
+      return match[1]
+    end
+    raise ModelAdvisorError, "invalid Codex config #{path}: #{key} must be a quoted string"
+  rescue JSON::ParserError
+    raise ModelAdvisorError, "invalid Codex config #{path}: malformed #{key} string"
   end
 
   def claude_settings
@@ -381,10 +440,24 @@ class ModelAdvisor
     allowlists = []
     paths.select { |path| File.file?(path) }.each do |path|
       data = read_json(path, "Claude Code settings")
-      result["model"] = data["model"] if data["model"].is_a?(String) && !data["model"].empty?
-      result["effort"] = data["effortLevel"] if data["effortLevel"].is_a?(String) && !data["effortLevel"].empty?
-      allowlists << data["availableModels"] if data["availableModels"].is_a?(Array)
-      env = data["env"].is_a?(Hash) ? data["env"] : {}
+      raise ModelAdvisorError, "Claude Code settings must be an object: #{path}" unless data.is_a?(Hash)
+      if data.key?("model")
+        raise ModelAdvisorError, "Claude Code settings model must be a non-empty string" unless data["model"].is_a?(String) && !data["model"].empty?
+        result["model"] = data["model"]
+      end
+      if data.key?("effortLevel")
+        raise ModelAdvisorError, "Claude Code settings effortLevel must be a non-empty string" unless data["effortLevel"].is_a?(String) && !data["effortLevel"].empty?
+        result["effort"] = data["effortLevel"]
+      end
+      if data.key?("availableModels")
+        models = data["availableModels"]
+        raise ModelAdvisorError, "Claude Code settings availableModels must be an array of model IDs" unless models.is_a?(Array) && models.all? { |model| model.is_a?(String) && !model.empty? }
+        allowlists << models
+      end
+      if data.key?("env") && !data["env"].is_a?(Hash)
+        raise ModelAdvisorError, "Claude Code settings env must be an object"
+      end
+      env = data["env"] || {}
       alias_map = {
         "opus" => env["ANTHROPIC_DEFAULT_OPUS_MODEL"],
         "sonnet" => env["ANTHROPIC_DEFAULT_SONNET_MODEL"],
@@ -429,6 +502,9 @@ class ModelAdvisor
       next unless value
       raise ModelAdvisorError, "configured #{key} is unsupported: #{value}" unless %w[auto minimal low medium high xhigh max].include?(value)
     end
+    unless @local["allowlist"].nil? || @local["allowlist"].is_a?(Array)
+      raise ModelAdvisorError, "local model allowlist must be an array"
+    end
     Array(@local["allowlist"]).each { |model| model_id(model, "local allowlist model") }
     @local.fetch("aliases", {}).each do |name, target|
       model_id(name, "local alias")
@@ -464,6 +540,9 @@ class ModelAdvisor
       recommendations[purpose == "verification" ? "verification" : purpose] = resolution
       warnings << "#{purpose} recommendation uses unavailable model #{resolution['requested_model']}" unless resolution["available"]
       warnings << "#{purpose} recommendation selected its allowed fallback #{resolution['requested_model']}" if resolution["source"] == "fallback"
+      if floating_alias?(resolution["requested_model"]) && resolution["resolved_model"].nil?
+        warnings << "#{purpose} recommendation uses provider-resolved floating alias #{resolution['requested_model']}; exact model capabilities may vary"
+      end
       blockers << "no allowed model is available for required purpose #{purpose}" if required[purpose] && !resolution["available"]
     end
     [recommendations, warnings, blockers]
@@ -506,6 +585,13 @@ class ModelAdvisor
       source = "fallback"
       available = true
     end
+    configured_model = @local["model"]
+    if !available && configured_model && model_available?(configured_model)
+      requested = configured_model
+      effort = supported_effort(configured_model, explicit_effort || @local["effort"] || effort)
+      source = "configured_session"
+      available = true
+    end
     {
       "purpose" => purpose == "verification" ? "independent_verification" : purpose,
       "required" => required,
@@ -523,7 +609,7 @@ class ModelAdvisor
   end
 
   def model_known?(model)
-    @provider.fetch("models").key?(model) || @provider.fetch("aliases", {}).key?(model)
+    @provider.fetch("models").key?(model) || @provider.fetch("aliases", {}).key?(model) || local_model_candidates.include?(model)
   end
 
   def model_available?(model)
@@ -533,7 +619,7 @@ class ModelAdvisor
   def allowed?(model)
     return true unless @allowlist
     resolved = resolved_model(model)
-    @allowlist.include?(model) || (resolved && @allowlist.include?(resolved))
+    !!(@allowlist.include?(model) || (resolved && @allowlist.include?(resolved)))
   end
 
   def resolved_model(model)
@@ -545,15 +631,35 @@ class ModelAdvisor
   end
 
   def supported_effort(model, requested)
+    allowed = exact_claude_efforts(model)
     definition = @provider.fetch("models", {})[model]
-    allowed = definition && definition["efforts"]
-    allowed ||= @provider["efforts"]
+    allowed ||= definition && definition["efforts"]
+    allowed ||= @provider.fetch("efforts")
     requested = "auto" if requested.to_s.empty?
     return requested if allowed.include?(requested)
     return allowed.first if requested == "auto"
     rank = EFFORT_ORDER.index(requested) || EFFORT_ORDER.length
     candidates = allowed.reject { |value| value == "auto" }.select { |value| (EFFORT_ORDER.index(value) || -1) <= rank }
     candidates.max_by { |value| EFFORT_ORDER.index(value) || -1 } || allowed.first
+  end
+
+  def local_model_candidates
+    [@local["model"], @local["worker_model"], *@local.fetch("allowlist", []), *@local.fetch("aliases", {}).values].compact.uniq
+  end
+
+  def floating_alias?(model)
+    definition = @provider.fetch("models", {})[model]
+    definition && definition["alias"] && resolved_model(model).nil?
+  end
+
+  def exact_claude_efforts(model)
+    return nil unless @provider_id == "claude_code"
+    exact = resolved_model(model)
+    return nil unless exact
+    exact = exact.sub(/\[1m\]\z/, "")
+    return %w[auto low medium high xhigh max] if exact.match?(/(?:^|[.:\/-])claude-opus-4-7(?:$|[.:\/-])/)
+    return %w[auto low medium high max] if exact.match?(/(?:^|[.:\/-])claude-(?:opus|sonnet)-4-6(?:$|[.:\/-])/)
+    nil
   end
 
   def launch_command(model, effort)

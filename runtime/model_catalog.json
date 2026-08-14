@@ -30,12 +30,14 @@
     "claude_code": {
       "display_name": "Claude Code",
       "command": "claude",
-      "efforts": ["auto", "low", "medium", "high", "xhigh"],
+      "efforts": ["auto", "low", "medium", "high", "xhigh", "max"],
       "models": {
         "haiku": {"alias": true, "efforts": ["auto"], "vision": true},
-        "sonnet": {"alias": true, "efforts": ["auto", "low", "medium", "high"], "vision": true},
-        "opus": {"alias": true, "efforts": ["auto", "low", "medium", "high", "xhigh"], "vision": true},
-        "opusplan": {"alias": true, "efforts": ["auto", "low", "medium", "high"], "vision": true}
+        "sonnet": {"alias": true, "efforts": ["auto", "low", "medium", "high", "xhigh", "max"], "vision": true},
+        "sonnet[1m]": {"alias": true, "efforts": ["auto", "low", "medium", "high", "xhigh", "max"], "vision": true},
+        "opus": {"alias": true, "efforts": ["auto", "low", "medium", "high", "xhigh", "max"], "vision": true},
+        "opus[1m]": {"alias": true, "efforts": ["auto", "low", "medium", "high", "xhigh", "max"], "vision": true},
+        "opusplan": {"alias": true, "efforts": ["auto", "low", "medium", "high", "xhigh", "max"], "vision": true}
       },
       "profiles": {
         "fast": {"model": "haiku", "effort": "auto", "fallback": "sonnet"},

@@ -134,13 +134,50 @@ ruby -rjson -e '
   abort("Claude worker setting missing") unless data.dig("recommendations", "delegated_worker", "requested_model") == "haiku"
 ' "$tmpdir/claude-strict.json"
 
+cat > "$tmpdir/claude-exact-settings.json" <<'EOF'
+{
+  "model": "claude-sonnet-4-6",
+  "effortLevel": "high",
+  "availableModels": ["claude-sonnet-4-6"]
+}
+EOF
+recommend claude-exact --provider claude-code --role execution --claude-settings "$tmpdir/claude-exact-settings.json"
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  abort("Claude exact session model missing") unless data.dig("recommendations", "session", "requested_model") == "claude-sonnet-4-6"
+  abort("Claude exact model must resolve to itself") unless data.dig("recommendations", "session", "resolved_model") == "claude-sonnet-4-6"
+  abort("Claude exact model should keep configured effort") unless data.dig("recommendations", "session", "effort") == "high"
+  abort("Claude exact model recommendation should be ready") unless data["ready"] == true
+  abort("recommendation provider command missing") unless data.dig("provider", "command") == "claude"
+  data.fetch("recommendations").each_value do |item|
+    abort("recommendation availability must be boolean") unless [true, false].include?(item["available"])
+    fallback = item["fallback"]
+    abort("fallback availability must be boolean") if fallback && ![true, false].include?(fallback["available"])
+  end
+' "$tmpdir/claude-exact.json"
+
+cat > "$tmpdir/claude-1m-settings.json" <<'EOF'
+{
+  "model": "sonnet[1m]",
+  "effortLevel": "high",
+  "availableModels": ["sonnet[1m]", "opus[1m]"]
+}
+EOF
+recommend claude-1m --provider claude-code --role execution --claude-settings "$tmpdir/claude-1m-settings.json"
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  abort("Claude 1M alias missing") unless data.dig("recommendations", "session", "requested_model") == "sonnet[1m]"
+  abort("floating 1M alias must not invent exact model") unless data.dig("recommendations", "session", "resolved_model").nil?
+  abort("floating alias warning missing") unless data["warnings"].any? { |warning| warning.include?("floating alias sonnet[1m]") }
+' "$tmpdir/claude-1m.json"
+
 recommend codex-effort --provider codex --role execution --task T-20260814-103 --model gpt-5.6-sol --effort max --codex-config "$project/.codex/config.toml"
 recommend claude-effort --provider claude-code --role execution --task T-20260814-102 --model sonnet --effort xhigh --claude-settings "$project/.claude/settings.json"
 ruby -rjson -e '
   codex = JSON.parse(File.read(ARGV[0]))
   claude = JSON.parse(File.read(ARGV[1]))
   abort("Codex max should clamp to xhigh") unless codex.dig("recommendations", "task", "effort") == "xhigh"
-  abort("Claude sonnet xhigh should clamp to high") unless claude.dig("recommendations", "task", "effort") == "high"
+  abort("Claude floating alias should preserve provider-handled xhigh") unless claude.dig("recommendations", "task", "effort") == "xhigh"
   abort("CLI source missing") unless codex.dig("recommendations", "task", "source") == "cli_override"
 ' "$tmpdir/codex-effort.json" "$tmpdir/claude-effort.json"
 
@@ -221,6 +258,49 @@ if "$repo_root/bin/aiops" validate model-overrides "$tmpdir/incomplete-custom-pr
   exit 1
 fi
 
+cat > "$tmpdir/unknown-managed-provider.json" <<'EOF'
+{
+  "schema": "aiops.model_overrides.v1",
+  "managed_allowlist": {"codeex": ["gpt-5.6-luna"]}
+}
+EOF
+if "$repo_root/bin/aiops" validate model-overrides "$tmpdir/unknown-managed-provider.json" >/dev/null 2>&1; then
+  printf '%s\n' "unknown managed allowlist provider should fail" >&2
+  exit 1
+fi
+if "$repo_root/bin/aiops" model recommend --target "$project" --provider codex --role execution --override-file "$tmpdir/unknown-managed-provider.json" --codex-config "$project/.codex/config.toml" >/dev/null 2> "$tmpdir/unknown-managed-provider.err"; then
+  printf '%s\n' "unknown managed allowlist provider should fail at runtime" >&2
+  exit 1
+fi
+grep -q 'unknown providers: codeex' "$tmpdir/unknown-managed-provider.err"
+
+cat > "$tmpdir/unknown-profile.json" <<'EOF'
+{
+  "schema": "aiops.model_overrides.v1",
+  "providers": {"codex": {"profiles": {"turbo": {"model": "gpt-5.6-luna", "effort": "low", "fallback": "gpt-5.6-terra"}}}}
+}
+EOF
+if "$repo_root/bin/aiops" validate model-overrides "$tmpdir/unknown-profile.json" >/dev/null 2>&1; then
+  printf '%s\n' "unknown override profile should fail" >&2
+  exit 1
+fi
+
+cat > "$tmpdir/malformed-managed.json" <<'EOF'
+{
+  "schema": "aiops.model_overrides.v1",
+  "managed_allowlist": []
+}
+EOF
+if "$repo_root/bin/aiops" model recommend --target "$project" --provider codex --role execution --override-file "$tmpdir/malformed-managed.json" --codex-config "$project/.codex/config.toml" >/dev/null 2> "$tmpdir/malformed-managed.err"; then
+  printf '%s\n' "malformed managed allowlist should fail" >&2
+  exit 1
+fi
+grep -q '^error: managed model allowlist must be an object$' "$tmpdir/malformed-managed.err"
+if grep -q 'runtime/model_advisor.rb:' "$tmpdir/malformed-managed.err"; then
+  printf '%s\n' "malformed override leaked a stack trace" >&2
+  exit 1
+fi
+
 "$repo_root/bin/aiops" model recommend --target "$project" --provider codex --role execution --task T-20260814-102 --codex-config "$project/.codex/config.toml" --locale ko --json > "$tmpdir/ko.json"
 "$repo_root/bin/aiops" model recommend --target "$project" --provider codex --role execution --task T-20260814-102 --codex-config "$project/.codex/config.toml" --locale en --json > "$tmpdir/en.json"
 ruby -rjson -e '
@@ -246,6 +326,30 @@ if grep -q 'runtime/model_advisor.rb:' "$tmpdir/malformed.err"; then
   exit 1
 fi
 
+cat > "$tmpdir/malformed.toml" <<'EOF'
+model = [
+EOF
+if "$repo_root/bin/aiops" model recommend --target "$project" --provider codex --role execution --codex-config "$tmpdir/malformed.toml" >/dev/null 2> "$tmpdir/malformed-toml.err"; then
+  printf '%s\n' "malformed watched Codex TOML should fail" >&2
+  exit 1
+fi
+grep -q '^error: invalid Codex config ' "$tmpdir/malformed-toml.err"
+if grep -q 'runtime/model_advisor.rb:' "$tmpdir/malformed-toml.err"; then
+  printf '%s\n' "malformed Codex config leaked a stack trace" >&2
+  exit 1
+fi
+
+for args in '--effort impossible' '--task INVALID' '--unknown-option'; do
+  if "$repo_root/bin/aiops" model recommend --target "$project" --provider codex --role execution $args >/dev/null 2> "$tmpdir/invalid-option.err"; then
+    printf '%s\n' "invalid model advisor option should fail: $args" >&2
+    exit 1
+  fi
+  if grep -q 'runtime/model_advisor.rb:' "$tmpdir/invalid-option.err"; then
+    printf '%s\n' "invalid option leaked a stack trace: $args" >&2
+    exit 1
+  fi
+done
+
 if "$repo_root/bin/aiops" model recommend --target "$project" --provider codex --role execution --model 'gpt;touch-pwned' --codex-config "$project/.codex/config.toml" >/dev/null 2> "$tmpdir/unsafe.err"; then
   printf '%s\n' "unsafe model ID should fail" >&2
   exit 1
@@ -269,6 +373,14 @@ ruby -rjson -e '
 ' "$tmpdir/codex-standard.json" "$tmpdir/invalid-recommendation.json"
 if "$repo_root/bin/aiops" validate model-recommendation "$tmpdir/invalid-recommendation.json" >/dev/null 2>&1; then
   printf '%s\n' "invalid recommendation mutation should fail" >&2
+  exit 1
+fi
+
+ruby -rjson -e '
+  data=JSON.parse(File.read(ARGV[0])); data["recommendations"]["task"]["launch_command"]=["codex;touch", "/tmp/pwned"]; File.write(ARGV[1], JSON.pretty_generate(data))
+' "$tmpdir/codex-standard.json" "$tmpdir/unsafe-launch-recommendation.json"
+if "$repo_root/bin/aiops" validate model-recommendation "$tmpdir/unsafe-launch-recommendation.json" >/dev/null 2>&1; then
+  printf '%s\n' "unsafe launch argv should fail recommendation validation" >&2
   exit 1
 fi
 
