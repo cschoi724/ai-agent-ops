@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/model_overrides.schema.json",
+  "title": "AI Ops Project Model Overrides",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema"],
+  "properties": {
+    "schema": {"const": "aiops.model_overrides.v1"},
+    "default_provider": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "managed_allowlist": {
+      "type": "object", "additionalProperties": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"}}
+    },
+    "providers": {
+      "type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"},
+      "additionalProperties": {"$ref": "#/$defs/providerOverride"}
+    },
+    "role_profiles": {
+      "type": "object",
+      "additionalProperties": {"enum": ["fast", "balanced", "coding", "deep", "independent_review", "vision"]}
+    }
+  },
+  "$defs": {
+    "effort": {"enum": ["auto", "minimal", "low", "medium", "high", "xhigh", "max"]},
+    "profile": {
+      "type": "object", "additionalProperties": false,
+      "required": ["model", "effort", "fallback"],
+      "properties": {
+        "model": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"},
+        "effort": {"$ref": "#/$defs/effort"},
+        "fallback": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"}
+      }
+    },
+    "model": {
+      "type": "object", "additionalProperties": false,
+      "required": ["alias", "efforts", "vision"],
+      "properties": {
+        "alias": {"type": "boolean"},
+        "efforts": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/effort"}},
+        "vision": {"type": "boolean"}
+      }
+    },
+    "providerOverride": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "display_name": {"type": "string", "minLength": 1},
+        "command": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+        "allowlist": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"}},
+        "aliases": {"type": "object", "propertyNames": {"pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"}, "additionalProperties": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"}},
+        "models": {"type": "object", "propertyNames": {"pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"}, "additionalProperties": {"$ref": "#/$defs/model"}},
+        "profiles": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "fast": {"$ref": "#/$defs/profile"}, "balanced": {"$ref": "#/$defs/profile"},
+            "coding": {"$ref": "#/$defs/profile"}, "deep": {"$ref": "#/$defs/profile"},
+            "independent_review": {"$ref": "#/$defs/profile"}, "vision": {"$ref": "#/$defs/profile"}
+          }
+        }
+      }
+    }
+  }
+}

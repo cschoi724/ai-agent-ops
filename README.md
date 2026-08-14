@@ -90,6 +90,7 @@ YourProject/
 | `aiops bootstrap-guide` | 현재 상태에 맞는 다음 Agent 입력 안내 |
 | `aiops session-guide` | 운영 구성 이후 열 Role Session 선택 |
 | `aiops role prompt ROLE` | Codex/Claude 공통 Role Session 첫 문구 생성 |
+| `aiops model recommend --role ROLE` | 현재 provider와 Task 위험도에 맞는 session/task/verification/worker 모델과 effort 추천 |
 | `aiops migrate --plan` | 기존 운영 프로젝트 업데이트 영향 확인 |
 | `aiops migrate --apply` | 승인된 안전 범위만 마이그레이션 |
 | `aiops validate --strict` | `.ai_project/` schema 검증 |
@@ -113,6 +114,8 @@ YourProject/
 자주 쓰는 명령은 `aiops help`, 전체 명령은 `aiops help all`, Agent/자동화용 명령은 `aiops help ai`를 확인한다.
 
 사용자용 dashboard와 HTML은 한국어가 기본이다. 영어 표시는 `aiops status --locale en` 또는 `aiops project dashboard --format html --locale en --output dashboard.html`로 선택한다. 프로젝트별 표시 용어는 검증된 `aiops.dashboard_locale.v1` 파일을 `--locale-file`로 지정한다.
+
+모델 추천도 한국어 terminal이 기본이며 model ID와 provider alias는 원문을 보존한다. `aiops model recommend --role execution --task TASK_ID --provider codex` 또는 `--provider claude-code`로 실제 모델, effort, fallback과 새 세션 필요 여부를 확인한다. 추천은 advisory-only이며 현재 세션 설정을 자동 변경하지 않는다. 기계 출력은 `--json`과 `aiops validate model-recommendation FILE`을 사용한다.
 
 `tests/visual_dashboard.sh`와 CI의 `dashboard browser visual` job은 locale별 HTML, Mermaid 지연 렌더, Explorer 필터 동기화, 반응형 layout과 주요 상호작용을 실제 Chrome에서 검증하고 full-page PNG를 남긴다.
 

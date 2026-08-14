@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/model_recommendation.schema.json",
+  "title": "AI Ops Model Recommendation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "generated_at", "target", "ready", "advisory_only", "provider", "role", "task", "recommendations", "sources", "warnings", "blockers"],
+  "properties": {
+    "schema": {"const": "aiops.model_recommendation.v1"},
+    "generated_at": {"type": "string", "minLength": 1},
+    "target": {"type": "string", "minLength": 1},
+    "ready": {"type": "boolean"},
+    "advisory_only": {"const": true},
+    "provider": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "display_name", "command", "detected_by", "configured_model", "configured_effort", "configured_worker_model", "configured_worker_effort", "allowlist_source"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "display_name": {"type": "string", "minLength": 1},
+        "command": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+        "detected_by": {"enum": ["explicit", "environment", "project_override", "installed_cli"]},
+        "configured_model": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"}]},
+        "configured_effort": {"oneOf": [{"type": "null"}, {"enum": ["auto", "minimal", "low", "medium", "high", "xhigh", "max"]}]},
+        "configured_worker_model": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"}]},
+        "configured_worker_effort": {"oneOf": [{"type": "null"}, {"enum": ["auto", "minimal", "low", "medium", "high", "xhigh", "max"]}]},
+        "allowlist_source": {"type": ["string", "null"]}
+      }
+    },
+    "role": {"type": "string", "minLength": 1},
+    "task": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["id", "workflow", "risk_profile", "classification", "capabilities"],
+          "properties": {
+            "id": {"type": "string", "pattern": "^T-[0-9]{8}-[0-9]{3,}$"},
+            "workflow": {"type": ["string", "null"]},
+            "risk_profile": {"enum": ["light", "standard", "strict"]},
+            "classification": {"enum": ["state_only", "docs_only", "product_code", "mixed", "unknown"]},
+            "capabilities": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+          }
+        }
+      ]
+    },
+    "recommendations": {
+      "type": "object", "additionalProperties": false,
+      "required": ["session", "task", "verification", "delegated_worker"],
+      "properties": {
+        "session": {"$ref": "#/$defs/resolution"},
+        "task": {"$ref": "#/$defs/resolution"},
+        "verification": {"$ref": "#/$defs/resolution"},
+        "delegated_worker": {"$ref": "#/$defs/resolution"}
+      }
+    },
+    "sources": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^https://"}},
+    "warnings": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "blockers": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+  },
+  "$defs": {
+    "resolution": {
+      "type": "object", "additionalProperties": false,
+      "required": ["purpose", "required", "profile", "requested_model", "resolved_model", "effort", "source", "reason", "available", "requires_new_session", "launch_command", "fallback"],
+      "properties": {
+        "purpose": {"enum": ["session", "task", "independent_verification", "delegated_worker"]},
+        "required": {"type": "boolean"},
+        "profile": {"enum": ["fast", "balanced", "coding", "deep", "independent_review", "vision"]},
+        "requested_model": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"},
+        "resolved_model": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"}]},
+        "effort": {"enum": ["auto", "minimal", "low", "medium", "high", "xhigh", "max"]},
+        "source": {"enum": ["configured_session", "configured_worker", "cli_override", "project_override", "built_in_catalog", "fallback"]},
+        "reason": {"type": "string", "minLength": 1},
+        "available": {"type": "boolean"},
+        "requires_new_session": {"type": "boolean"},
+        "launch_command": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "fallback": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["model", "resolved_model", "effort", "available"],
+              "properties": {
+                "model": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"},
+                "resolved_model": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@\\[\\]-]*$"}]},
+                "effort": {"enum": ["auto", "minimal", "low", "medium", "high", "xhigh", "max"]},
+                "available": {"type": "boolean"}
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "schema": "aiops.model_catalog.v1",
+  "updated_at": "2026-08-14",
+  "sources": [
+    "https://developers.openai.com/api/docs/guides/latest-model",
+    "https://developers.openai.com/api/docs/models/gpt-5.3-codex",
+    "https://developers.openai.com/codex/config-reference",
+    "https://code.claude.com/docs/en/model-config"
+  ],
+  "providers": {
+    "codex": {
+      "display_name": "Codex",
+      "command": "codex",
+      "efforts": ["minimal", "low", "medium", "high", "xhigh"],
+      "models": {
+        "gpt-5.6-luna": {"alias": false, "efforts": ["minimal", "low", "medium", "high", "xhigh"], "vision": true},
+        "gpt-5.6-terra": {"alias": false, "efforts": ["minimal", "low", "medium", "high", "xhigh"], "vision": true},
+        "gpt-5.6-sol": {"alias": false, "efforts": ["minimal", "low", "medium", "high", "xhigh"], "vision": true},
+        "gpt-5.3-codex": {"alias": false, "efforts": ["low", "medium", "high", "xhigh"], "vision": true}
+      },
+      "profiles": {
+        "fast": {"model": "gpt-5.6-luna", "effort": "low", "fallback": "gpt-5.6-terra"},
+        "balanced": {"model": "gpt-5.6-terra", "effort": "medium", "fallback": "gpt-5.6-sol"},
+        "coding": {"model": "gpt-5.3-codex", "effort": "high", "fallback": "gpt-5.6-terra"},
+        "deep": {"model": "gpt-5.6-sol", "effort": "xhigh", "fallback": "gpt-5.3-codex"},
+        "independent_review": {"model": "gpt-5.6-sol", "effort": "xhigh", "fallback": "gpt-5.3-codex"},
+        "vision": {"model": "gpt-5.6-sol", "effort": "high", "fallback": "gpt-5.3-codex"}
+      }
+    },
+    "claude_code": {
+      "display_name": "Claude Code",
+      "command": "claude",
+      "efforts": ["auto", "low", "medium", "high", "xhigh", "max"],
+      "models": {
+        "haiku": {"alias": true, "efforts": ["auto"], "vision": true},
+        "sonnet": {"alias": true, "efforts": ["auto", "low", "medium", "high", "xhigh", "max"], "vision": true},
+        "sonnet[1m]": {"alias": true, "efforts": ["auto", "low", "medium", "high", "xhigh", "max"], "vision": true},
+        "opus": {"alias": true, "efforts": ["auto", "low", "medium", "high", "xhigh", "max"], "vision": true},
+        "opus[1m]": {"alias": true, "efforts": ["auto", "low", "medium", "high", "xhigh", "max"], "vision": true},
+        "opusplan": {"alias": true, "efforts": ["auto", "low", "medium", "high", "xhigh", "max"], "vision": true}
+      },
+      "profiles": {
+        "fast": {"model": "haiku", "effort": "auto", "fallback": "sonnet"},
+        "balanced": {"model": "sonnet", "effort": "medium", "fallback": "opus"},
+        "coding": {"model": "sonnet", "effort": "high", "fallback": "opus"},
+        "deep": {"model": "opusplan", "effort": "high", "fallback": "opus"},
+        "independent_review": {"model": "opus", "effort": "xhigh", "fallback": "sonnet"},
+        "vision": {"model": "opus", "effort": "high", "fallback": "sonnet"}
+      }
+    }
+  },
+  "role_profiles": {
+    "Direction Role": "balanced",
+    "Lead Role": "balanced",
+    "Execution Role": "coding",
+    "Verification Role": "independent_review",
+    "Completion Role": "balanced",
+    "Ops Governance Role": "deep",
+    "Release Role": "deep"
+  }
+}

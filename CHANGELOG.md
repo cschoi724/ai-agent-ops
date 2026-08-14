@@ -12,6 +12,8 @@
 
 ### Added
 
+- Add provider-aware `aiops model recommend` for Codex, Claude Code, and custom providers with Role/Task risk mapping, session/task/verification/delegated-worker recommendations, effort clamping, alias resolution, allowlist fallback, and advisory-only launch argv.
+- Add `aiops.model_catalog.v1`, `aiops.model_overrides.v1`, `aiops.model_recommendation.v1`, validators, and a dated built-in catalog with official provider sources.
 - Add `aiops task close TASK_ID` with read-only planning, explicit apply, canonical completion and merge verification, linked worktree/local branch cleanup, optional remote deletion, and resumable local cleanup receipts.
 - Add `aiops.task_cleanup_plan.v1`, `aiops.task_cleanup_receipt.v1`, and their validators.
 - Add `aiops task profile TASK_ID` with Light, Standard, and Strict workflow recommendations, risk signals, targeted validation argv, Role/report/CI requirements, and `aiops.task_risk_profile.v1` validation.
@@ -21,6 +23,7 @@
 
 ### Changed
 
+- Connect model recommendation guidance to `session-guide`, `role prompt`, and terminal Task acceptance without changing existing Task or dashboard machine projections.
 - Treat Task completion and Git cleanup as separate lifecycle results; cleanup always requires an explicit apply command, honors project policy, and never rewrites Task status.
 - Add optional Task `risk_profile` overrides and workflow `default_profile` values while preventing explicit overrides from lowering schema, security, migration, policy, CI, or release minimums.
 - Integrate calculated profiles into Task status, project snapshot, dashboard work views, and lifecycle routing; Light Tasks can move from Execution to Completion while Standard and Strict retain independent Verification.
@@ -29,6 +32,10 @@
 - Define sender and receiver readiness checks before lifecycle transitions and align Task, QA, and handoff reports around one compact receipt.
 
 ### Fixed
+
+- Accept configured Claude Code exact/provider model IDs and `[1m]` aliases without producing nullable availability fields, while leaving unresolved floating aliases explicit.
+- Reject unknown managed-allowlist providers, unknown override profiles, malformed watched provider config, and recommendation launch argv that does not match the selected provider, model, and effort.
+- Apply the complete nested model/profile override structure and merged-provider semantics at recommendation runtime, including auto-discovered project overrides.
 
 - Protect current, shared, dirty, unpushed, unmerged, stale-canonical, configured protected, and GitHub-protected branches during Task cleanup; require Task-owned worktree metadata, bind squash PR evidence to the current branch tip SHA, validate cleanup action sets, and use SHA leases for remote deletion.
 - Keep base-less Task Profile recommendations scoped to Task-owned changes while lifecycle allowed-path checks continue to inspect and block unrelated worktree changes.

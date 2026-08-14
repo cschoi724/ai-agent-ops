@@ -198,7 +198,8 @@ if "$repo_root/bin/aiops" handoff validate "$tmpdir/mismatched-handoff.md" \
 fi
 grep -q 'transition receipt status does not match handoff current_status' "$tmpdir/mismatched-handoff.out"
 
-"$repo_root/bin/aiops" task accept "$task_id" --target "$project" >/dev/null
+"$repo_root/bin/aiops" task accept "$task_id" --target "$project" >"$tmpdir/verification-accept.out"
+grep -q '모델 추천: aiops model recommend --role "Verification Role"' "$tmpdir/verification-accept.out"
 grep -q '^status: verification_in_progress$' "$task_file"
 grep -q '^locked_by: QA Agent$' "$task_file"
 cmp -s "$project/$verification_receipt" "$tmpdir/verification-receipt.before"
