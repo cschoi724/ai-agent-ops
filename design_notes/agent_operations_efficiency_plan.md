@@ -1,6 +1,6 @@
 # Agent Operations Efficiency Improvement Plan
 
-상태: 1차 완료 / 2차 완료 / 3차 완료 / 4차 구현 완료·독립 검증 대기
+상태: 1차 완료 / 2차 완료 / 3차 완료 / 4차 완료 / 5차 구현 준비 완료
 대상: Role Session, Task 상태 전이, 보고, 검증, Git 정리, 모델 추천
 기준 버전: v0.14.0
 작성일: 2026-08-13
@@ -380,7 +380,7 @@ Role Session을 계속 유지할 모델, 실제 Task를 처리할 모델, 독립
 
 ### 10.3 현재 실제 모델 추천 기준
 
-아래 표는 2026-08-13 공식 model guidance를 기준으로 한 초기 추천값이다. 실제 실행 시에는 Agent 도구의 사용 가능 모델과 조직 allowlist를 먼저 확인한다.
+아래 표는 2026-08-14 공식 model guidance를 기준으로 한 초기 추천값이다. 실제 실행 시에는 Agent 도구의 사용 가능 모델과 조직 allowlist를 먼저 확인한다.
 
 | 작업 | Codex 추천 | Claude Code 추천 |
 |---|---|---|
@@ -388,7 +388,7 @@ Role Session을 계속 유지할 모델, 실제 Task를 처리할 모델, 독립
 | 일반 Role Session과 조율 | `gpt-5.6-terra`, effort `medium` | `sonnet`, effort `medium` |
 | 일반 코드 구현 | `gpt-5.3-codex`, effort `high` | `sonnet`, effort `high` |
 | 복잡한 설계, migration, 장애 분석 | `gpt-5.6-sol`, effort `high` 또는 `xhigh` | `opus` 또는 `opusplan`, effort `xhigh` |
-| 가장 어렵고 장시간인 자율 작업 | `gpt-5.6-sol`, effort `xhigh` | 사용 가능하면 `fable`, effort `high` 또는 `xhigh` |
+| 가장 어렵고 장시간인 자율 작업 | `gpt-5.6-sol`, effort `xhigh` | `opus`, effort `xhigh`; 조직 custom catalog가 있으면 허용된 상위 모델 검토 |
 | 독립 코드·계약 검증 | `gpt-5.6-sol` 또는 `gpt-5.3-codex`, effort `xhigh` | `opus`, effort `xhigh` |
 | UI 구현과 시각 QA | `gpt-5.6-sol`, effort `high` | `sonnet` 또는 `opus`, effort `high` |
 
@@ -399,6 +399,7 @@ Codex 기준:
 - `gpt-5.6-luna`는 단순하고 반복적인 고빈도 작업에 사용한다.
 - `gpt-5.3-codex`는 agentic coding과 repository 도구 사용이 중심인 구현에 사용한다.
 - 지원 effort는 모델마다 다르므로 local model catalog가 허용하는 범위에서 선택한다.
+- GPT-5.6 API의 `max` effort를 Codex CLI가 지원한다고 가정하지 않는다. Codex adapter는 현재 CLI 지원 범위인 `minimal`, `low`, `medium`, `high`, `xhigh` 안에서 조정한다.
 
 Claude Code 기준:
 
@@ -406,7 +407,7 @@ Claude Code 기준:
 - `sonnet`은 일상적인 코딩과 일반 Role Session에 사용한다.
 - `opus`는 복잡한 추론과 독립 검증에 사용한다.
 - `opusplan`은 계획 단계에서 Opus, 실행 단계에서 Sonnet으로 자동 전환하는 경우에 사용한다.
-- `fable`은 조직에서 사용할 수 있을 때 가장 어렵고 장시간인 작업에만 추천한다.
+- 공식 built-in alias가 아닌 이름은 조직 또는 project custom catalog에 등록된 경우에만 추천한다.
 - alias가 실제로 가리키는 버전은 provider에 따라 다르므로 alias와 resolved model을 모두 기록한다.
 
 공식 기준 문서:
@@ -673,7 +674,7 @@ provider_model_map:
 
 ### 4차. Safe Task Close and Branch Cleanup
 
-구현 상태: 구현 완료, 독립 검증 대기
+구현 상태: 완료, 독립 검증 통과, PR #54로 main 반영
 
 목표:
 
@@ -707,8 +708,13 @@ provider_model_map:
 - remote 삭제에는 점검한 SHA의 `--force-with-lease`를 사용해 확인 이후 바뀐 branch를 삭제하지 않는다.
 - cleanup은 Task status를 수정하지 않으며 `.ai_project/.runtime/task_cleanup/`의 `aiops.task_cleanup_receipt.v1`에 complete/partial/blocked 결과를 기록한다. 부분 실패 후 재실행은 남은 작업만 수행한다.
 - `aiops.task_cleanup_plan.v1`과 plan/receipt validator, 정상·차단·squash·GitHub protection·부분 실패·멱등성 E2E를 추가했다.
+- merged PR의 head SHA를 현재 local/remote branch tip과 대조하고 Task metadata에 등록되지 않은 linked worktree 삭제를 차단한다.
+- cleanup action 집합의 중복·누락과 partial/blocked receipt 의미를 검증하며, 독립 재검증에서 High/Medium/Low 이슈 없음 판정을 받았다.
+- PR #54, merge commit `0b03e62`로 `main`에 반영했다.
 
 ### 5차. Model Advisor
+
+구현 상태: 준비 완료, 구현 대기
 
 목표:
 
@@ -747,6 +753,30 @@ provider_model_map:
 - 모델 catalog 갱신 없이 기존 Task/machine contract가 변하지 않음
 - AI Ops가 사용자 허용 없이 현재 세션 모델을 변경하지 않음
 - 독립 검증 후 계획 완료 판정
+
+구현 준비 결정 (2026-08-14):
+
+- 기본 사용자 출력 locale은 한국어이며 Agent/Team/model ID/alias 같은 고유 이름은 원문을 보존한다. JSON은 locale과 무관한 machine contract로 유지한다.
+- 추천은 advisory-only다. AI Ops는 현재 세션의 모델이나 effort를 자동 변경하지 않고 provider별 실행 명령 또는 picker 안내만 반환한다.
+- provider 감지는 명시적 `--provider`, 현재 도구 환경, 설치된 CLI와 읽을 수 있는 local config 순서로 해석하며 모호하면 provider 지정을 요구한다.
+- model 선택은 조직 managed allowlist를 항상 hard constraint로 적용한 뒤 명시적 CLI 선택, project override, local provider catalog/config, built-in catalog 순으로 해석한다. 어떤 override도 managed allowlist를 우회할 수 없다.
+- built-in catalog는 `runtime/model_catalog.json`, resolver는 `runtime/model_advisor.rb`, machine output은 `aiops.model_recommendation.v1`로 분리한다. project override는 선택 파일 `.ai_project/model_overrides.json`에서 읽는다.
+- adapter가 읽는 local config는 model ID, alias mapping, effort 지원 범위와 allowlist로 제한한다. 인증 token, endpoint secret, 계정 정보는 수집하거나 출력하지 않는다.
+- Codex adapter는 `model`, `model_reasoning_effort`, `agents.default_subagent_model`, `agents.default_subagent_reasoning_effort`를 인식하되 project-local config가 provider 설정을 바꿀 수 있다고 가정하지 않는다.
+- Claude Code adapter는 `model`, `availableModels`, provider별 alias override와 effort 지원 범위를 인식한다. `haiku`, `sonnet`, `opus`, `opusplan`은 alias로 기록하고 resolved model이 확인될 때만 별도 표시한다.
+- Strict Task의 exact pinning은 catalog에서 exact model이 확인되고 allowlist가 허용할 때만 사용한다. 확인할 수 없는 floating alias를 임의의 exact ID로 추정하지 않는다.
+- Verification 추천은 구현 모델과 purpose를 분리하고 독립 세션 필요 여부를 표시한다. delegated worker 추천은 주 세션의 책임이나 독립 Verification을 대체하지 않는다.
+- 공식 source URL, catalog 기준일과 resolver source를 JSON에 포함해 추천 시점의 근거를 추적한다.
+
+구현 순서:
+
+1. model catalog와 project override schema, validator
+2. provider-neutral Role/Task/Profile 추천 엔진
+3. Codex·Claude Code resolver와 안전한 local config 감지
+4. `aiops model recommend` 한국어 terminal/JSON 출력
+5. `role prompt`, `task start`, `session-guide`의 비파괴적 추천 연결
+6. provider/allowlist/alias/effort/fallback mutation E2E와 CookLog read-only dry run
+7. 전체 machine contract 비교와 독립 검증
 
 ## 13. 공통 검증 게이트
 
@@ -814,11 +844,11 @@ bin/aiops release-check --strict --allow-pending-release
 
 ## 17. 권장 다음 단계
 
-Project Dashboard 1~9차는 v0.14.0으로 릴리스 및 Homebrew 배포가 완료됐고, 1~3차 운영 효율 개선은 main 반영을 완료했다. 현재 4차 `Safe Task Close and Branch Cleanup` 구현을 완료하고 독립 검증을 준비한다.
+Project Dashboard 1~9차는 v0.14.0으로 릴리스 및 Homebrew 배포가 완료됐고, 운영 효율 개선 1~4차도 독립 검증과 main 반영을 완료했다. 다음 작업은 마지막 5차 `Model Advisor` 구현이다.
 
 이유:
 
 - 현재 문제는 시각화 기능 부족보다 실제 Task 운영 시간과 반복 비용에 직접 영향을 준다.
 - 1차에서 계약을 먼저 통합해야 이후 명령 자동화가 기존 문서 중복을 확대하지 않는다.
 - 다중 Role과 상태 전이 준비도 기준이 확정되어야 위험도 profile과 branch cleanup을 안전하게 자동화할 수 있다.
-- 모델 추천은 Task 위험도와 Role continuity 정보가 마련된 뒤 연결해야 일관된 추천이 가능하다.
+- 1~4차에서 Task 위험도와 Role continuity 정보가 마련됐으므로 이제 provider-aware 모델 추천을 일관되게 연결할 수 있다.
