@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/task_cleanup_receipt.schema.json",
+  "title": "AI Ops Task Cleanup Receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "task_id",
+    "actor",
+    "canonical",
+    "branch",
+    "worktree_path",
+    "merge_evidence",
+    "actions",
+    "result",
+    "blockers",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "schema": { "const": "aiops.task_cleanup_receipt.v1" },
+    "task_id": { "type": "string", "pattern": "^T-[0-9]{8}-[0-9]{3,}$" },
+    "actor": { "type": "string", "minLength": 1 },
+    "canonical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "sha"],
+      "properties": {
+        "ref": { "type": "string", "minLength": 1 },
+        "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "branch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "remote"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "remote": { "type": ["string", "null"] }
+      }
+    },
+    "worktree_path": { "type": ["string", "null"] },
+    "merge_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "verified"],
+      "properties": {
+        "method": { "enum": ["git_ancestor", "github_pull_request", "already_clean"] },
+        "verified": { "const": true },
+        "canonical_ref": { "type": "string", "minLength": 1 },
+        "canonical_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "pull_request": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["number", "url", "head", "base", "merge_commit", "merged_at"],
+          "properties": {
+            "number": { "type": "integer", "minimum": 1 },
+            "url": { "type": "string", "pattern": "^https://" },
+            "head": { "type": "string", "minLength": 1 },
+            "base": { "type": "string", "minLength": 1 },
+            "merge_commit": { "type": ["string", "null"] },
+            "merged_at": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "properties": { "method": { "const": "git_ancestor" } },
+          "required": ["canonical_ref", "canonical_sha"]
+        },
+        {
+          "properties": { "method": { "const": "github_pull_request" } },
+          "required": ["canonical_ref", "canonical_sha", "pull_request"]
+        },
+        {
+          "properties": { "method": { "const": "already_clean" } }
+        }
+      ]
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action", "result", "detail"],
+        "properties": {
+          "action": { "enum": ["remove_worktree", "delete_local_branch", "delete_remote_branch", "prune_worktrees"] },
+          "result": { "enum": ["complete", "skipped"] },
+          "detail": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "result": { "enum": ["complete", "partial", "blocked"] },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "created_at": { "type": "string", "minLength": 1 },
+    "updated_at": { "type": "string", "minLength": 1 }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "result": { "const": "complete" },
+        "blockers": { "type": "array", "maxItems": 0 }
+      }
+    },
+    {
+      "properties": {
+        "result": { "enum": ["partial", "blocked"] },
+        "blockers": { "type": "array", "minItems": 1 }
+      }
+    }
+  ]
+}

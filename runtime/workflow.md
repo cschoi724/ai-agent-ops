@@ -84,6 +84,8 @@ completion_review --advance--> done
 
 성공한 전이는 `aiops.transition_receipt.v1`으로 요약한다. receipt에는 Task ID, 이전/새 상태, 실제 Agent와 `active_role`, 다음 담당, 결과, 검증 근거 또는 생략 사유, risk, blocker, 다음 행동을 포함한다.
 
+`done` 이후 Git 정리는 상태 전이와 분리한다. `aiops task close TASK_ID --check`는 canonical 완료와 merge 증거, branch/worktree guard를 확인하고 `--apply`에서만 정리한다. remote branch 삭제에는 추가로 `--delete-remote`가 필요하다. cleanup의 성공·부분 실패·차단은 로컬 `aiops.task_cleanup_receipt.v1`에 기록하며 Task 상태를 다시 쓰지 않는다.
+
 Task 수행 절차는 `aiops task profile TASK_ID`가 계산한 위험도 profile을 따른다. Light는 독립 Verification을 생략할 수 있지만 self-check와 canonical/allowed-path guard를 생략하지 않는다. Standard와 Strict는 Execution과 Verification을 분리하며, Strict는 scope review, 전체 회귀, 상세 근거와 release gate를 추가한다. Task 또는 workflow override는 자동 위험 신호가 요구하는 최소 profile보다 낮출 수 없다. Git base가 없는 기존 Task도 현재 staged, unstaged, untracked 경로를 검사하되 Profile 추천에는 Task 소유 범위의 변경만 반영한다. 허용 범위 밖 변경은 lifecycle blocker로 분리해 차단하며, 비-Git 프로젝트에서만 path guard 호환 모드를 사용한다.
 
 ## 3. 중심 흐름

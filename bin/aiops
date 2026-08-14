@@ -35,6 +35,8 @@ Usage:
   aiops validate transition-receipt FILE
   aiops validate task-transition-plan FILE
   aiops validate task-risk-profile FILE
+  aiops validate task-cleanup-plan FILE
+  aiops validate task-cleanup-receipt FILE
   aiops validate policy-rules [--core DIR]
   aiops validate workflow-catalog [--target DIR|--core DIR]
   aiops validate project-snapshot FILE
@@ -47,6 +49,7 @@ Usage:
   aiops task profile TASK_ID [--target DIR] [--profile light|standard|strict] [--json]
   aiops task advance TASK_ID [--target DIR] [--by AGENT] [--role ROLE] [--next-agent AGENT] [--evidence PATH] [--check] [--json]
   aiops task accept TASK_ID [--target DIR] [--by AGENT] [--role ROLE] [--check] [--json]
+  aiops task close TASK_ID [--target DIR] [--by ACTOR] [--check|--apply] [--delete-remote] [--json]
   aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT] [--blocker TEXT] [--next-decision TEXT]
   aiops task lock TASK_ID --by AGENT [--target DIR] [--role ROLE] [--session ID]
   aiops task unlock TASK_ID --by AGENT [--target DIR]
@@ -122,11 +125,15 @@ Examples:
   aiops validate transition-receipt /tmp/transition_receipt.json
   aiops validate task-transition-plan /tmp/task_transition_plan.json
   aiops validate task-risk-profile /tmp/task_risk_profile.json
+  aiops validate task-cleanup-plan /tmp/task_cleanup_plan.json
+  aiops validate task-cleanup-receipt /tmp/task_cleanup_receipt.json
   aiops task create --title "로그인 화면 구현" --workflow feature --role "Lead Role"
   aiops task status T-YYYYMMDD-001 --source canonical
   aiops task profile T-YYYYMMDD-001 --json
   aiops task accept T-YYYYMMDD-001 --check
   aiops task advance T-YYYYMMDD-001 --next-agent "QA Agent" --evidence .ai_project/reports/T-YYYYMMDD-001_task-report.md
+  aiops task close T-YYYYMMDD-001 --check
+  aiops task close T-YYYYMMDD-001 --apply --delete-remote
   aiops task transition T-YYYYMMDD-001 --to approved --role "Direction Role"
   aiops handoff create T-YYYYMMDD-001 --from "Execution Role" --to "Verification Role" --next-action "변경 결과 검증"
   aiops status-ref
@@ -233,10 +240,13 @@ These commands expose machine-readable contracts or low-level workflow controls.
   aiops project context --role ROLE --task TASK_ID --json
   aiops policy evaluate --json
   aiops action plan --role ROLE --task TASK_ID --json
+  aiops task close TASK_ID --check --json
   aiops validate project-dashboard FILE
   aiops validate project-snapshot FILE
   aiops validate policy-evaluation FILE
   aiops validate transition-receipt FILE
+  aiops validate task-cleanup-plan FILE
+  aiops validate task-cleanup-receipt FILE
 
 Use `aiops help all` for the complete command reference.
 EOF
@@ -252,10 +262,13 @@ Agent / 자동화용 명령
   aiops project context --role ROLE --task TASK_ID --json
   aiops policy evaluate --json
   aiops action plan --role ROLE --task TASK_ID --json
+  aiops task close TASK_ID --check --json
   aiops validate project-dashboard FILE
   aiops validate project-snapshot FILE
   aiops validate policy-evaluation FILE
   aiops validate transition-receipt FILE
+  aiops validate task-cleanup-plan FILE
+  aiops validate task-cleanup-receipt FILE
 
 전체 명령은 `aiops help all`에서 확인합니다.
 EOF
@@ -9104,7 +9117,7 @@ cmd_validate() {
       ' "$catalog"
       info "ok: workflow catalog"
       ;;
-    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets|dashboard-locale|transition-receipt|task-transition-plan|task-risk-profile)
+    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets|dashboard-locale|transition-receipt|task-transition-plan|task-risk-profile|task-cleanup-plan|task-cleanup-receipt)
       file=""
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -9158,6 +9171,14 @@ cmd_validate() {
         task-risk-profile)
           schema="$core/schemas/task_risk_profile.schema.json"
           label="task risk profile"
+          ;;
+        task-cleanup-plan)
+          schema="$core/schemas/task_cleanup_plan.schema.json"
+          label="task cleanup plan"
+          ;;
+        task-cleanup-receipt)
+          schema="$core/schemas/task_cleanup_receipt.schema.json"
+          label="task cleanup receipt"
           ;;
       esac
       [ -f "$schema" ] || die "$label schema not found: $schema"
@@ -9361,7 +9382,7 @@ cmd_validate() {
 
 cmd_task() {
   action="${1:-}"
-  [ "$#" -gt 0 ] || die "task requires an action: create, status, profile, advance, accept, transition, lock, unlock"
+  [ "$#" -gt 0 ] || die "task requires an action: create, status, profile, advance, accept, close, transition, lock, unlock"
   shift
 
   case "$action" in
@@ -9650,6 +9671,14 @@ EOF
       [ -f "$runtime" ] || die "task lifecycle runtime missing: $runtime"
       command -v ruby >/dev/null 2>&1 || die "ruby is required for task $action"
       ruby "$runtime" "$action" "$@"
+      ;;
+
+    close)
+      core="$(default_core_dir)"
+      runtime="$core/runtime/task_cleanup.rb"
+      [ -f "$runtime" ] || die "task cleanup runtime missing: $runtime"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for task close"
+      ruby "$runtime" "$@"
       ;;
 
     transition)
@@ -12022,6 +12051,8 @@ cmd_release_check() {
     "$core/schemas/transition_receipt.schema.json" \
     "$core/schemas/task_transition_plan.schema.json" \
     "$core/schemas/task_risk_profile.schema.json" \
+    "$core/schemas/task_cleanup_plan.schema.json" \
+    "$core/schemas/task_cleanup_receipt.schema.json" \
     "$core/schemas/agent_registry.schema.json" \
     "$core/schemas/operating_model.schema.json" \
     "$core/schemas/bootstrap_options.schema.json" \
@@ -12055,7 +12086,9 @@ cmd_release_check() {
     "$core/runtime/dashboard_presets.rb" \
     "$core/runtime/github_release_status.rb" \
     "$core/runtime/task_lifecycle.rb" \
+    "$core/runtime/task_cleanup.rb" \
     "$core/templates/reports/transition_receipt.json" \
+    "$core/templates/reports/task_cleanup_receipt.json" \
     "$core/templates/ci/github-actions/aiops.yml" \
     "$core/templates/tool_adapters/codex/AGENTS.md" \
     "$core/templates/tool_adapters/claude/CLAUDE.md"
