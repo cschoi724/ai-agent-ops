@@ -301,6 +301,44 @@ if grep -q 'runtime/model_advisor.rb:' "$tmpdir/malformed-managed.err"; then
   exit 1
 fi
 
+cat > "$tmpdir/malformed-model-definition.json" <<'EOF'
+{
+  "schema": "aiops.model_overrides.v1",
+  "providers": {"codex": {"models": {"broken-model": {}}}}
+}
+EOF
+cat > "$tmpdir/malformed-profile-extra.json" <<'EOF'
+{
+  "schema": "aiops.model_overrides.v1",
+  "providers": {
+    "codex": {
+      "profiles": {
+        "coding": {
+          "model": "gpt-5.3-codex",
+          "effort": "high",
+          "fallback": "gpt-5.6-terra",
+          "unexpected": true
+        }
+      }
+    }
+  }
+}
+EOF
+for override in "$tmpdir/malformed-model-definition.json" "$tmpdir/malformed-profile-extra.json"; do
+  if "$repo_root/bin/aiops" validate model-overrides "$override" >/dev/null 2>&1; then
+    printf '%s\n' "nested schema-invalid override should fail validation: $override" >&2
+    exit 1
+  fi
+  if "$repo_root/bin/aiops" model recommend --target "$project" --provider codex --role execution --override-file "$override" --codex-config "$project/.codex/config.toml" >/dev/null 2> "$tmpdir/nested-override.err"; then
+    printf '%s\n' "nested schema-invalid override should fail at runtime: $override" >&2
+    exit 1
+  fi
+  if grep -q 'runtime/model_advisor.rb:' "$tmpdir/nested-override.err"; then
+    printf '%s\n' "nested schema-invalid override leaked a stack trace: $override" >&2
+    exit 1
+  fi
+done
+
 "$repo_root/bin/aiops" model recommend --target "$project" --provider codex --role execution --task T-20260814-102 --codex-config "$project/.codex/config.toml" --locale ko --json > "$tmpdir/ko.json"
 "$repo_root/bin/aiops" model recommend --target "$project" --provider codex --role execution --task T-20260814-102 --codex-config "$project/.codex/config.toml" --locale en --json > "$tmpdir/en.json"
 ruby -rjson -e '
@@ -381,6 +419,17 @@ ruby -rjson -e '
 ' "$tmpdir/codex-standard.json" "$tmpdir/unsafe-launch-recommendation.json"
 if "$repo_root/bin/aiops" validate model-recommendation "$tmpdir/unsafe-launch-recommendation.json" >/dev/null 2>&1; then
   printf '%s\n' "unsafe launch argv should fail recommendation validation" >&2
+  exit 1
+fi
+
+cp "$tmpdir/malformed-profile-extra.json" "$project/.ai_project/model_overrides.json"
+if "$repo_root/bin/aiops" model recommend --target "$project" --provider codex --role execution --codex-config "$project/.codex/config.toml" >/dev/null 2> "$tmpdir/auto-override.err"; then
+  printf '%s\n' "auto-discovered schema-invalid override should fail at runtime" >&2
+  exit 1
+fi
+grep -q 'profile coding unknown fields: unexpected' "$tmpdir/auto-override.err"
+if grep -q 'runtime/model_advisor.rb:' "$tmpdir/auto-override.err"; then
+  printf '%s\n' "auto-discovered schema-invalid override leaked a stack trace" >&2
   exit 1
 fi
 

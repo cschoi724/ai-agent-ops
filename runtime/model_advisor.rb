@@ -32,6 +32,7 @@ class ModelAdvisor
     "release" => "Release Role"
   }.freeze
   EFFORT_ORDER = %w[minimal low medium high xhigh max].freeze
+  EFFORTS = (["auto"] + EFFORT_ORDER).freeze
   MODEL_ID_PATTERN = /\A[A-Za-z0-9][A-Za-z0-9._:+\/@\[\]-]*\z/.freeze
 
   def initialize(argv)
@@ -131,7 +132,9 @@ class ModelAdvisor
   end
 
   def printable(value, label)
-    raise ModelAdvisorError, "#{label} must be a non-empty printable value" if value.to_s.empty? || value.match?(/[\x00-\x1f\x7f]/)
+    unless value.is_a?(String) && !value.empty? && !value.match?(/[\x00-\x1f\x7f]/)
+      raise ModelAdvisorError, "#{label} must be a non-empty printable value"
+    end
     value
   end
 
@@ -186,9 +189,9 @@ class ModelAdvisor
     raise ModelAdvisorError, "model overrides schema must be aiops.model_overrides.v1" unless @overrides["schema"] == "aiops.model_overrides.v1"
     unknown = @overrides.keys - %w[schema default_provider managed_allowlist providers role_profiles]
     raise ModelAdvisorError, "model overrides unknown keys: #{unknown.join(', ')}" unless unknown.empty?
-    providers = @overrides["providers"] || {}
-    managed = @overrides["managed_allowlist"] || {}
-    role_profiles = @overrides["role_profiles"] || {}
+    providers = @overrides.key?("providers") ? @overrides["providers"] : {}
+    managed = @overrides.key?("managed_allowlist") ? @overrides["managed_allowlist"] : {}
+    role_profiles = @overrides.key?("role_profiles") ? @overrides["role_profiles"] : {}
     raise ModelAdvisorError, "model override providers must be an object" unless providers.is_a?(Hash)
     raise ModelAdvisorError, "managed model allowlist must be an object" unless managed.is_a?(Hash)
     raise ModelAdvisorError, "model override role_profiles must be an object" unless role_profiles.is_a?(Hash)
@@ -196,8 +199,11 @@ class ModelAdvisor
     unknown_managed = managed.keys - known_provider_ids
     raise ModelAdvisorError, "managed allowlist references unknown providers: #{unknown_managed.join(', ')}" unless unknown_managed.empty?
     default_provider = @overrides["default_provider"]
-    if default_provider && !known_provider_ids.include?(default_provider)
-      raise ModelAdvisorError, "default_provider #{default_provider} is not configured"
+    if @overrides.key?("default_provider")
+      unless default_provider.is_a?(String) && default_provider.match?(/\A[a-z][a-z0-9_]*\z/)
+        raise ModelAdvisorError, "default_provider is invalid"
+      end
+      raise ModelAdvisorError, "default_provider #{default_provider} is not configured" unless known_provider_ids.include?(default_provider)
     end
     managed.each_value do |models|
       raise ModelAdvisorError, "managed model allowlist must be a non-empty array" unless models.is_a?(Array) && !models.empty?
@@ -213,10 +219,10 @@ class ModelAdvisor
       raise ModelAdvisorError, "model override provider #{provider_id} must be an object" unless provider.is_a?(Hash)
       provider_unknown = provider.keys - %w[display_name command allowlist aliases models profiles]
       raise ModelAdvisorError, "model override provider #{provider_id} unknown keys: #{provider_unknown.join(', ')}" unless provider_unknown.empty?
-      if provider["display_name"] && (!provider["display_name"].is_a?(String) || provider["display_name"].empty?)
-        raise ModelAdvisorError, "model override provider #{provider_id} display_name invalid"
+      if provider.key?("display_name")
+        printable(provider["display_name"], "model override provider #{provider_id} display_name")
       end
-      if provider["command"] && (!provider["command"].is_a?(String) || !provider["command"].match?(/\A[A-Za-z0-9._-]+\z/))
+      if provider.key?("command") && (!provider["command"].is_a?(String) || !provider["command"].match?(/\A[A-Za-z0-9._-]+\z/))
         raise ModelAdvisorError, "model override provider #{provider_id} command invalid"
       end
       %w[allowlist].each do |key|
@@ -226,9 +232,9 @@ class ModelAdvisor
         raise ModelAdvisorError, "model override provider #{provider_id} #{key} must be unique" unless values.uniq.length == values.length
         values.each { |model| model_id(model, "model override #{key} model") }
       end
-      models = provider["models"] || {}
-      aliases = provider["aliases"] || {}
-      profiles = provider["profiles"] || {}
+      models = provider.key?("models") ? provider["models"] : {}
+      aliases = provider.key?("aliases") ? provider["aliases"] : {}
+      profiles = provider.key?("profiles") ? provider["profiles"] : {}
       raise ModelAdvisorError, "model override provider #{provider_id} models must be an object" unless models.is_a?(Hash)
       raise ModelAdvisorError, "model override provider #{provider_id} aliases must be an object" unless aliases.is_a?(Hash)
       raise ModelAdvisorError, "model override provider #{provider_id} profiles must be an object" unless profiles.is_a?(Hash)
@@ -236,15 +242,49 @@ class ModelAdvisor
       raise ModelAdvisorError, "model override provider #{provider_id} unknown profiles: #{unknown_profiles.join(', ')}" unless unknown_profiles.empty?
       models.each do |model, definition|
         model_id(model, "model override model")
-        raise ModelAdvisorError, "model override model #{model} must be an object" unless definition.is_a?(Hash)
+        validate_override_model!(provider_id, model, definition)
       end
       aliases.each do |name, model|
         model_id(name, "model override alias")
         model_id(model, "model override alias target")
       end
       profiles.each do |profile, mapping|
-        raise ModelAdvisorError, "model override provider #{provider_id} profile #{profile} must be an object" unless mapping.is_a?(Hash)
+        validate_override_profile!(provider_id, profile, mapping)
       end
+    end
+    providers.each_key { |provider_id| merged_provider(provider_id) }
+  end
+
+  def validate_override_model!(provider_id, model, definition)
+    raise ModelAdvisorError, "model override model #{model} must be an object" unless definition.is_a?(Hash)
+    expected = %w[alias efforts vision]
+    missing = expected - definition.keys
+    unknown = definition.keys - expected
+    raise ModelAdvisorError, "model override #{provider_id}/#{model} missing fields: #{missing.join(', ')}" unless missing.empty?
+    raise ModelAdvisorError, "model override #{provider_id}/#{model} unknown fields: #{unknown.join(', ')}" unless unknown.empty?
+    unless [true, false].include?(definition["alias"])
+      raise ModelAdvisorError, "model override #{provider_id}/#{model} alias must be boolean"
+    end
+    efforts = definition["efforts"]
+    unless efforts.is_a?(Array) && !efforts.empty? && efforts.uniq.length == efforts.length && efforts.all? { |effort| EFFORTS.include?(effort) }
+      raise ModelAdvisorError, "model override #{provider_id}/#{model} efforts invalid"
+    end
+    unless [true, false].include?(definition["vision"])
+      raise ModelAdvisorError, "model override #{provider_id}/#{model} vision must be boolean"
+    end
+  end
+
+  def validate_override_profile!(provider_id, profile, mapping)
+    raise ModelAdvisorError, "model override provider #{provider_id} profile #{profile} must be an object" unless mapping.is_a?(Hash)
+    expected = %w[model effort fallback]
+    missing = expected - mapping.keys
+    unknown = mapping.keys - expected
+    raise ModelAdvisorError, "model override provider #{provider_id} profile #{profile} missing fields: #{missing.join(', ')}" unless missing.empty?
+    raise ModelAdvisorError, "model override provider #{provider_id} profile #{profile} unknown fields: #{unknown.join(', ')}" unless unknown.empty?
+    model_id(mapping["model"], "model override profile model")
+    model_id(mapping["fallback"], "model override profile fallback")
+    unless EFFORTS.include?(mapping["effort"])
+      raise ModelAdvisorError, "model override provider #{provider_id} profile #{profile} effort invalid"
     end
   end
 

@@ -35,6 +35,7 @@
 
 - Accept configured Claude Code exact/provider model IDs and `[1m]` aliases without producing nullable availability fields, while leaving unresolved floating aliases explicit.
 - Reject unknown managed-allowlist providers, unknown override profiles, malformed watched provider config, and recommendation launch argv that does not match the selected provider, model, and effort.
+- Apply the complete nested model/profile override structure and merged-provider semantics at recommendation runtime, including auto-discovered project overrides.
 
 - Protect current, shared, dirty, unpushed, unmerged, stale-canonical, configured protected, and GitHub-protected branches during Task cleanup; require Task-owned worktree metadata, bind squash PR evidence to the current branch tip SHA, validate cleanup action sets, and use SHA leases for remote deletion.
 - Keep base-less Task Profile recommendations scoped to Task-owned changes while lifecycle allowed-path checks continue to inspect and block unrelated worktree changes.
