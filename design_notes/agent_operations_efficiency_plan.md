@@ -1,6 +1,6 @@
 # Agent Operations Efficiency Improvement Plan
 
-상태: 1차 완료 / 2차 완료 / 3차 구현 보완 완료·독립 재검증 대기
+상태: 1차 완료 / 2차 완료 / 3차 완료 / 4차 구현 완료·독립 검증 대기
 대상: Role Session, Task 상태 전이, 보고, 검증, Git 정리, 모델 추천
 기준 버전: v0.14.0
 작성일: 2026-08-13
@@ -631,7 +631,7 @@ provider_model_map:
 
 ### 3차. Risk-based Workflow Profiles
 
-구현 상태: 구현 보완 완료, 독립 재검증 대기
+구현 상태: 완료, 독립 검증 통과, PR #53으로 main 반영
 
 목표:
 
@@ -669,8 +669,11 @@ provider_model_map:
 - 독립 검증에서 발견된 저수준 전이 Profile 우회와 base 없는 Task의 변경 누락을 차단했다. project context도 같은 Profile 조건을 사용하며 staged, unstaged, untracked 경로를 allowed-path guard에 포함한다.
 - Snapshot/dashboard Profile 필드 타입을 schema로 검증하고, snapshot 한 번 안에서 저장소·untracked·base별 Git 조회 결과를 재사용한다.
 - 병렬 dirty worktree의 무관한 변경이 base-less Task를 일괄 Strict로 올리지 않도록 추천 입력은 Task-owned 변경으로 제한하고, 범위 밖 변경 차단은 lifecycle guard에 유지한다.
+- 독립 재검증에서 High/Medium/Low 이슈 없음과 릴리즈 차단 없음 판정을 받았고 PR #53, merge commit `d89261b`로 `main`에 반영했다.
 
 ### 4차. Safe Task Close and Branch Cleanup
+
+구현 상태: 구현 완료, 독립 검증 대기
 
 목표:
 
@@ -695,6 +698,15 @@ provider_model_map:
 - 반복 실행 idempotency
 - GitHub 보호 규칙과 PR squash merge 처리
 - 독립 검증 후 다음 차수 진행
+
+구현 결과 (2026-08-14):
+
+- `aiops task close TASK_ID`는 기본적으로 read-only 계획을 표시하고 `--apply`에서만 linked worktree와 local branch를 정리한다. remote 삭제는 `--delete-remote`를 추가한 경우에만 수행한다.
+- canonical Task가 `done`인지와 recorded canonical SHA가 현재인지 확인하며, 일반 merge는 Git ancestry, squash/rebase는 matching merged PR과 canonical merge commit으로 검증한다.
+- current/configured protected/GitHub protected/shared branch, dirty 또는 locked worktree, unpushed·unmerged commit, Task worktree metadata drift를 fail-closed로 차단한다.
+- remote 삭제에는 점검한 SHA의 `--force-with-lease`를 사용해 확인 이후 바뀐 branch를 삭제하지 않는다.
+- cleanup은 Task status를 수정하지 않으며 `.ai_project/.runtime/task_cleanup/`의 `aiops.task_cleanup_receipt.v1`에 complete/partial/blocked 결과를 기록한다. 부분 실패 후 재실행은 남은 작업만 수행한다.
+- `aiops.task_cleanup_plan.v1`과 plan/receipt validator, 정상·차단·squash·GitHub protection·부분 실패·멱등성 E2E를 추가했다.
 
 ### 5차. Model Advisor
 
@@ -802,7 +814,7 @@ bin/aiops release-check --strict --allow-pending-release
 
 ## 17. 권장 다음 단계
 
-Project Dashboard 1~9차는 v0.14.0으로 릴리스 및 Homebrew 배포가 완료됐고, 1차 `Unified Lifecycle Contract`와 2차 `Transition Automation`도 main 반영을 완료했다. 현재 3차 `Risk-based Workflow Profiles`의 독립 검증 지적사항을 보완하고 재검증을 준비한다.
+Project Dashboard 1~9차는 v0.14.0으로 릴리스 및 Homebrew 배포가 완료됐고, 1~3차 운영 효율 개선은 main 반영을 완료했다. 현재 4차 `Safe Task Close and Branch Cleanup` 구현을 완료하고 독립 검증을 준비한다.
 
 이유:
 

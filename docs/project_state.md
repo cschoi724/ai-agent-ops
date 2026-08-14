@@ -460,6 +460,23 @@ Light Task의 `in_progress -> completion_review`는 별도 Verification Role 없
 
 `project snapshot`, dashboard 작업 표와 `aiops task status`는 계산된 profile을 표시한다. 기존 Task는 `risk_profile`을 필수로 추가하지 않아도 자동 추천을 받으며 migration에서 일괄 수정하지 않는다.
 
+## Safe Task Close
+
+canonical에 완료가 반영된 Task의 branch와 worktree는 다음 순서로 정리한다.
+
+```sh
+aiops task close TASK_ID --check
+aiops task close TASK_ID --check --json > /tmp/task-cleanup-plan.json
+aiops validate task-cleanup-plan /tmp/task-cleanup-plan.json
+
+aiops task close TASK_ID --apply
+aiops task close TASK_ID --apply --delete-remote
+```
+
+기본 명령과 `--check`는 상태를 바꾸지 않는다. `--apply`는 canonical Task `done`, canonical SHA cache, merge 또는 현재 branch tip SHA와 일치하는 merged PR, branch 단독 소유, Task metadata와 양방향으로 일치하는 linked worktree clean 상태, unpushed commit, current/protected branch와 프로젝트 cleanup 정책을 다시 확인한 뒤 실행한다. 원격 삭제는 `--delete-remote`가 있을 때만 수행하며 점검한 remote SHA가 그대로일 때만 삭제되는 lease를 사용한다.
+
+Task 상태와 cleanup 결과는 분리한다. 일부 삭제가 실패해도 Task를 다시 완료 처리하거나 되돌리지 않고 `.ai_project/.runtime/task_cleanup/TASK_ID-cleanup-receipt.json`에 `partial` 또는 `blocked` 결과를 남긴다. 같은 명령을 다시 실행하면 남은 작업만 처리하며 완료 receipt를 중복 작성하지 않는다. 이 runtime receipt는 로컬 cache이므로 commit하지 않는다.
+
 ## Workflow Catalog와 Checkpoint
 
 `runtime/workflows.json`은 workflow 상태와 checkpoint 정책을 기계가 읽을 수 있게 정리한 catalog다.

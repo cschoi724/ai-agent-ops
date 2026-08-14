@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/task_cleanup_plan.schema.json",
+  "title": "AI Ops Task Cleanup Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "generated_at",
+    "task_id",
+    "check_only",
+    "ready",
+    "actor",
+    "canonical",
+    "branch",
+    "worktree",
+    "merge_evidence",
+    "approval",
+    "checks",
+    "actions",
+    "receipt_path"
+  ],
+  "properties": {
+    "schema": { "const": "aiops.task_cleanup_plan.v1" },
+    "generated_at": { "type": "string", "minLength": 1 },
+    "task_id": { "$ref": "#/$defs/taskId" },
+    "check_only": { "type": "boolean" },
+    "ready": { "const": true },
+    "actor": { "type": "string", "minLength": 1 },
+    "canonical": { "$ref": "#/$defs/canonicalTask" },
+    "branch": { "$ref": "#/$defs/branchPlan" },
+    "worktree": { "$ref": "#/$defs/worktreePlan" },
+    "merge_evidence": { "$ref": "#/$defs/mergeEvidence" },
+    "approval": { "$ref": "#/$defs/approval" },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/check" }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": { "$ref": "#/$defs/plannedAction" }
+    },
+    "receipt_path": { "type": "string", "pattern": "^\\.ai_project/\\.runtime/task_cleanup/T-[0-9]{8}-[0-9]{3,}-cleanup-receipt\\.json$" }
+  },
+  "$defs": {
+    "taskId": { "type": "string", "pattern": "^T-[0-9]{8}-[0-9]{3,}$" },
+    "nullableString": { "type": ["string", "null"] },
+    "stringList": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "canonical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "sha"],
+      "properties": {
+        "ref": { "type": "string", "minLength": 1 },
+        "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "canonicalTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "sha", "task_status"],
+      "properties": {
+        "ref": { "type": "string", "minLength": 1 },
+        "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "task_status": { "const": "done" }
+      }
+    },
+    "branchPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "local_exists", "remote", "remote_exists", "shared_by"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "local_exists": { "type": "boolean" },
+        "remote": { "$ref": "#/$defs/nullableString" },
+        "remote_exists": { "type": "boolean" },
+        "shared_by": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "worktreePlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "registered", "current", "dirty", "locked", "prunable"],
+      "properties": {
+        "path": { "$ref": "#/$defs/nullableString" },
+        "registered": { "type": "boolean" },
+        "current": { "type": "boolean" },
+        "dirty": { "type": "boolean" },
+        "locked": { "type": "boolean" },
+        "prunable": { "type": "boolean" }
+      }
+    },
+    "pullRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "url", "head", "head_sha", "base", "merge_commit", "merged_at"],
+      "properties": {
+        "number": { "type": "integer", "minimum": 1 },
+        "url": { "type": "string", "pattern": "^https://" },
+        "head": { "type": "string", "minLength": 1 },
+        "head_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "base": { "type": "string", "minLength": 1 },
+        "merge_commit": { "$ref": "#/$defs/nullableString" },
+        "merged_at": { "type": "string", "minLength": 1 }
+      }
+    },
+    "mergeEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "verified"],
+      "properties": {
+        "method": { "enum": ["git_ancestor", "github_pull_request", "already_clean"] },
+        "verified": { "const": true },
+        "canonical_ref": { "type": "string", "minLength": 1 },
+        "canonical_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "pull_request": { "$ref": "#/$defs/pullRequest" }
+      },
+      "oneOf": [
+        {
+          "properties": { "method": { "const": "git_ancestor" } },
+          "required": ["canonical_ref", "canonical_sha"]
+        },
+        {
+          "properties": { "method": { "const": "github_pull_request" } },
+          "required": ["canonical_ref", "canonical_sha", "pull_request"]
+        },
+        {
+          "properties": { "method": { "const": "already_clean" } }
+        }
+      ]
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "delete_remote_requested"],
+      "properties": {
+        "source": { "enum": ["project_policy", "explicit_command", "manual_apply_required"] },
+        "delete_remote_requested": { "type": "boolean" }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "ready", "message"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "ready": { "const": true },
+        "message": { "type": "string", "minLength": 1 }
+      }
+    },
+    "plannedAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "status", "detail"],
+      "properties": {
+        "action": { "enum": ["remove_worktree", "delete_local_branch", "delete_remote_branch", "prune_worktrees", "write_receipt"] },
+        "status": { "enum": ["planned", "skipped"] },
+        "detail": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

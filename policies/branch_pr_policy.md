@@ -150,6 +150,17 @@ merge 조건:
 
 merge owner 기본값은 Lead Role이다.
 
+### Merge 후 cleanup
+
+Task branch 정리는 canonical ref에서 Task가 `done`이고 branch 통합 증거가 확인된 뒤 수행한다. 일반 merge는 Git ancestry로 확인하고 squash/rebase merge는 같은 head/base의 merged PR과 canonical에 포함된 merge commit으로 확인한다.
+
+- 기본 `aiops task close TASK_ID`와 `--check`는 보고 전용이다.
+- 실제 local worktree/branch 정리는 `--apply`가 필요하다.
+- remote branch 삭제는 `--apply --delete-remote`가 필요하다.
+- dirty, unpushed, current, shared, protected branch는 삭제하지 않는다.
+- remote 삭제는 점검한 SHA에 대한 lease를 사용하며 그 사이 branch가 바뀌면 실패한다.
+- cleanup 실패는 Task 완료 상태를 수정하지 않고 별도 receipt에 기록한다.
+
 ## 12. 프로젝트별 설정 위치
 
 ```text

@@ -120,7 +120,9 @@ worktree는 아래 상태로 분류한다.
 | `unpushed` | local commit이 remote에 없음 | 제거 금지 |
 | `cleanup_candidate` | merged, clean, 보존 필요 없음 | 사용자 승인 후 제거 가능 |
 
-AI Ops는 worktree를 자동 삭제하지 않는다. 삭제는 사용자 승인 또는 프로젝트별 cleanup 정책이 있을 때만 가능하다.
+AI Ops는 상태 조회나 프로젝트 정책만으로 worktree를 자동 삭제하지 않는다. 실제 정리는 `aiops task close TASK_ID --apply`처럼 사용자가 명시적으로 적용해야 하며, 프로젝트별 `delete_branch_after_merge` 정책이 정리를 금지하지 않아야 한다. 원격 branch 삭제는 별도 `--delete-remote`가 필요하다.
+
+Task의 `done`과 Git cleanup은 별도 결과다. cleanup 실패가 Task 상태를 되돌리거나 새로 `done`으로 만들지 않으며, 결과는 `.ai_project/.runtime/task_cleanup/`의 로컬 receipt에 `complete`, `partial`, `blocked`로 기록한다. 공용 완료 판단은 계속 canonical Task 상태와 merge 증거를 사용한다.
 
 ## 8. 금지사항
 
@@ -151,8 +153,17 @@ worktree 점검:
 aiops worktree doctor
 ```
 
+완료 Task 정리:
+
+```sh
+aiops task close T-YYYYMMDD-001 --check
+aiops task close T-YYYYMMDD-001 --apply
+aiops task close T-YYYYMMDD-001 --apply --delete-remote
+```
+
 ## 10. 변경 이력
 
 | 날짜 | 변경 내용 |
 |---|---|
 | 2026-07-31 | 다중 Agent worktree 공용 상태 기준 정책 추가 |
+| 2026-08-14 | canonical 완료 확인 기반 Safe Task Close와 로컬 cleanup receipt 기준 추가 |

@@ -1,0 +1,28 @@
+{
+  "schema": "aiops.task_cleanup_receipt.v1",
+  "task_id": "T-20260814-001",
+  "actor": "Completion Agent",
+  "canonical": {
+    "ref": "origin/main",
+    "sha": "0000000000000000000000000000000000000000"
+  },
+  "branch": {
+    "name": "task/T-20260814-001-example",
+    "remote": "origin"
+  },
+  "worktree_path": null,
+  "merge_evidence": {
+    "method": "already_clean",
+    "verified": true
+  },
+  "actions": [
+    { "action": "remove_worktree", "result": "skipped", "detail": "no registered Task worktree" },
+    { "action": "delete_local_branch", "result": "skipped", "detail": "local branch already absent" },
+    { "action": "delete_remote_branch", "result": "skipped", "detail": "remote branch already absent" },
+    { "action": "prune_worktrees", "result": "skipped", "detail": "no worktree removal required" }
+  ],
+  "result": "complete",
+  "blockers": [],
+  "created_at": "2026-08-14T00:00:00Z",
+  "updated_at": "2026-08-14T00:00:00Z"
+}

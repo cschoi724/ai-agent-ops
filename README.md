@@ -102,6 +102,8 @@ YourProject/
 | `aiops task profile TASK_ID` | Task 위험도에 맞는 Light/Standard/Strict 절차와 검증 범위 추천 |
 | `aiops task accept TASK_ID --check` | 현재 담당자의 작업 수락 가능 여부 확인 |
 | `aiops task advance TASK_ID --check` | 다음 상태와 담당자, 송수신 준비도 확인 |
+| `aiops task close TASK_ID --check` | 완료 Task의 branch/worktree 정리 가능 여부 확인 |
+| `aiops task close TASK_ID --apply` | 검증된 linked worktree와 local branch 정리 |
 | `aiops task transition TASK_ID --to STATUS --role ROLE` | 예외 처리용 저수준 상태 전이 |
 | `aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT` | Role 인계 |
 | `aiops knowledge init --mode minimal` | `.ai_knowledge/` 생성 |
