@@ -103,6 +103,15 @@ assert_fails() {
   fi
 }
 
+# Expected user errors must stay concise outside a Git worktree.
+mkdir -p "$tmpdir/non-git"
+assert_fails "$tmpdir/non-git.out" "$repo_root/bin/aiops" task close T-20260814-999 --target "$tmpdir/non-git" --check
+grep -q 'task close requires a Git worktree' "$tmpdir/non-git.out"
+if grep -qE 'NoMethodError|task_cleanup\.rb:[0-9]+' "$tmpdir/non-git.out"; then
+  printf '%s\n' "non-Git cleanup exposed a Ruby stack trace" >&2
+  exit 1
+fi
+
 # Clean merged branch: plan, apply, receipt, and idempotent retry.
 setup_fixture clean
 task_hash_before="$(git -C "$project" hash-object ".ai_project/tasks/archive/$task_id.md")"
@@ -221,6 +230,20 @@ perl -0pi -e "s|worktree_path: .*|worktree_path: $tmpdir/unregistered-task-path|
 assert_fails "$tmpdir/metadata.out" "$repo_root/bin/aiops" task close "$task_id" --target "$project" --check
 grep -q 'worktree_path does not match' "$tmpdir/metadata.out"
 
+# A linked branch worktree is not Task-owned without matching Task metadata.
+setup_fixture metadata-missing
+perl -0pi -e 's/\nworktree_path: .*\n/\n/' "$project/.ai_project/tasks/archive/$task_id.md"
+assert_fails "$tmpdir/metadata-missing.out" "$repo_root/bin/aiops" task close "$task_id" --target "$project" --apply
+grep -q 'worktree_path is not recorded' "$tmpdir/metadata-missing.out"
+[ -d "$task_worktree" ]
+git -C "$project" show-ref --verify --quiet "refs/heads/$task_branch"
+
+# Cleanup metadata accepts only conservative machine-safe branch names.
+setup_fixture unsafe-branch
+perl -0pi -e "s|name: $task_branch|name: task/evil;touch|" "$project/.ai_project/tasks/archive/$task_id.md"
+assert_fails "$tmpdir/unsafe-branch.out" "$repo_root/bin/aiops" task close "$task_id" --target "$project" --check
+grep -q 'invalid Task branch name' "$tmpdir/unsafe-branch.out"
+
 # Missing linked worktree directories are pruned before branch deletion.
 setup_fixture prunable
 mv "$task_worktree" "$task_worktree-moved"
@@ -276,13 +299,30 @@ git -C "$project" add src/value.txt
 git -C "$project" commit -m "squash task change" >/dev/null
 git -C "$project" push origin main >/dev/null 2>&1
 canonical_sha="$(git -C "$project" rev-parse HEAD)"
+task_head_sha="$(git -C "$project" rev-parse "$task_branch")"
+stale_head_sha="$(git -C "$project" rev-parse "$task_branch^")"
 git -C "$project" remote set-url origin git@github.com:example/fixture.git
 fake_bin="$tmpdir/fake-bin"
 mkdir -p "$fake_bin"
 cat > "$fake_bin/gh" <<EOF
 #!/bin/sh
 if [ "\$1" = "pr" ]; then
-  printf '%s\n' '[{"number":42,"url":"https://github.com/example/fixture/pull/42","headRefName":"task/T-20260814-001-cleanup","baseRefName":"main","mergeCommit":{"oid":"$canonical_sha"},"mergedAt":"2026-08-14T00:00:00Z"}]'
+  printf '%s\n' '[{"number":41,"url":"https://github.com/example/fixture/pull/41","headRefName":"task/T-20260814-001-cleanup","headRefOid":"$stale_head_sha","baseRefName":"main","mergeCommit":{"oid":"$canonical_sha"},"mergedAt":"2026-08-13T00:00:00Z"}]'
+  exit 0
+fi
+printf '%s\n' 'Not Found (HTTP 404)' >&2
+exit 1
+EOF
+chmod +x "$fake_bin/gh"
+assert_fails "$tmpdir/stale-pr-head.out" env PATH="$fake_bin:$PATH" \
+  "$repo_root/bin/aiops" task close "$task_id" --target "$project" --check
+grep -q 'no matching merged PR' "$tmpdir/stale-pr-head.out"
+[ -d "$task_worktree" ]
+
+cat > "$fake_bin/gh" <<EOF
+#!/bin/sh
+if [ "\$1" = "pr" ]; then
+  printf '%s\n' '[{"number":42,"url":"https://github.com/example/fixture/pull/42","headRefName":"task/T-20260814-001-cleanup","headRefOid":"$task_head_sha","baseRefName":"main","mergeCommit":{"oid":"$canonical_sha"},"mergedAt":"2026-08-14T00:00:00Z"}]'
   exit 0
 fi
 printf '%s\n' 'Not Found (HTTP 404)' >&2
@@ -325,5 +365,31 @@ ruby -rjson -e '
   File.write(ARGV[1], JSON.pretty_generate(data))
 ' "$tmpdir/clean-receipt.json" "$tmpdir/invalid-receipt.json"
 assert_fails "$tmpdir/invalid-receipt.out" "$repo_root/bin/aiops" validate task-cleanup-receipt "$tmpdir/invalid-receipt.json"
+
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  data["actions"][-1] = data["actions"][0].dup
+  File.write(ARGV[1], JSON.pretty_generate(data))
+' "$tmpdir/clean-plan.json" "$tmpdir/duplicate-plan-action.json"
+assert_fails "$tmpdir/duplicate-plan-action.out" "$repo_root/bin/aiops" validate task-cleanup-plan "$tmpdir/duplicate-plan-action.json"
+grep -q 'duplicate actions' "$tmpdir/duplicate-plan-action.out"
+
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  data["actions"] << data["actions"][0].dup
+  File.write(ARGV[1], JSON.pretty_generate(data))
+' "$tmpdir/clean-receipt.json" "$tmpdir/duplicate-receipt-action.json"
+assert_fails "$tmpdir/duplicate-receipt-action.out" "$repo_root/bin/aiops" validate task-cleanup-receipt "$tmpdir/duplicate-receipt-action.json"
+grep -q 'duplicate actions' "$tmpdir/duplicate-receipt-action.out"
+
+ruby -rjson -e '
+  data = JSON.parse(File.read(ARGV[0]))
+  data["result"] = "partial"
+  data["blockers"] = ["injected blocker"]
+  data["actions"] = []
+  File.write(ARGV[1], JSON.pretty_generate(data))
+' "$tmpdir/clean-receipt.json" "$tmpdir/empty-partial-receipt.json"
+assert_fails "$tmpdir/empty-partial-receipt.out" "$repo_root/bin/aiops" validate task-cleanup-receipt "$tmpdir/empty-partial-receipt.json"
+grep -q 'partial cleanup receipt must contain' "$tmpdir/empty-partial-receipt.out"
 
 printf '%s\n' "ok: safe task close cleanup"

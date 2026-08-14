@@ -9342,6 +9342,38 @@ cmd_validate() {
         abort("schema_error:\n" + errors.join("\n")) unless errors.empty?
         puts "ok: schema"
       ' "$file" "$schema"
+      if [ "$subject" = "task-cleanup-plan" ] || [ "$subject" = "task-cleanup-receipt" ]; then
+        ruby -rjson -e '
+          data = JSON.parse(File.read(ARGV[0]))
+          subject = ARGV[1]
+          actions = data["actions"]
+          abort("schema_error: $.actions must be an array") unless actions.is_a?(Array)
+          names = actions.filter_map { |action| action.is_a?(Hash) ? action["action"] : nil }
+          duplicates = names.tally.select { |_name, count| count > 1 }.keys.sort
+          abort("schema_error: $.actions contains duplicate actions: #{duplicates.join(", ")}") unless duplicates.empty?
+
+          if subject == "task-cleanup-plan"
+            expected = %w[remove_worktree delete_local_branch delete_remote_branch prune_worktrees write_receipt]
+            missing = expected - names
+            extra = names - expected
+            unless missing.empty? && extra.empty? && names.length == expected.length
+              abort("schema_error: $.actions must contain each cleanup plan action exactly once; missing=#{missing.join(",")} extra=#{extra.join(",")}")
+            end
+          elsif data["result"] == "complete"
+            expected = %w[remove_worktree delete_local_branch delete_remote_branch prune_worktrees]
+            missing = expected - names
+            extra = names - expected
+            unless missing.empty? && extra.empty? && names.length == expected.length
+              abort("schema_error: complete cleanup receipt must contain each cleanup result action exactly once; missing=#{missing.join(",")} extra=#{extra.join(",")}")
+            end
+          elsif data["result"] == "partial" && names.empty?
+            abort("schema_error: partial cleanup receipt must contain at least one completed or skipped action")
+          elsif data["result"] == "blocked" && !names.empty?
+            abort("schema_error: blocked cleanup receipt must not contain completed actions")
+          end
+          puts "ok: cleanup semantics"
+        ' "$file" "$subject"
+      fi
       if [ "$subject" = "dashboard-presets" ]; then
         presets_runtime="$core/runtime/dashboard_presets.rb"
         [ -f "$presets_runtime" ] || die "dashboard preset runtime not found: $presets_runtime"

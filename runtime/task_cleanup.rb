@@ -9,6 +9,7 @@ require "open3"
 require "optparse"
 require "pathname"
 require "time"
+require "tmpdir"
 require "uri"
 require "yaml"
 
@@ -16,6 +17,7 @@ class TaskCleanupError < StandardError; end
 
 class TaskCleanup
   PROTECTED_BRANCHES = %w[main master develop].freeze
+  SAFE_REF_NAME = %r{\A[A-Za-z0-9][A-Za-z0-9._/-]*\z}.freeze
 
   def initialize(argv)
     @options = {
@@ -173,6 +175,7 @@ class TaskCleanup
     end
     check("branch_ownership", true, "Task branch is not shared by another Task")
 
+    validate_task_worktree_metadata
     if @branch_worktree
       raise TaskCleanupError, "cannot remove the current worktree #{@branch_worktree[:path]}" if same_path?(@branch_worktree[:path], @root)
       raise TaskCleanupError, "Task worktree is locked: #{@branch_worktree[:path]}" if @branch_worktree[:locked]
@@ -186,8 +189,6 @@ class TaskCleanup
     else
       check("worktree", true, "no registered Task worktree uses #{@branch}")
     end
-    validate_task_worktree_metadata
-
     validate_unpushed_commits
     resolve_merge_evidence
     validate_github_protection if @options[:delete_remote] && @remote_exists
@@ -229,6 +230,9 @@ class TaskCleanup
   end
 
   def validate_task_worktree_metadata
+    if @branch_worktree && !@task_worktree
+      raise TaskCleanupError, "Task branch has a linked worktree but Task worktree_path is not recorded"
+    end
     return unless @task_worktree
     registered = @worktrees.find { |entry| same_path?(entry[:path], @task_worktree) }
     if registered && registered[:branch] != @local_ref
@@ -247,6 +251,9 @@ class TaskCleanup
     if @local_exists && @remote_exists
       ahead = capture_git("rev-list", "--count", "#{@remote_ref}..#{@local_ref}").strip.to_i
       raise TaskCleanupError, "Task branch has #{ahead} unpushed commit(s)" if ahead.positive?
+      unless @local_sha == @remote_sha
+        raise TaskCleanupError, "local and remote Task branch tips differ; synchronize or review the branch before cleanup"
+      end
     end
     check("unpushed_commits", true, "no unpushed Task branch commits")
   end
@@ -270,7 +277,9 @@ class TaskCleanup
       return
     end
 
-    pr = merged_pull_request
+    target_shas = [@local_sha, @remote_sha].compact.uniq
+    raise TaskCleanupError, "local and remote Task branch tips differ; synchronize or review the branch before cleanup" unless target_shas.length == 1
+    pr = merged_pull_request(target_shas.first)
     raise TaskCleanupError, "Task branch is not included in #{@canonical_ref} and no matching merged PR was found" unless pr
     merge_commit = pr["merge_commit"].to_s
     unless merge_commit.match?(/\A[0-9a-f]{40}\z/) && commit_exists?(merge_commit) && ancestor?(merge_commit, @canonical_ref)
@@ -593,13 +602,13 @@ class TaskCleanup
   end
 
   def validate_branch_name(branch)
-    raise TaskCleanupError, "invalid Task branch name: #{branch}" if branch.start_with?("-") || branch.match?(/[\x00-\x20\x7f]/)
+    raise TaskCleanupError, "invalid Task branch name: #{branch}" unless branch.match?(SAFE_REF_NAME)
     _out, _error, status = Open3.capture3("git", "check-ref-format", "--branch", branch)
     raise TaskCleanupError, "invalid Task branch name: #{branch}" unless status.success?
   end
 
   def validate_canonical_ref_name(ref)
-    raise TaskCleanupError, "invalid canonical_status_ref: #{ref}" if ref.start_with?("-") || ref.match?(/[\x00-\x20\x7f]/)
+    raise TaskCleanupError, "invalid canonical_status_ref: #{ref}" unless ref.match?(SAFE_REF_NAME)
   end
 
   def ensure_git_repository
@@ -652,22 +661,26 @@ class TaskCleanup
     end
   end
 
-  def merged_pull_request
+  def merged_pull_request(expected_head_sha)
     return nil unless @repository && command_available?("gh")
     output, _error, status = Open3.capture3(
       "gh", "pr", "list", "--repo", @repository, "--state", "merged", "--head", @branch,
-      "--json", "number,url,headRefName,baseRefName,mergeCommit,mergedAt", "--limit", "20"
+      "--json", "number,url,headRefName,headRefOid,baseRefName,mergeCommit,mergedAt", "--limit", "20"
     )
     return nil unless status.success?
     items = JSON.parse(output)
     item = items.find do |entry|
-      entry["headRefName"] == @branch && entry["baseRefName"] == @canonical_branch && !entry["mergedAt"].to_s.empty?
+      entry["headRefName"] == @branch &&
+        entry["headRefOid"] == expected_head_sha &&
+        entry["baseRefName"] == @canonical_branch &&
+        !entry["mergedAt"].to_s.empty?
     end
     return nil unless item
     {
       "number" => item["number"],
       "url" => item["url"],
       "head" => item["headRefName"],
+      "head_sha" => item["headRefOid"],
       "base" => item["baseRefName"],
       "merge_commit" => item.dig("mergeCommit", "oid"),
       "merged_at" => item["mergedAt"]

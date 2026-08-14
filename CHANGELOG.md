@@ -30,7 +30,7 @@
 
 ### Fixed
 
-- Protect current, shared, dirty, unpushed, unmerged, stale-canonical, configured protected, and GitHub-protected branches during Task cleanup; verify squash merges through merged PR evidence and use SHA leases for remote deletion.
+- Protect current, shared, dirty, unpushed, unmerged, stale-canonical, configured protected, and GitHub-protected branches during Task cleanup; require Task-owned worktree metadata, bind squash PR evidence to the current branch tip SHA, validate cleanup action sets, and use SHA leases for remote deletion.
 - Keep base-less Task Profile recommendations scoped to Task-owned changes while lifecycle allowed-path checks continue to inspect and block unrelated worktree changes.
 - Enforce workflow Profile restrictions in low-level Task transitions and project context, include current staged, unstaged, and untracked paths when a Task has no Git base, and fail closed on out-of-scope changes.
 - Validate projected Task Profile field types in snapshot and dashboard schemas, cache repeated Git path lookups during snapshot generation, and retain staged lifecycle tempfiles through bundle validation.
