@@ -47,6 +47,7 @@
         "status",
         "workflow",
         "target_role",
+        "target_agent_id",
         "target_agent"
       ],
       "properties": {
@@ -54,6 +55,10 @@
         "status": { "type": ["string", "null"] },
         "workflow": { "type": ["string", "null"] },
         "target_role": { "type": ["string", "null"] },
+        "target_agent_id": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        },
         "target_agent": { "type": ["string", "null"] }
       }
     },

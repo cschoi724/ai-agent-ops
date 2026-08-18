@@ -1,6 +1,6 @@
 # Agent Identity and Reference Integrity Improvement Plan
 
-상태: 1차 구현 완료 / 독립 검증 대기 / 2~4차 미착수
+상태: 1차 완료 / 2차 구현 완료·독립 검증 대기 / 3~4차 미착수
 대상: Agent Registry, Task ownership, lifecycle routing, migration, validation
 작성일: 2026-08-18
 
@@ -326,6 +326,8 @@ rename과 migration은 다음 순서로 처리한다.
 
 ### 2차: ID와 alias 호환 계층
 
+진행 상태: 구현 완료, 독립 검증 대기
+
 구현:
 
 - Registry에 optional `id`, `aliases` 추가
@@ -348,6 +350,14 @@ rename과 migration은 다음 순서로 처리한다.
 
 - ID가 있는 프로젝트는 Agent 이름 변경과 무관하게 상태 전이를 계속할 수 있다.
 - legacy 프로젝트는 아직 깨지지 않지만 migration 필요 상태가 명확히 보인다.
+
+구현 메모:
+
+- v1 schema에 optional 필드를 추가해 기존 프로젝트를 즉시 깨지 않도록 했다.
+- resolver 우선순위는 `target_agent_id`, 현재 이름, 단일 alias 순서다.
+- ID와 표시 이름이 서로 다른 Agent를 가리키면 lifecycle과 strict validation이 차단한다.
+- snapshot/dashboard는 안정 ID를 machine field로 유지하고 현재 Registry 이름을 표시 projection으로 사용한다.
+- 실제 Registry·Task 파일 갱신 명령과 atomic migration receipt는 3차 범위다.
 
 ### 3차: rename과 migration 자동화
 

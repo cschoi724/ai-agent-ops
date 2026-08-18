@@ -154,6 +154,24 @@ class TaskLifecycle
     unless duplicates.empty?
       raise LifecycleError, "agent registry has duplicate Agent name: #{duplicates.join(', ')}"
     end
+    duplicate_ids = @agent_identity.duplicate_ids
+    unless duplicate_ids.empty?
+      raise LifecycleError, "agent registry has duplicate Agent ID: #{duplicate_ids.join(', ')}"
+    end
+    invalid_ids = @agent_identity.invalid_ids
+    unless invalid_ids.empty?
+      raise LifecycleError, "agent registry has invalid Agent ID: #{invalid_ids.join(', ')}"
+    end
+    unless @agent_identity.invalid_alias_entries.empty?
+      raise LifecycleError, "agent registry aliases must be arrays"
+    end
+    unless @agent_identity.invalid_alias_values.empty?
+      raise LifecycleError, "agent registry aliases must be unique non-empty strings without control characters"
+    end
+    collisions = @agent_identity.identity_collisions.keys.sort
+    unless collisions.empty?
+      raise LifecycleError, "agent registry identity token is not unique: #{collisions.join(', ')}"
+    end
 
     catalog_path = if File.file?(File.join(@target, ".ai", "runtime", "workflows.json"))
                      File.join(@target, ".ai", "runtime", "workflows.json")
@@ -228,21 +246,37 @@ class TaskLifecycle
 
   def resolve_actor
     assigned = @task["target_agent"].to_s
+    assigned_id = @task["target_agent_id"].to_s
     requested = @options[:actor].to_s
-    if !assigned.empty? && !requested.empty? && assigned != requested
+    assigned_resolution = @agent_identity.resolve(assigned, assigned_id)
+    case assigned_resolution.state
+    when "unresolved"
+      reference = assigned_id.empty? ? assigned : assigned_id
+      raise LifecycleError, "actor is not registered: #{reference}" unless reference.empty?
+    when "ambiguous"
+      reference = assigned_id.empty? ? assigned : assigned_id
+      raise LifecycleError, "agent reference is ambiguous: #{reference}"
+    when "mismatch"
+      raise LifecycleError, "Task target_agent_id #{assigned_id} does not match target_agent #{assigned}"
+    end
+
+    requested_agent = requested.empty? ? nil : find_agent(requested)
+    raise LifecycleError, "actor is not registered: #{requested}" if !requested.empty? && requested_agent.nil?
+    if assigned_resolution.agent && requested_agent && assigned_resolution.agent != requested_agent
       raise LifecycleError, "--by #{requested} conflicts with Task target_agent #{assigned}"
     end
-    @actor_name = requested.empty? ? assigned : requested
-    if @actor_name.empty?
+
+    @actor = requested_agent || assigned_resolution.agent
+    unless @actor
       candidates = eligible_agents(@actor_role)
       if candidates.length != 1
         names = candidates.map { |agent| agent_name(agent) }.join(", ")
         raise LifecycleError, "cannot choose #{@actor_role} actor#{names.empty? ? '' : ": #{names}"}; set Task target_agent or use --by"
       end
-      @actor_name = agent_name(candidates.first)
+      @actor = candidates.first
     end
-    @actor = find_agent(@actor_name)
-    raise LifecycleError, "actor is not registered: #{@actor_name}" unless @actor
+    @actor_name = agent_name(@actor)
+    @actor_id = agent_id(@actor)
     raise LifecycleError, "actor is not enabled: #{@actor_name}" unless @actor["status"] == "enabled"
     unless Array(@actor["roles"]).include?(@actor_role)
       raise LifecycleError, "#{@actor_name} is not assigned #{@actor_role}"
@@ -258,11 +292,13 @@ class TaskLifecycle
     end
 
     if @next_role == @actor_role
-      if @options[:next_agent] && @options[:next_agent] != @actor_name
+      requested_next = @options[:next_agent] ? find_agent(@options[:next_agent]) : nil
+      if @options[:next_agent] && requested_next != @actor
         raise LifecycleError, "task accept keeps ownership with #{@actor_name}; --next-agent cannot change it"
       end
       @next_agent = @actor
       @next_agent_name = @actor_name
+      @next_agent_id = @actor_id
       return
     end
 
@@ -280,12 +316,13 @@ class TaskLifecycle
       end
       @next_agent_name = agent_name(@next_agent)
     end
+    @next_agent_id = agent_id(@next_agent)
 
     raise LifecycleError, "next Agent is not enabled: #{@next_agent_name}" unless @next_agent["status"] == "enabled"
     unless Array(@next_agent["roles"]).include?(@next_role)
       raise LifecycleError, "#{@next_agent_name} is not assigned #{@next_role}"
     end
-    if @actor_name == @next_agent_name && separation_required?
+    if @actor == @next_agent && separation_required?
       raise LifecycleError, "#{@actor_role} and #{@next_role} must use different Agents"
     end
     ensure_capability(@next_agent, @next_role, "receiver")
@@ -388,7 +425,8 @@ class TaskLifecycle
 
   def validate_lock
     locked_by = @task["locked_by"].to_s
-    if !locked_by.empty? && locked_by != @actor_name
+    lock_agent = locked_by.empty? ? nil : find_agent(locked_by)
+    if !locked_by.empty? && lock_agent != @actor
       raise LifecycleError, "Task is locked by #{locked_by}; #{@actor_name} cannot transition it"
     end
     check("lock", true, locked_by.empty? ? "Task is unlocked" : "Task lock belongs to actor")
@@ -504,6 +542,9 @@ class TaskLifecycle
       "receipt_path" => @receipt_relative,
       "created_at" => @date
     }
+    @receipt["actor"]["agent_id"] = @actor_id unless @actor_id.to_s.empty?
+    receipt_next_id = @next_agent_id || @actor_id
+    @receipt["next"]["agent_id"] = receipt_next_id unless receipt_next_id.to_s.empty?
     skip_reason = @options[:validation_skip_reason].to_s
     @receipt["validation_skip_reason"] = skip_reason unless skip_reason.empty?
 
@@ -529,6 +570,11 @@ class TaskLifecycle
     task["status"] = @to
     task["target_role"] = @next_role
     task["target_agent"] = @next_agent_name
+    if @next_agent_id.to_s.empty?
+      task.delete("target_agent_id")
+    else
+      task["target_agent_id"] = @next_agent_id
+    end
     task["updated_at"] = @date_only
     task["transition_receipt_path"] = @receipt_relative
     if @command == "accept"
@@ -595,6 +641,8 @@ class TaskLifecycle
       "created_at" => @date_only,
       "created_by" => @actor_name
     }
+    data["from_agent_id"] = @actor_id unless @actor_id.to_s.empty?
+    data["to_agent_id"] = @next_agent_id unless @next_agent_id.to_s.empty?
     YAML.dump(data) + <<~MD
       ---
 
@@ -806,7 +854,7 @@ class TaskLifecycle
   end
 
   def find_agent(name)
-    resolution = @agent_identity.resolve(name)
+    resolution = @agent_identity.resolve_any(name)
     raise LifecycleError, "agent reference is ambiguous: #{name}" if resolution.state == "ambiguous"
 
     resolution.agent
@@ -814,6 +862,11 @@ class TaskLifecycle
 
   def agent_name(agent)
     @agent_identity.name(agent)
+  end
+
+  def agent_id(agent)
+    value = @agent_identity.id(agent)
+    value.empty? ? nil : value
   end
 
   def role_slug(role)

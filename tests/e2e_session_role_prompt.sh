@@ -136,6 +136,28 @@ locked_by: null
 # Completion ownership validation
 EOF
 
+cat > "$tmpdir/.ai_project/tasks/active/T-20260727-022.md" <<'EOF'
+---
+schema: aiops.task.v1
+id: T-20260727-022
+title: Stable identity role prompt
+status: verification_passed
+workflow: feature
+target_agent_id: lead-agent
+target_agent: Legacy Lead Agent
+target_role: Completion Role
+required_capabilities:
+  - completion_review
+allowed_paths:
+  - src/
+source_of_truth:
+  - .ai_project/source_of_truth.md
+locked_by: null
+---
+
+# Stable identity role prompt
+EOF
+
 "$repo_root/bin/aiops" session-guide --target "$tmpdir" >/tmp/aiops-e2e-session-guide.out
 
 grep -q 'AI Ops session guide' /tmp/aiops-e2e-session-guide.out || {
@@ -187,6 +209,19 @@ grep -q '^active_role: Completion Role$' /tmp/aiops-e2e-completion-role-prompt.o
 
 grep -q '너의 Agent 정체성은 Lead Agent 하나다.' /tmp/aiops-e2e-completion-role-prompt.out || {
   printf '%s\n' "completion prompt split one multi-role Agent into separate identities" >&2
+  exit 1
+}
+
+perl -0pi -e 's/  - agent: Lead Agent/  - id: lead-agent\n    agent: Lead Agent\n    aliases:\n      - Legacy Lead Agent/' "$tmpdir/.ai_project/agent_registry.md"
+"$repo_root/bin/aiops" role prompt completion \
+  --target "$tmpdir" \
+  --task T-20260727-022 \
+  --agent lead-agent \
+  >/tmp/aiops-e2e-stable-role-prompt.out
+
+grep -q '^agent: Lead Agent$' /tmp/aiops-e2e-stable-role-prompt.out || {
+  printf '%s\n' "role prompt did not resolve stable Agent ID to the current display name" >&2
+  cat /tmp/aiops-e2e-stable-role-prompt.out >&2
   exit 1
 }
 

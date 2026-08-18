@@ -123,7 +123,9 @@ aiops agent inspect
 aiops agent inspect --json
 ```
 
-active/backlog Task의 `target_agent`가 Registry에 없거나 같은 이름이 중복 등록되면 `aiops validate project --strict`와 자동 lifecycle 전이가 차단된다. archive Task의 과거 Agent 이름은 당시 감사 기록이므로 warning으로 표시하되 현재 라우팅을 차단하지 않는다.
+Agent Registry에는 optional `id`와 `aliases`, Task에는 optional `target_agent_id`를 사용할 수 있다. resolver는 안정 ID를 먼저 확인하고 현재 이름, 단일 alias 순으로 legacy 참조를 해석한다. ID와 이름이 서로 다른 Agent를 가리키거나 ID·이름·alias가 충돌하면 `aiops validate project --strict`와 자동 lifecycle 전이가 차단된다. 이름 또는 alias만 사용하는 active/backlog Task는 계속 동작하지만 `migration_required`로 표시된다. archive Task의 과거 Agent 이름은 당시 감사 기록이므로 현재 라우팅을 차단하지 않는다.
+
+ID가 있는 Task는 Agent 표시 이름이 변경돼도 같은 Agent로 라우팅된다. `aiops role prompt`, lifecycle plan·receipt·handoff와 snapshot/dashboard machine projection은 ID를 보존하고, 사용자 화면에는 Registry의 현재 Agent 이름을 표시한다. Registry와 Task metadata를 실제로 일괄 갱신하는 rename/migration 명령은 후속 단계에서 제공한다.
 
 Main Dashboard 표시 항목은 프로젝트 진행률, readiness, canonical status sync, 운영 설정, Agent/Role 요약, blocker/warning, next command다.
 

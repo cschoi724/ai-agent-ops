@@ -9,7 +9,8 @@ require "yaml"
 class AgentIdentityError < StandardError; end
 
 module AgentIdentity
-  Resolution = Struct.new(:state, :agent, :matches, keyword_init: true)
+  ID_PATTERN = /\A[a-z][a-z0-9]*(?:-[a-z0-9]+)*\z/.freeze
+  Resolution = Struct.new(:state, :agent, :matches, :matched_by, :migration_required, keyword_init: true)
 
   class Registry
     attr_reader :agents
@@ -19,7 +20,19 @@ module AgentIdentity
     end
 
     def name(agent)
-      (agent["agent"] || agent["id"]).to_s
+      agent["agent"].to_s
+    end
+
+    def id(agent)
+      agent["id"].to_s
+    end
+
+    def aliases(agent)
+      value = agent["aliases"]
+      return [] if value.nil?
+      return [] unless value.is_a?(Array)
+
+      value.map(&:to_s).reject(&:empty?)
     end
 
     def duplicate_names
@@ -33,16 +46,101 @@ module AgentIdentity
       agents.select { |agent| name(agent).empty? }
     end
 
-    def resolve(value)
-      reference = value.to_s
-      return Resolution.new(state: "unassigned", matches: []) if reference.empty?
+    def invalid_ids
+      agents.map { |agent| id(agent) unless id(agent).empty? || id(agent).match?(ID_PATTERN) }.compact.uniq.sort
+    end
 
-      matches = agents.select { |agent| name(agent) == reference }
-      case matches.length
-      when 0 then Resolution.new(state: "unresolved", matches: [])
-      when 1 then Resolution.new(state: "resolved", agent: matches.first, matches: matches)
-      else Resolution.new(state: "ambiguous", matches: matches)
+    def duplicate_ids
+      duplicate_values(agents.map { |agent| id(agent) }.reject(&:empty?))
+    end
+
+    def invalid_alias_entries
+      agents.select { |agent| agent.key?("aliases") && !agent["aliases"].is_a?(Array) }
+    end
+
+    def invalid_alias_values
+      agents.select do |agent|
+        values = agent["aliases"]
+        next false unless values.is_a?(Array)
+
+        values.any? { |value| !value.is_a?(String) || value.empty? || value.match?(/[[:cntrl:]]/) } ||
+          values.uniq.length != values.length
       end
+    end
+
+    def identity_collisions
+      tokens = Hash.new { |hash, key| hash[key] = [] }
+      agents.each do |agent|
+        values = [["id", id(agent)], ["name", name(agent)]]
+        values.concat(aliases(agent).map { |value| ["alias", value] })
+        values.each do |kind, value|
+          next if value.empty?
+          tokens[value] << { "kind" => kind, "agent" => agent }
+        end
+      end
+      tokens.each_with_object({}) do |(value, entries), out|
+        identities = entries.map { |entry| entry["agent"].object_id }.uniq
+        out[value] = entries if identities.length > 1
+      end
+    end
+
+    def valid?
+      unnamed_agents.empty? && duplicate_names.empty? && duplicate_ids.empty? && invalid_ids.empty? &&
+        invalid_alias_entries.empty? && invalid_alias_values.empty? && identity_collisions.empty?
+    end
+
+    def resolve(name_reference = nil, id_reference = nil)
+      reference_name = name_reference.to_s
+      reference_id = id_reference.to_s
+      return Resolution.new(state: "unassigned", matches: [], migration_required: false) if reference_name.empty? && reference_id.empty?
+
+      unless reference_id.empty?
+        matches = agents.select { |agent| id(agent) == reference_id }
+        return Resolution.new(state: "unresolved", matches: [], matched_by: "id", migration_required: false) if matches.empty?
+        return Resolution.new(state: "ambiguous", matches: matches, matched_by: "id", migration_required: false) if matches.length > 1
+
+        agent = matches.first
+        return Resolution.new(state: "resolved", agent: agent, matches: matches, matched_by: "id", migration_required: false) if reference_name.empty? || name(agent) == reference_name
+        if aliases(agent).include?(reference_name)
+          return Resolution.new(state: "alias", agent: agent, matches: matches, matched_by: "id", migration_required: true)
+        end
+        return Resolution.new(state: "mismatch", matches: matches, matched_by: "id", migration_required: false)
+      end
+
+      current_matches = agents.select { |agent| name(agent) == reference_name }
+      if current_matches.length == 1
+        return Resolution.new(state: "legacy", agent: current_matches.first, matches: current_matches, matched_by: "name", migration_required: true)
+      end
+      return Resolution.new(state: "ambiguous", matches: current_matches, matched_by: "name", migration_required: false) if current_matches.length > 1
+
+      alias_matches = agents.select { |agent| aliases(agent).include?(reference_name) }
+      if alias_matches.length == 1
+        return Resolution.new(state: "alias", agent: alias_matches.first, matches: alias_matches, matched_by: "alias", migration_required: true)
+      end
+      return Resolution.new(state: "ambiguous", matches: alias_matches, matched_by: "alias", migration_required: false) if alias_matches.length > 1
+
+      Resolution.new(state: "unresolved", matches: [], migration_required: false)
+    end
+
+    def resolve_any(value)
+      reference = value.to_s
+      return Resolution.new(state: "unassigned", matches: [], migration_required: false) if reference.empty?
+
+      matches = agents.select do |agent|
+        id(agent) == reference || name(agent) == reference || aliases(agent).include?(reference)
+      end
+      case matches.length
+      when 0 then Resolution.new(state: "unresolved", matches: [], migration_required: false)
+      when 1 then Resolution.new(state: "resolved", agent: matches.first, matches: matches, matched_by: "any", migration_required: false)
+      else Resolution.new(state: "ambiguous", matches: matches, matched_by: "any", migration_required: false)
+      end
+    end
+
+    private
+
+    def duplicate_values(values)
+      counts = values.each_with_object(Hash.new(0)) { |value, out| out[value] += 1 }
+      counts.select { |_value, count| count > 1 }.keys.sort
     end
   end
 
@@ -80,12 +178,29 @@ module AgentIdentity
       registry.duplicate_names.each do |name|
         issues << issue("error", "duplicate_agent_name", "agent_registry contains duplicate Agent name: #{name}", agent: name, path: relative(registry_path))
       end
+      registry.duplicate_ids.each do |agent_id|
+        issues << issue("error", "duplicate_agent_id", "agent_registry contains duplicate Agent ID: #{agent_id}", agent_id: agent_id, path: relative(registry_path))
+      end
+      registry.invalid_ids.each do |agent_id|
+        issues << issue("error", "invalid_agent_id", "agent_registry contains invalid Agent ID: #{agent_id}", agent_id: agent_id, path: relative(registry_path))
+      end
+      registry.invalid_alias_entries.each do |agent|
+        issues << issue("error", "agent_aliases_invalid", "agent_registry aliases must be an array: #{registry.name(agent)}", agent: registry.name(agent), agent_id: nullable(registry.id(agent)), path: relative(registry_path))
+      end
+      registry.invalid_alias_values.each do |agent|
+        issues << issue("error", "agent_aliases_invalid", "agent_registry aliases must be unique non-empty strings without control characters: #{registry.name(agent)}", agent: registry.name(agent), agent_id: nullable(registry.id(agent)), path: relative(registry_path))
+      end
+      registry.identity_collisions.each do |value, entries|
+        identities = entries.map { |entry| registry.name(entry["agent"]) }.uniq.sort
+        issues << issue("error", "agent_identity_collision", "agent_registry identity token is not unique: #{value} (#{identities.join(', ')})", agent: value, path: relative(registry_path))
+      end
 
       references = task_references(registry, issues)
       errors = issues.count { |entry| entry["level"] == "error" }
       warnings = issues.count { |entry| entry["level"] == "warning" }
-      current_references = references.count { |entry| CURRENT_SCOPES.include?(entry["scope"]) && entry["target_agent"] }
-      historical_references = references.count { |entry| entry["scope"] == "archive" && entry["target_agent"] }
+      current_references = references.count { |entry| CURRENT_SCOPES.include?(entry["scope"]) && (entry["target_agent"] || entry["target_agent_id"]) }
+      historical_references = references.count { |entry| entry["scope"] == "archive" && (entry["target_agent"] || entry["target_agent_id"]) }
+      migration_required = references.count { |entry| CURRENT_SCOPES.include?(entry["scope"]) && entry["migration_required"] }
       projected_agents = registry.agents.reject { |agent| registry.name(agent).empty? }
 
       {
@@ -97,13 +212,17 @@ module AgentIdentity
           "agents" => projected_agents.length,
           "current_references" => current_references,
           "historical_references" => historical_references,
+          "migration_required" => migration_required,
+          "agents_without_id" => projected_agents.count { |agent| registry.id(agent).empty? },
           "errors" => errors,
           "warnings" => warnings
         },
         "agents" => projected_agents.map do |agent|
           name = registry.name(agent)
           {
+            "id" => nullable(registry.id(agent)),
             "name" => name,
+            "aliases" => registry.aliases(agent),
             "status" => agent["status"].to_s,
             "roles" => Array(agent["roles"]).map(&:to_s).reject(&:empty?),
             "current_reference_count" => references.count do |reference|
@@ -113,7 +232,7 @@ module AgentIdentity
         end,
         "references" => references,
         "issues" => issues,
-        "next" => next_actions(errors, warnings)
+        "next" => next_actions(errors, warnings, migration_required)
       }
     end
 
@@ -128,7 +247,8 @@ module AgentIdentity
           task = front_matter(path)
           task_id = (task["id"] || File.basename(path, ".md")).to_s
           target_agent = task["target_agent"].to_s
-          resolution = registry.resolve(target_agent)
+          target_agent_id = task["target_agent_id"].to_s
+          resolution = registry.resolve(target_agent, target_agent_id)
           current = CURRENT_SCOPES.include?(scope)
 
           case resolution.state
@@ -146,14 +266,33 @@ module AgentIdentity
             code = current ? "target_agent_ambiguous" : "historical_target_agent_ambiguous"
             message = "#{relative(path)} target_agent is ambiguous: #{target_agent}"
             issues << issue(level, code, message, path: relative(path), task_id: task_id, agent: target_agent)
+          when "mismatch"
+            level = current ? "error" : "warning"
+            code = current ? "target_agent_identity_mismatch" : "historical_target_agent_identity_mismatch"
+            message = "#{relative(path)} target_agent_id #{target_agent_id} does not match target_agent #{target_agent}"
+            issues << issue(level, code, message, path: relative(path), task_id: task_id, agent: target_agent, agent_id: target_agent_id)
+          when "legacy"
+            if current
+              message = "#{relative(path)} target_agent uses a legacy name reference; add target_agent_id"
+              issues << issue("warning", "target_agent_id_missing", message, path: relative(path), task_id: task_id, agent: target_agent, agent_id: nullable(registry.id(resolution.agent)))
+            end
+          when "alias"
+            if current
+              message = "#{relative(path)} target_agent uses legacy alias #{target_agent}; synchronize the current name and Agent ID"
+              issues << issue("warning", "target_agent_alias_migration_required", message, path: relative(path), task_id: task_id, agent: target_agent, agent_id: nullable(registry.id(resolution.agent)))
+            end
           end
 
           {
             "task_id" => task_id,
             "path" => relative(path),
             "scope" => scope,
+            "target_agent_id" => target_agent_id.empty? ? nil : target_agent_id,
             "target_agent" => target_agent.empty? ? nil : target_agent,
             "state" => resolution.state,
+            "matched_by" => resolution.matched_by,
+            "migration_required" => current && resolution.migration_required,
+            "resolved_agent_id" => resolution.agent ? nullable(registry.id(resolution.agent)) : nil,
             "resolved_agent" => resolution.agent ? registry.name(resolution.agent) : nil
           }
         end
@@ -174,19 +313,21 @@ module AgentIdentity
       data
     end
 
-    def issue(level, code, message, path: nil, task_id: nil, agent: nil)
+    def issue(level, code, message, path: nil, task_id: nil, agent: nil, agent_id: nil)
       {
         "level" => level,
         "code" => code,
         "message" => message,
         "path" => path,
         "task_id" => task_id,
-        "agent" => agent
+        "agent" => agent,
+        "agent_id" => agent_id
       }
     end
 
-    def next_actions(errors, warnings)
+    def next_actions(errors, warnings, migration_required)
       return ["fix current Agent references and run aiops agent inspect again"] if errors.positive?
+      return ["add stable Agent IDs and target_agent_id values before renaming Agents"] if migration_required.positive?
       return ["historical Agent references are preserved; no routing change is required"] if warnings.positive?
 
       ["Agent references are ready"]
@@ -194,6 +335,10 @@ module AgentIdentity
 
     def relative(path)
       path.delete_prefix("#{@target}/")
+    end
+
+    def nullable(value)
+      value.to_s.empty? ? nil : value
     end
   end
 
@@ -263,6 +408,8 @@ module AgentIdentity
         puts "agents: #{audit['summary']['agents']}"
         puts "current Task references: #{audit['summary']['current_references']}"
         puts "historical references: #{audit['summary']['historical_references']}"
+        puts "identity migration required: #{audit['summary']['migration_required']}"
+        puts "Agents without ID: #{audit['summary']['agents_without_id']}"
         puts "errors: #{audit['summary']['errors']}"
         puts "warnings: #{audit['summary']['warnings']}"
       else
@@ -272,6 +419,8 @@ module AgentIdentity
         puts "등록 Agent: #{audit['summary']['agents']}"
         puts "현재 Task 참조: #{audit['summary']['current_references']}"
         puts "역사 참조: #{audit['summary']['historical_references']}"
+        puts "Identity 마이그레이션 필요: #{audit['summary']['migration_required']}"
+        puts "ID 없는 Agent: #{audit['summary']['agents_without_id']}"
         puts "오류: #{audit['summary']['errors']}"
         puts "경고: #{audit['summary']['warnings']}"
       end

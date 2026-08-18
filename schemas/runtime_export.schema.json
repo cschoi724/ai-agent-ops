@@ -52,6 +52,10 @@
           "status": { "type": ["string", "null"] },
           "workflow": { "type": ["string", "null"] },
           "target_role": { "type": ["string", "null"] },
+          "target_agent_id": {
+            "type": ["string", "null"],
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          },
           "target_agent": { "type": ["string", "null"] },
           "required_capabilities": { "type": "array" },
           "allowed_paths": { "type": "array" },
@@ -78,7 +82,15 @@
           "task_id": { "type": ["string", "null"] },
           "from_role": { "type": ["string", "null"] },
           "to_role": { "type": ["string", "null"] },
+          "from_agent_id": {
+            "type": ["string", "null"],
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          },
           "from_agent": { "type": ["string", "null"] },
+          "to_agent_id": {
+            "type": ["string", "null"],
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          },
           "to_agent": { "type": ["string", "null"] },
           "current_status": { "type": ["string", "null"] },
           "next_action": { "type": ["string", "null"] },

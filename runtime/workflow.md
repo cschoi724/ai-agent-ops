@@ -33,10 +33,11 @@ Need
 - 프로젝트별 실행 지시는 `.ai_project/tasks/`에 기록한다.
 - Task 파일은 실행 지시의 source of truth다.
 - `task_board.md`는 현황 요약판이며 Task 파일을 대체하지 않는다.
-- Task 실행은 Agent 이름보다 세션 Role과 Task의 `workflow`, `status`, `target_agent` 또는 `target_role` 조합을 우선한다.
-- `target_agent`는 현재 `status`에서 Task를 처리할 기존 호환 Role 또는 Agent 이름을 뜻한다.
+- Task 실행은 Agent 표시 이름보다 안정 `target_agent_id`, 세션 Role과 Task의 `workflow`, `status`, `target_role` 조합을 우선한다.
+- `target_agent_id`는 불변 Agent identity이며, `target_agent`는 현재 표시 이름과 기존 프로젝트 호환 projection이다.
+- ID가 없으면 현재 이름과 단일 alias를 legacy 참조로 해석하고 identity migration 대상으로 보고한다.
 - `target_role`은 vNext에서 도입할 명시적 Role 라우팅 필드다.
-- `target_agent`가 존재하면 기존 호환성을 위해 `target_role`보다 우선한다.
+- `target_agent_id` 또는 `target_agent`가 존재하면 기존 호환성을 위해 `target_role`만으로 다른 Agent를 선택하지 않는다.
 - Capability가 맞더라도 `target_agent` 또는 `target_role`이 현재 Role과 맞지 않으면 실행하지 않는다.
 - report/QA 문서는 Task 진행 과정의 보조 기록이다.
 - 커밋, push, 배포, 외부 설정 변경은 사용자 승인 후 진행한다.

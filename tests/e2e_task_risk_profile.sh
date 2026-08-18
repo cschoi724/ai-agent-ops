@@ -13,13 +13,13 @@ cat > "$project/.ai_project/agent_registry.md" <<'EOF'
 schema: aiops.agent_registry.v1
 project: Risk Profile Fixture
 agents:
-  - id: Lead Agent
+  - id: lead-agent
     agent: Lead Agent
     status: enabled
     team: Core Team
     roles: [Lead Role, Execution Role, Completion Role]
     capabilities: [planning, implementation, completion]
-  - id: QA Agent
+  - id: qa-agent
     agent: QA Agent
     status: enabled
     team: Quality Team
@@ -68,6 +68,7 @@ type: $type
 priority: medium
 risk_profile: ${profile:-null}
 workflow: $workflow
+target_agent_id: lead-agent
 target_agent: Lead Agent
 target_role: Execution Role
 required_capabilities: [implementation]

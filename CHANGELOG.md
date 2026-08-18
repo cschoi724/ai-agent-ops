@@ -13,11 +13,13 @@
 ### Added
 
 - Add `aiops agent inspect` and `aiops.agent_identity_audit.v1` to report current and historical Task references to Agent Registry names before lifecycle routing.
+- Add optional stable Agent IDs, legacy aliases, Task `target_agent_id`, and Agent ID fields in lifecycle plans, receipts, handoffs, snapshots, and dashboards.
 
 ### Changed
 
 - Make strict project validation fail for unregistered or ambiguous active/backlog `target_agent` references while preserving archived Agent names as historical warnings.
 - Share Agent name resolution and duplicate-name rejection between project validation and automated Task lifecycle routing.
+- Resolve Agent ownership by stable ID before current name or alias, preserve current Agent proper names in user output, and report legacy active/backlog references as identity migration work.
 
 ### Fixed
 
