@@ -4811,11 +4811,11 @@ cmd_project() {
           groups = items.group_by { |task| task_area(task) }
           active_groups = active_items.group_by { |task| task_area(task) }
           by_id = items.each_with_object({}) { |task, out| out[task["id"].to_s] = task }
-          edges = dashboard_dependency_edges(items).filter_map do |from, to|
+          edges = dashboard_dependency_edges(items).map do |from, to|
             from_area = task_area(by_id[from] || { "id" => from })
             to_area = task_area(by_id[to] || { "id" => to })
             [from_area, to_area] unless from_area == to_area
-          end.uniq
+          end.compact.uniq
 
           puts "flowchart LR"
           groups.keys.sort.each do |area|
@@ -5087,11 +5087,11 @@ cmd_project() {
           groups = items.group_by { |task| task_area(task) }
           active_groups = active_items.group_by { |task| task_area(task) }
           by_id = items.each_with_object({}) { |task, out| out[task["id"].to_s] = task }
-          edges = dashboard_dependency_edges(items).filter_map do |from, to|
+          edges = dashboard_dependency_edges(items).map do |from, to|
             from_area = task_area(by_id[from] || { "id" => from })
             to_area = task_area(by_id[to] || { "id" => to })
             { "from" => from_area, "to" => to_area, "type" => "area_dependency" } unless from_area == to_area
-          end.uniq
+          end.compact.uniq
 
           {
             "type" => "summary",
@@ -9462,8 +9462,9 @@ cmd_validate() {
           subject = ARGV[1]
           actions = data["actions"]
           abort("schema_error: $.actions must be an array") unless actions.is_a?(Array)
-          names = actions.filter_map { |action| action.is_a?(Hash) ? action["action"] : nil }
-          duplicates = names.tally.select { |_name, count| count > 1 }.keys.sort
+          names = actions.map { |action| action.is_a?(Hash) ? action["action"] : nil }.compact
+          counts = names.each_with_object(Hash.new(0)) { |name, out| out[name] += 1 }
+          duplicates = counts.select { |_name, count| count > 1 }.keys.sort
           abort("schema_error: $.actions contains duplicate actions: #{duplicates.join(", ")}") unless duplicates.empty?
 
           if subject == "task-cleanup-plan"
@@ -12494,36 +12495,36 @@ cmd_release_check() {
   rm -rf "$release_tmp"
   if (
     set -eu
-    mkdir -p "$release_tmp"
-    "$core/bin/aiops" seed --target "$release_tmp" --adapter both --mode link --core "$core" >/dev/null
-    cp -R "$core/templates/ai_project/fast_track" "$release_tmp/.ai_project"
+    mkdir -p "$release_tmp" || exit 1
+    "$core/bin/aiops" seed --target "$release_tmp" --adapter both --mode link --core "$core" >/dev/null || exit 1
+    cp -R "$core/templates/ai_project/fast_track" "$release_tmp/.ai_project" || exit 1
     mkdir -p \
       "$release_tmp/.ai_project/tasks/active" \
       "$release_tmp/.ai_project/tasks/backlog" \
       "$release_tmp/.ai_project/tasks/archive" \
-      "$release_tmp/.ai_project/handoffs"
-    "$core/bin/aiops" knowledge init --target "$release_tmp" --mode minimal >/dev/null
-    "$core/bin/aiops" doctor --target "$release_tmp" --strict >/dev/null
-    "$core/bin/aiops" validate --target "$release_tmp" --strict >/dev/null
-    "$core/bin/aiops" migrate --target "$release_tmp" --plan >/dev/null
-    "$core/bin/aiops" knowledge lint --target "$release_tmp" >/dev/null
-    "$core/bin/aiops" export runtime --target "$release_tmp" >/dev/null
-    "$core/bin/aiops" project snapshot --target "$release_tmp" --json > "$release_tmp/project_snapshot.json"
-    "$core/bin/aiops" validate project-snapshot "$release_tmp/project_snapshot.json" >/dev/null
-    "$core/bin/aiops" project dashboard --target "$release_tmp" --json > "$release_tmp/project_dashboard.json"
-    "$core/bin/aiops" validate project-dashboard "$release_tmp/project_dashboard.json" >/dev/null
-    risk_task_id="$(ruby -rjson -e 'data = JSON.parse(File.read(ARGV[0])); task = data.dig("tasks", "items")&.first; puts task && task["id"]' "$release_tmp/project_snapshot.json")"
+      "$release_tmp/.ai_project/handoffs" || exit 1
+    "$core/bin/aiops" knowledge init --target "$release_tmp" --mode minimal >/dev/null || exit 1
+    "$core/bin/aiops" doctor --target "$release_tmp" --strict >/dev/null || exit 1
+    "$core/bin/aiops" validate --target "$release_tmp" --strict >/dev/null || exit 1
+    "$core/bin/aiops" migrate --target "$release_tmp" --plan >/dev/null || exit 1
+    "$core/bin/aiops" knowledge lint --target "$release_tmp" >/dev/null || exit 1
+    "$core/bin/aiops" export runtime --target "$release_tmp" >/dev/null || exit 1
+    "$core/bin/aiops" project snapshot --target "$release_tmp" --json > "$release_tmp/project_snapshot.json" || exit 1
+    "$core/bin/aiops" validate project-snapshot "$release_tmp/project_snapshot.json" >/dev/null || exit 1
+    "$core/bin/aiops" project dashboard --target "$release_tmp" --json > "$release_tmp/project_dashboard.json" || exit 1
+    "$core/bin/aiops" validate project-dashboard "$release_tmp/project_dashboard.json" >/dev/null || exit 1
+    risk_task_id="$(ruby -rjson -e 'data = JSON.parse(File.read(ARGV[0])); task = data.dig("tasks", "items")&.first; puts task && task["id"]' "$release_tmp/project_snapshot.json")" || exit 1
     if [ -n "$risk_task_id" ]; then
-      "$core/bin/aiops" task profile "$risk_task_id" --target "$release_tmp" --json > "$release_tmp/task_risk_profile.json"
-      "$core/bin/aiops" validate task-risk-profile "$release_tmp/task_risk_profile.json" >/dev/null
+      "$core/bin/aiops" task profile "$risk_task_id" --target "$release_tmp" --json > "$release_tmp/task_risk_profile.json" || exit 1
+      "$core/bin/aiops" validate task-risk-profile "$release_tmp/task_risk_profile.json" >/dev/null || exit 1
     fi
-    "$core/bin/aiops" validate model-catalog "$core/runtime/model_catalog.json" >/dev/null
-    printf '\n' > "$release_tmp/empty-codex-config.toml"
-    "$core/bin/aiops" model recommend --target "$release_tmp" --role "Lead Role" --provider codex --codex-config "$release_tmp/empty-codex-config.toml" --json > "$release_tmp/model_recommendation.json"
-    "$core/bin/aiops" validate model-recommendation "$release_tmp/model_recommendation.json" >/dev/null
-    "$core/bin/aiops" policy evaluate --target "$release_tmp" --json > "$release_tmp/policy_evaluation.json"
-    "$core/bin/aiops" validate policy-evaluation "$release_tmp/policy_evaluation.json" >/dev/null
-    printf '{}\n' > "$release_tmp/invalid_project_snapshot.json"
+    "$core/bin/aiops" validate model-catalog "$core/runtime/model_catalog.json" >/dev/null || exit 1
+    printf '\n' > "$release_tmp/empty-codex-config.toml" || exit 1
+    "$core/bin/aiops" model recommend --target "$release_tmp" --role "Lead Role" --provider codex --codex-config "$release_tmp/empty-codex-config.toml" --json > "$release_tmp/model_recommendation.json" || exit 1
+    "$core/bin/aiops" validate model-recommendation "$release_tmp/model_recommendation.json" >/dev/null || exit 1
+    "$core/bin/aiops" policy evaluate --target "$release_tmp" --json > "$release_tmp/policy_evaluation.json" || exit 1
+    "$core/bin/aiops" validate policy-evaluation "$release_tmp/policy_evaluation.json" >/dev/null || exit 1
+    printf '{}\n' > "$release_tmp/invalid_project_snapshot.json" || exit 1
     if "$core/bin/aiops" policy evaluate --snapshot "$release_tmp/invalid_project_snapshot.json" --json >/dev/null 2>&1; then
       exit 1
     fi

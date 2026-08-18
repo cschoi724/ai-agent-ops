@@ -192,7 +192,7 @@ ruby -rjson -e '
 "$repo_root/bin/aiops" project dashboard --target "$project" --view work --format mermaid --map dependencies --locale en > "$tmpdir/map-en.mmd"
 ruby -e '
   def ids(path)
-    File.readlines(path).filter_map { |line| line[/^\s*(T_[A-Za-z0-9_]+)/, 1] }.uniq.sort
+    File.readlines(path).map { |line| line[/^\s*(T_[A-Za-z0-9_]+)/, 1] }.compact.uniq.sort
   end
   abort("Mermaid internal IDs changed by locale") unless ids(ARGV[0]) == ids(ARGV[1])
 ' "$tmpdir/map-ko.mmd" "$tmpdir/map-en.mmd"

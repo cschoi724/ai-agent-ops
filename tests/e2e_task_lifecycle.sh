@@ -177,7 +177,7 @@ verification_receipt="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).dig(
 grep -q '^status: verification_ready$' "$task_file"
 grep -q '^target_agent: QA Agent$' "$task_file"
 grep -q '^target_role: Verification Role$' "$task_file"
-grep -q '^locked_by:$' "$task_file"
+grep -Eq '^locked_by:[[:space:]]*$' "$task_file"
 handoff="$project/.ai_project/handoffs/${task_id}_execution_to_verification.md"
 [ -f "$handoff" ]
 "$repo_root/bin/aiops" validate handoff "$handoff" --strict >/dev/null
@@ -221,8 +221,8 @@ grep -q '^target_agent: Lead Agent$' "$task_file"
 grep -q '^status: completion_review$' "$task_file"
 "$repo_root/bin/aiops" task advance "$task_id" --target "$project" >/dev/null
 grep -q '^status: done$' "$task_file"
-grep -q '^target_agent:$' "$task_file"
-grep -q '^target_role:$' "$task_file"
+grep -Eq '^target_agent:[[:space:]]*$' "$task_file"
+grep -Eq '^target_role:[[:space:]]*$' "$task_file"
 "$repo_root/bin/aiops" validate task "$task_file" --strict >/dev/null
 
 write_task T-20260813-002 in_progress "Dev Agent" "Execution Role" missing/source.md

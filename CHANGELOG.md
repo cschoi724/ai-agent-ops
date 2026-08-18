@@ -19,6 +19,11 @@
 - Make strict project validation fail for unregistered or ambiguous active/backlog `target_agent` references while preserving archived Agent names as historical warnings.
 - Share Agent name resolution and duplicate-name rejection between project validation and automated Task lifecycle routing.
 
+### Fixed
+
+- Keep Agent reference inspection, lifecycle routing, dashboard helpers, and cleanup validation compatible with the supported Ruby 2.6 runtime.
+- Make strict release checks propagate seeded-project command failures instead of reporting a false successful gate.
+
 ## 0.15.1 - 2026-08-18
 
 ### Fixed

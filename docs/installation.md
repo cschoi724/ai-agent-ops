@@ -9,6 +9,8 @@ AI Agent Ops는 최종적으로 패키지 매니저로 설치할 수 있는 운�
 
 처음 사용하는 사람은 `QUICKSTART.md`의 5분 시작 흐름을 먼저 따른다. 이 문서는 설치 방식과 디렉토리 구조를 더 자세히 설명하는 레퍼런스다.
 
+CLI runtime은 Ruby 2.6 이상을 지원한다. macOS 기본 `/usr/bin/ruby`와 Homebrew 설치 환경 모두 같은 CLI 계약을 사용한다.
+
 초기 구조:
 
 ```text

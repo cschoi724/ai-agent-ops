@@ -23,7 +23,10 @@ module AgentIdentity
     end
 
     def duplicate_names
-      agents.map { |agent| name(agent) }.reject(&:empty?).tally.select { |_name, count| count > 1 }.keys.sort
+      counts = agents.map { |agent| name(agent) }.reject(&:empty?).each_with_object(Hash.new(0)) do |name, out|
+        out[name] += 1
+      end
+      counts.select { |_name, count| count > 1 }.keys.sort
     end
 
     def unnamed_agents

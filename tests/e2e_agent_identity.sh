@@ -108,6 +108,16 @@ grep -q '^AI Ops Agent 참조 점검$' "$tmpdir/ko.out"
 grep -q '^AI Ops Agent reference inspection$' "$tmpdir/en.out"
 grep -q 'Builder Agent' "$tmpdir/ready.json"
 
+if [ -x /usr/bin/ruby ]; then
+  system_ruby_bin="$tmpdir/system-ruby-bin"
+  mkdir -p "$system_ruby_bin"
+  ln -s /usr/bin/ruby "$system_ruby_bin/ruby"
+  PATH="$system_ruby_bin:$PATH" \
+    "$repo_root/bin/aiops" agent inspect --target "$project" --json > "$tmpdir/system-ruby.json"
+  PATH="$system_ruby_bin:$PATH" \
+    "$repo_root/bin/aiops" validate agent-identity-audit "$tmpdir/system-ruby.json" >/dev/null
+fi
+
 ruby -rjson -e '
   data = JSON.parse(File.read(ARGV[0]))
   data["ready"] = "yes"
