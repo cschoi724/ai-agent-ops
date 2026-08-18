@@ -181,6 +181,10 @@ usage_quick() {
     cat <<'EOF'
 AI Ops
 
+Getting Started
+
+  aiops bootstrap-guide Inspect this project and show the first setup step
+
 Common Commands
 
   aiops status        Show project status and next recommended actions
@@ -204,6 +208,10 @@ EOF
   else
     cat <<'EOF'
 AI Ops
+
+처음 시작
+
+  aiops bootstrap-guide 현재 프로젝트를 확인하고 첫 설정 단계를 안내받습니다
 
 자주 쓰는 명령어
 
@@ -569,6 +577,36 @@ aiops sync-status
   aiops session-guide Role Session 선택 안내
 EOF
       ;;
+    bootstrap-guide:en)
+      cat <<'EOF'
+aiops bootstrap-guide
+
+Inspects the current project and shows the correct first or next setup step. It guides you to seed an unconnected project, start bootstrap for an unconfigured project, or continue with role sessions for a configured project.
+
+Examples:
+  aiops bootstrap-guide
+  aiops bootstrap-guide --target ./CookLog
+
+Related:
+  aiops doctor        Installation and configuration checks
+  aiops session-guide Role session guidance after setup
+EOF
+      ;;
+    bootstrap-guide:*)
+      cat <<'EOF'
+aiops bootstrap-guide
+
+현재 프로젝트를 확인하고 처음 시작하거나 이어서 진행할 단계를 안내합니다. 미연결 프로젝트에는 seed, 운영 미구성 프로젝트에는 bootstrap, 구성 완료 프로젝트에는 Role Session 진입 방법을 보여줍니다.
+
+사용 예:
+  aiops bootstrap-guide
+  aiops bootstrap-guide --target ./CookLog
+
+비슷한 명령:
+  aiops doctor        설치와 운영 구성 점검
+  aiops session-guide 구성 완료 후 Role Session 선택
+EOF
+      ;;
     session-guide:en|guide:en)
       cat <<'EOF'
 aiops session-guide
@@ -633,7 +671,7 @@ cmd_help() {
     quick) usage_quick "$locale" ;;
     all) usage_all ;;
     ai|machine) usage_machine "$locale" ;;
-    status|work|risks|agents|release|dashboard|doctor|sync-status|sync|session-guide|guide)
+    status|work|risks|agents|release|dashboard|doctor|sync-status|sync|bootstrap-guide|session-guide|guide)
       usage_command_help "$topic" "$locale"
       ;;
     *)
@@ -12489,7 +12527,7 @@ cmd_bootstrap_guide() {
         target="$1"
         ;;
       -h|--help)
-        usage
+        usage_command_help "bootstrap-guide" "${AIOPS_LOCALE:-ko}"
         exit 0
         ;;
       *)

@@ -12,6 +12,14 @@ grep -q 'aiops status' /tmp/aiops-e2e-help-quick.out || {
   printf '%s\n' "quick help status command missing" >&2
   exit 1
 }
+grep -q '^처음 시작$' /tmp/aiops-e2e-help-quick.out || {
+  printf '%s\n' "quick help getting started section missing" >&2
+  exit 1
+}
+grep -q 'aiops bootstrap-guide' /tmp/aiops-e2e-help-quick.out || {
+  printf '%s\n' "quick help bootstrap guide missing" >&2
+  exit 1
+}
 if grep -q 'project snapshot --json' /tmp/aiops-e2e-help-quick.out; then
   printf '%s\n' "quick help exposed machine snapshot command" >&2
   exit 1
@@ -64,7 +72,7 @@ cmp -s /tmp/aiops-e2e-work-help-option.out /tmp/aiops-e2e-help-work.out || {
   exit 1
 }
 
-for topic in status work risks agents release doctor sync-status session-guide; do
+for topic in status work risks agents release doctor sync-status bootstrap-guide session-guide; do
   "$repo_root/bin/aiops" help "$topic" >/tmp/aiops-e2e-help-topic.out
   "$repo_root/bin/aiops" "$topic" --help >/tmp/aiops-e2e-help-command.out
   cmp -s /tmp/aiops-e2e-help-command.out /tmp/aiops-e2e-help-topic.out || {
@@ -80,6 +88,27 @@ for topic in status work risks agents release doctor sync-status session-guide; 
     exit 1
   }
 done
+
+"$repo_root/bin/aiops" help bootstrap-guide >/tmp/aiops-e2e-help-bootstrap.out
+grep -q '미연결 프로젝트에는 seed' /tmp/aiops-e2e-help-bootstrap.out || {
+  printf '%s\n' "bootstrap help seed guidance missing" >&2
+  exit 1
+}
+grep -q '운영 미구성 프로젝트에는 bootstrap' /tmp/aiops-e2e-help-bootstrap.out || {
+  printf '%s\n' "bootstrap help setup guidance missing" >&2
+  exit 1
+}
+grep -q 'aiops session-guide' /tmp/aiops-e2e-help-bootstrap.out || {
+  printf '%s\n' "bootstrap help configured-project guidance missing" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" help bootstrap-guide --locale en >/tmp/aiops-e2e-help-bootstrap-en.out
+AIOPS_LOCALE=en "$repo_root/bin/aiops" bootstrap-guide --help >/tmp/aiops-e2e-bootstrap-help-option-en.out
+cmp -s /tmp/aiops-e2e-bootstrap-help-option-en.out /tmp/aiops-e2e-help-bootstrap-en.out || {
+  printf '%s\n' "english bootstrap-guide --help diverges from help bootstrap-guide" >&2
+  exit 1
+}
 
 "$repo_root/bin/aiops" help dashboard >/tmp/aiops-e2e-help-dashboard.out
 grep -q '^aiops project dashboard$' /tmp/aiops-e2e-help-dashboard.out || {
@@ -98,6 +127,14 @@ grep -q '^Common Commands$' /tmp/aiops-e2e-help-en.out || {
 }
 grep -q 'Show project status' /tmp/aiops-e2e-help-en.out || {
   printf '%s\n' "english quick help status text missing" >&2
+  exit 1
+}
+grep -q '^Getting Started$' /tmp/aiops-e2e-help-en.out || {
+  printf '%s\n' "english quick help getting started section missing" >&2
+  exit 1
+}
+grep -q 'aiops bootstrap-guide' /tmp/aiops-e2e-help-en.out || {
+  printf '%s\n' "english quick help bootstrap guide missing" >&2
   exit 1
 }
 
