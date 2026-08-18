@@ -326,7 +326,7 @@ rename과 migration은 다음 순서로 처리한다.
 
 ### 2차: ID와 alias 호환 계층
 
-진행 상태: 구현 완료, 독립 검증 대기
+진행 상태: 구현 및 독립 검증 완료
 
 구현:
 
@@ -360,6 +360,8 @@ rename과 migration은 다음 순서로 처리한다.
 - 실제 Registry·Task 파일 갱신 명령과 atomic migration receipt는 3차 범위다.
 
 ### 3차: rename과 migration 자동화
+
+진행 상태: 구현 완료, 독립 검증 대기
 
 구현:
 

@@ -125,7 +125,19 @@ aiops agent inspect --json
 
 Agent Registry에는 optional `id`와 `aliases`, Task에는 optional `target_agent_id`를 사용할 수 있다. resolver는 안정 ID를 먼저 확인하고 현재 이름, 단일 alias 순으로 legacy 참조를 해석한다. ID와 이름이 서로 다른 Agent를 가리키거나 ID·이름·alias가 충돌하면 `aiops validate project --strict`와 자동 lifecycle 전이가 차단된다. 이름 또는 alias만 사용하는 active/backlog Task는 계속 동작하지만 `migration_required`로 표시된다. archive Task의 과거 Agent 이름은 당시 감사 기록이므로 현재 라우팅을 차단하지 않는다.
 
-ID가 있는 Task는 Agent 표시 이름이 변경돼도 같은 Agent로 라우팅된다. `aiops role prompt`, lifecycle plan·receipt·handoff와 snapshot/dashboard machine projection은 ID를 보존하고, 사용자 화면에는 Registry의 현재 Agent 이름을 표시한다. Registry와 Task metadata를 실제로 일괄 갱신하는 rename/migration 명령은 후속 단계에서 제공한다.
+ID가 있는 Task는 Agent 표시 이름이 변경돼도 같은 Agent로 라우팅된다. `aiops role prompt`, lifecycle plan·receipt·handoff와 snapshot/dashboard machine projection은 ID를 보존하고, 사용자 화면에는 Registry의 현재 Agent 이름을 표시한다.
+
+기존 프로젝트에 안정 ID를 추가하거나 표시 이름을 바꿀 때는 파일을 직접 검색·치환하지 않는다. 먼저 read-only plan을 확인하고 명시적으로 적용한다.
+
+```sh
+aiops agent migrate-identities --check --json
+aiops agent migrate-identities --apply --json
+
+aiops agent rename builder-agent --to "Build Platform Agent" --check --json
+aiops agent rename builder-agent --to "Build Platform Agent" --apply --json
+```
+
+`migrate-identities`는 ID가 없는 Registry Agent에 안정 ID를 만들고 active/backlog Task의 `target_agent_id`와 현재 이름을 동기화한다. 자동 생성 ID가 충돌하면 `--map "Agent Name=stable-id"`로 명시한다. `rename`은 안정 ID로 대상을 고정하고 이전 표시 이름을 alias로 보존한다. 두 명령 모두 기본적으로 plan만 출력하며 `--apply`에서만 Registry와 현재 Task front matter를 하나의 rollback 가능한 bundle로 갱신한다. archive Task, report, QA, handoff와 기존 receipt는 수정하지 않는다. 적용 receipt는 Git에 커밋하지 않는 `.ai_project/.runtime/agent_identity/`에 기록한다.
 
 Main Dashboard 표시 항목은 프로젝트 진행률, readiness, canonical status sync, 운영 설정, Agent/Role 요약, blocker/warning, next command다.
 

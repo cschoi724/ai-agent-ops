@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/agent_rename_plan.schema.json",
+  "title": "AI Ops Agent Rename Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "generated_at", "operation", "check_only", "target", "actor", "agent_id", "from_name", "to_name", "ready", "changes", "writes", "historical_references_preserved", "preconditions", "checks", "actions", "receipt_path", "blockers"],
+  "properties": {
+    "schema": { "const": "aiops.agent_rename_plan.v1" },
+    "generated_at": { "type": "string", "minLength": 1 },
+    "operation": { "const": "rename" },
+    "check_only": { "const": true },
+    "target": { "type": "string", "minLength": 1 },
+    "actor": { "type": "string", "minLength": 1 },
+    "agent_id": { "$ref": "#/$defs/agentId" },
+    "from_name": { "type": "string", "minLength": 1 },
+    "to_name": { "type": "string", "minLength": 1 },
+    "ready": { "const": true },
+    "changes": { "$ref": "#/$defs/changes" },
+    "writes": { "$ref": "#/$defs/paths" },
+    "historical_references_preserved": { "type": "integer", "minimum": 0 },
+    "preconditions": { "type": "array", "items": { "$ref": "#/$defs/precondition" } },
+    "checks": { "type": "array", "minItems": 3, "items": { "$ref": "#/$defs/check" } },
+    "actions": { "$ref": "#/$defs/plannedActions" },
+    "receipt_path": { "$ref": "#/$defs/receiptPath" },
+    "blockers": { "type": "array", "maxItems": 0 }
+  },
+  "$defs": {
+    "agentId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
+    "paths": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "change": { "type": "object", "additionalProperties": false, "required": ["agent_id", "from_name", "to_name", "aliases_added", "task_ids"], "properties": { "agent_id": { "$ref": "#/$defs/agentId" }, "from_name": { "type": "string", "minLength": 1 }, "to_name": { "type": "string", "minLength": 1 }, "aliases_added": { "$ref": "#/$defs/paths" }, "task_ids": { "$ref": "#/$defs/paths" } } },
+    "changes": { "type": "array", "items": { "$ref": "#/$defs/change" } },
+    "precondition": { "type": "object", "additionalProperties": false, "required": ["path", "sha256", "mode"], "properties": { "path": { "type": "string", "minLength": 1 }, "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "mode": { "type": "string", "pattern": "^[0-7]{4}$" } } },
+    "check": { "type": "object", "additionalProperties": false, "required": ["code", "ready", "message"], "properties": { "code": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }, "ready": { "const": true }, "message": { "type": "string", "minLength": 1 } } },
+    "plannedAction": { "type": "object", "additionalProperties": false, "required": ["action", "status", "detail"], "properties": { "action": { "enum": ["update_registry", "update_current_tasks", "validate_identity", "write_receipt"] }, "status": { "enum": ["planned", "skipped"] }, "detail": { "type": "string", "minLength": 1 } } },
+    "plannedActions": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "$ref": "#/$defs/plannedAction" } },
+    "receiptPath": { "type": "string", "pattern": "^\\.ai_project/\\.runtime/agent_identity/rename-plan-[0-9a-f]{16}-receipt\\.json$" }
+  }
+}
