@@ -99,7 +99,9 @@ ruby -rjson -e '
   data = JSON.parse(File.read(ARGV[0]))
   abort "audit should be ready" unless data["ready"]
   abort "current references should be clean" unless data.dig("summary", "errors") == 0
-  abort "historical reference should remain a warning" unless data.dig("summary", "warnings") == 1
+  abort "legacy and historical references should be warnings" unless data.dig("summary", "warnings") == 2
+  abort "legacy reference should require migration" unless data.dig("summary", "migration_required") == 1
+  abort "legacy Registry Agent should lack ID" unless data.dig("summary", "agents_without_id") == 1
 ' "$tmpdir/ready.json"
 
 "$repo_root/bin/aiops" agent inspect --target "$project" > "$tmpdir/ko.out"

@@ -106,6 +106,13 @@
         "null"
       ]
     },
+    "target_agent_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
     "target_role": {
       "$ref": "#/$defs/roleName"
     },

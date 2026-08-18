@@ -13,16 +13,19 @@
 ### Added
 
 - Add `aiops agent inspect` and `aiops.agent_identity_audit.v1` to report current and historical Task references to Agent Registry names before lifecycle routing.
+- Add optional stable Agent IDs, legacy aliases, Task `target_agent_id`, and Agent ID fields in lifecycle plans, receipts, handoffs, snapshots, and dashboards.
 
 ### Changed
 
 - Make strict project validation fail for unregistered or ambiguous active/backlog `target_agent` references while preserving archived Agent names as historical warnings.
 - Share Agent name resolution and duplicate-name rejection between project validation and automated Task lifecycle routing.
+- Resolve Agent ownership by stable ID before current name or alias, preserve current Agent proper names in user output, and report legacy active/backlog references as identity migration work.
 
 ### Fixed
 
 - Keep Agent reference inspection, lifecycle routing, dashboard helpers, and cleanup validation compatible with the supported Ruby 2.6 runtime.
 - Make strict release checks propagate seeded-project command failures instead of reporting a false successful gate.
+- Validate optional Agent IDs in handoff metadata and reject Agent identity audits whose resolved name and ID do not identify the same Registry record.
 
 ## 0.15.1 - 2026-08-18
 

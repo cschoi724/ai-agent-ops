@@ -137,7 +137,8 @@
             "properties": {
               "risk_profile": { "type": "string", "enum": ["light", "standard", "strict", "invalid"] },
               "recommended_risk_profile": { "type": "string", "enum": ["light", "standard", "strict"] },
-              "risk_profile_ready": { "type": "boolean" }
+              "risk_profile_ready": { "type": "boolean" },
+              "target_agent_id": { "type": ["string", "null"], "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" }
             }
           }
         }

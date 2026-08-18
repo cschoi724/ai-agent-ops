@@ -35,11 +35,19 @@
         "null"
       ]
     },
+    "from_agent_id": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
     "to_agent": {
       "type": [
         "string",
         "null"
       ]
+    },
+    "to_agent_id": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
     },
     "current_status": {
       "$ref": "#/$defs/taskStatus"

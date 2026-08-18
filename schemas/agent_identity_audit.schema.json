@@ -14,11 +14,13 @@
     "summary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["agents", "current_references", "historical_references", "errors", "warnings"],
+      "required": ["agents", "current_references", "historical_references", "migration_required", "agents_without_id", "errors", "warnings"],
       "properties": {
         "agents": {"type": "integer", "minimum": 0},
         "current_references": {"type": "integer", "minimum": 0},
         "historical_references": {"type": "integer", "minimum": 0},
+        "migration_required": {"type": "integer", "minimum": 0},
+        "agents_without_id": {"type": "integer", "minimum": 0},
         "errors": {"type": "integer", "minimum": 0},
         "warnings": {"type": "integer", "minimum": 0}
       }
@@ -28,9 +30,11 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "status", "roles", "current_reference_count"],
+        "required": ["id", "name", "aliases", "status", "roles", "current_reference_count"],
         "properties": {
+          "id": {"type": ["string", "null"], "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"},
           "name": {"type": "string", "minLength": 1},
+          "aliases": {"$ref": "#/$defs/stringList"},
           "status": {"type": "string"},
           "roles": {"$ref": "#/$defs/stringList"},
           "current_reference_count": {"type": "integer", "minimum": 0}
@@ -42,13 +46,17 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["task_id", "path", "scope", "target_agent", "state", "resolved_agent"],
+        "required": ["task_id", "path", "scope", "target_agent_id", "target_agent", "state", "matched_by", "migration_required", "resolved_agent_id", "resolved_agent"],
         "properties": {
           "task_id": {"type": "string", "minLength": 1},
           "path": {"type": "string", "minLength": 1},
           "scope": {"type": "string", "enum": ["active", "backlog", "archive"]},
+          "target_agent_id": {"type": ["string", "null"], "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"},
           "target_agent": {"type": ["string", "null"]},
-          "state": {"type": "string", "enum": ["resolved", "unresolved", "ambiguous", "unassigned"]},
+          "state": {"type": "string", "enum": ["resolved", "legacy", "alias", "unresolved", "ambiguous", "mismatch", "unassigned"]},
+          "matched_by": {"type": ["string", "null"], "enum": [null, "id", "name", "alias"]},
+          "migration_required": {"type": "boolean"},
+          "resolved_agent_id": {"type": ["string", "null"], "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"},
           "resolved_agent": {"type": ["string", "null"]}
         }
       }
@@ -58,14 +66,15 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["level", "code", "message", "path", "task_id", "agent"],
+        "required": ["level", "code", "message", "path", "task_id", "agent", "agent_id"],
         "properties": {
           "level": {"type": "string", "enum": ["error", "warning"]},
           "code": {"type": "string", "minLength": 1},
           "message": {"type": "string", "minLength": 1},
           "path": {"type": ["string", "null"]},
           "task_id": {"type": ["string", "null"]},
-          "agent": {"type": ["string", "null"]}
+          "agent": {"type": ["string", "null"]},
+          "agent_id": {"type": ["string", "null"]}
         }
       }
     },

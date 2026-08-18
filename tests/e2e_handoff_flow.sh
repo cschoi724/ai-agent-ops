@@ -79,6 +79,25 @@ grep -q 'ok: handoff metadata' /tmp/aiops-e2e-handoff-validate-subject.out || {
   exit 1
 }
 
+handoff_with_ids="$tmpdir/.ai_project/handoffs/T-20260727-010_with_ids.md"
+cp "$handoff_file" "$handoff_with_ids"
+perl -0pi -e 's/from_agent: Dev Agent/from_agent_id: dev-agent\nfrom_agent: Dev Agent/; s/to_agent: QA Agent/to_agent_id: qa-agent\nto_agent: QA Agent/' "$handoff_with_ids"
+"$repo_root/bin/aiops" validate handoff "$handoff_with_ids" --strict >/dev/null
+
+for mutation in numeric bad_pattern control_character; do
+  invalid_id_handoff="$tmpdir/.ai_project/handoffs/T-20260727-010_${mutation}.md"
+  cp "$handoff_with_ids" "$invalid_id_handoff"
+  case "$mutation" in
+    numeric) perl -0pi -e 's/from_agent_id: dev-agent/from_agent_id: 42/' "$invalid_id_handoff" ;;
+    bad_pattern) perl -0pi -e 's/to_agent_id: qa-agent/to_agent_id: BAD_ID/' "$invalid_id_handoff" ;;
+    control_character) perl -0pi -e 's/to_agent_id: qa-agent/to_agent_id: "qa\\tagent"/' "$invalid_id_handoff" ;;
+  esac
+  if "$repo_root/bin/aiops" validate handoff "$invalid_id_handoff" --strict >/dev/null 2>&1; then
+    printf '%s\n' "handoff accepted invalid Agent ID: $mutation" >&2
+    exit 1
+  fi
+done
+
 cat > "$tmpdir/.ai_project/handoffs/T-20260727-010_bad.md" <<'EOF'
 ---
 schema: aiops.handoff.v1

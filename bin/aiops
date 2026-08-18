@@ -956,6 +956,7 @@ validate_front_matter() {
       "any", nil
     ]
     task_id_pattern = /\AT-[0-9]{8}-[0-9]{3,}\z/
+    agent_id_pattern = /\A[a-z][a-z0-9]*(?:-[a-z0-9]+)*\z/
 
     def say(message)
       STDOUT.puts(message)
@@ -1047,6 +1048,10 @@ validate_front_matter() {
       end
       if data["target_role"] && !roles.include?(data["target_role"])
         say("schema_error: invalid target_role #{data["target_role"]}")
+        failed = true
+      end
+      if data["target_agent_id"] && data["target_agent_id"] !~ agent_id_pattern
+        say("schema_error: invalid target_agent_id #{data["target_agent_id"]}")
         failed = true
       end
       if !%w[done cancelled].include?(data["status"]) && !scalar_present?(data["target_role"])
@@ -1142,6 +1147,7 @@ validate_front_matter() {
         failed = true
       end
       if data["agents"].is_a?(Array)
+        identity_tokens = Hash.new { |hash, key| hash[key] = [] }
         data["agents"].each_with_index do |agent, idx|
           unless agent.is_a?(Hash)
             say("schema_error: agents[#{idx}] must be a mapping")
@@ -1162,6 +1168,29 @@ validate_front_matter() {
               failed = true
             end
           end
+          if agent.key?("id") && (!agent["id"].is_a?(String) || agent["id"] !~ agent_id_pattern)
+            say("schema_error: invalid agents[#{idx}].id #{agent["id"]}")
+            failed = true
+          end
+          if agent.key?("aliases")
+            aliases = agent["aliases"]
+            unless aliases.is_a?(Array) && aliases.all? { |value| value.is_a?(String) && !value.empty? && !value.match?(/[[:cntrl:]]/) } && aliases.uniq.length == aliases.length
+              say("schema_error: agents[#{idx}].aliases must be a unique list of non-empty strings")
+              failed = true
+              aliases = []
+            end
+          else
+            aliases = []
+          end
+          [["id", agent["id"]], ["name", agent["agent"]], *aliases.map { |value| ["alias", value] }].each do |kind, value|
+            identity_tokens[value] << [idx, "agents[#{idx}].#{kind}"] if value.is_a?(String) && !value.empty?
+          end
+        end
+        identity_tokens.each do |value, entries|
+          next if entries.map(&:first).uniq.length == 1
+          locations = entries.map(&:last)
+          say("schema_error: Agent identity token #{value} is not unique: #{locations.join(", ")}")
+          failed = true
         end
       end
     when "handoff"
@@ -1193,6 +1222,13 @@ validate_front_matter() {
       if data["current_status"] && !statuses.include?(data["current_status"])
         say("schema_error: invalid current_status #{data["current_status"]}")
         failed = true
+      end
+      %w[from_agent_id to_agent_id].each do |field|
+        next unless data.key?(field) && !data[field].nil?
+        unless data[field].is_a?(String) && data[field].match?(agent_id_pattern)
+          say("schema_error: invalid #{field} #{data[field]}")
+          failed = true
+        end
       end
       %w[from_role to_role].each do |field|
         next unless data[field]
@@ -1344,6 +1380,7 @@ validate_project_relationships() {
           "status" => data["status"] || legacy_field(path, "status"),
           "workflow" => data["workflow"] || legacy_field(path, "workflow"),
           "target_role" => data["target_role"] || legacy_field(path, "target_role"),
+          "target_agent_id" => data["target_agent_id"] || legacy_field(path, "target_agent_id"),
           "target_agent" => data["target_agent"] || legacy_field(path, "target_agent"),
           "depends_on" => list(data["depends_on"]),
           "blocks" => list(data["blocks"]),
@@ -3265,6 +3302,33 @@ registry_assigned_roles() {
   ' "$file" "$agent_name"
 }
 
+registry_resolve_identity() {
+  file="$1"
+  agent_name="$2"
+  agent_id="$3"
+  mode="${4:-task}"
+  [ -f "$file" ] || return 1
+  command -v ruby >/dev/null 2>&1 || return 1
+  core="$(default_core_dir)"
+  ruby -I"$core/runtime" -ragent_identity -ryaml -rdate -e '
+    text = File.read(ARGV[0])
+    exit 1 unless text.start_with?("---\n")
+    lines = text.lines
+    closing = lines[1..].find_index { |line| line.strip == "---" }
+    exit 1 unless closing
+    data = YAML.safe_load(lines[1..closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+    registry = AgentIdentity::Registry.new(data["agents"])
+    unless registry.valid?
+      puts "invalid"
+      puts ""
+      exit 0
+    end
+    resolution = ARGV[3] == "any" ? registry.resolve_any(ARGV[1]) : registry.resolve(ARGV[1], ARGV[2])
+    puts resolution.state
+    puts(resolution.agent ? registry.name(resolution.agent) : "")
+  ' "$file" "$agent_name" "$agent_id" "$mode"
+}
+
 script_dir() {
   source="$0"
   while [ -L "$source" ]; do
@@ -5044,6 +5108,7 @@ cmd_project() {
             "recommended_risk_profile" => task["recommended_risk_profile"],
             "risk_profile_ready" => task["risk_profile_ready"],
             "target_role" => task["target_role"],
+            "target_agent_id" => task["target_agent_id"],
             "target_agent" => task["target_agent"],
             "locked_by" => task["locked_by"],
             "lock_state" => clean(task["locked_by"], "none") == "none" ? "none" : "locked",
@@ -6940,6 +7005,7 @@ document.addEventListener("DOMContentLoaded", () => {
         core = ARGV[1]
         core_dir = core
         require File.join(core_dir, "runtime", "task_risk_profile")
+        require File.join(core_dir, "runtime", "agent_identity")
 
         def scalar_string(value)
           return nil unless value.is_a?(String) || value.is_a?(Integer) || value.is_a?(Float) || value == true || value == false
@@ -7084,6 +7150,7 @@ document.addEventListener("DOMContentLoaded", () => {
         policy_rules_path = File.join(core, "runtime", "policy_rules.json") unless File.file?(policy_rules_path)
         operating = front_matter(operating_path)
         registry = front_matter(registry_path)
+        agent_identity = AgentIdentity::Registry.new(registry["agents"])
 
         core_version = File.file?(File.join(ai_path, "VERSION")) ? File.read(File.join(ai_path, "VERSION")).strip : "unknown"
         core = {
@@ -7124,6 +7191,10 @@ document.addEventListener("DOMContentLoaded", () => {
           data = front_matter(path)
           relative = path.sub(%r{\A#{Regexp.escape(target)}/?}, "")
           status = data["status"] || legacy_field(path, "status")
+          target_agent_id = data["target_agent_id"] || legacy_field(path, "target_agent_id")
+          target_agent = data["target_agent"] || legacy_field(path, "target_agent")
+          agent_resolution = agent_identity.resolve(target_agent, target_agent_id)
+          projected_agent = agent_resolution.agent ? agent_identity.name(agent_resolution.agent) : target_agent
           risk_profile = begin
             profile_task = data.merge(
               "id" => data["id"] || File.basename(path, ".md"),
@@ -7142,7 +7213,8 @@ document.addEventListener("DOMContentLoaded", () => {
             "recommended_risk_profile" => risk_profile["recommended_profile"],
             "risk_profile_ready" => risk_profile["ready"],
             "target_role" => data["target_role"] || legacy_field(path, "target_role"),
-            "target_agent" => data["target_agent"] || legacy_field(path, "target_agent"),
+            "target_agent_id" => target_agent_id,
+            "target_agent" => projected_agent,
             "depends_on" => list(data["depends_on"]),
             "blocks" => list(data["blocks"]),
             "allowed_paths" => list(data["allowed_paths"]),
@@ -7823,6 +7895,7 @@ document.addEventListener("DOMContentLoaded", () => {
               "status" => data["status"] || legacy_field(path, "status"),
               "workflow" => data["workflow"] || legacy_field(path, "workflow"),
               "target_role" => data["target_role"] || legacy_field(path, "target_role"),
+              "target_agent_id" => data["target_agent_id"] || legacy_field(path, "target_agent_id"),
               "target_agent" => data["target_agent"] || legacy_field(path, "target_agent"),
               "queue" => queue,
               "path" => relative
@@ -8165,6 +8238,7 @@ document.addEventListener("DOMContentLoaded", () => {
           workflow = data["workflow"] || legacy_field(task_file, "workflow") || default_workflow
           status = data["status"] || legacy_field(task_file, "status")
           target_role = data["target_role"] || legacy_field(task_file, "target_role")
+          target_agent_id = data["target_agent_id"] || legacy_field(task_file, "target_agent_id")
           target_agent = data["target_agent"] || legacy_field(task_file, "target_agent")
           allowed_paths = list(data["allowed_paths"])
           source_of_truth = list(data["source_of_truth"])
@@ -8200,6 +8274,7 @@ document.addEventListener("DOMContentLoaded", () => {
             "checkpoint" => status_meta["checkpoint"],
             "canonical_publish" => status_meta["canonical_publish"],
             "target_role" => target_role,
+            "target_agent_id" => target_agent_id,
             "target_agent" => target_agent,
             "allowed_paths" => allowed_paths,
             "source_of_truth" => source_of_truth,
@@ -8641,6 +8716,7 @@ document.addEventListener("DOMContentLoaded", () => {
             "status" => data["status"] || legacy_field(path, "status"),
             "workflow" => data["workflow"] || legacy_field(path, "workflow"),
             "target_role" => data["target_role"] || legacy_field(path, "target_role"),
+            "target_agent_id" => data["target_agent_id"] || legacy_field(path, "target_agent_id"),
             "target_agent" => data["target_agent"] || legacy_field(path, "target_agent"),
             "status_ref_sha" => data["status_ref_sha"] || legacy_field(path, "status_ref_sha")
           }
@@ -9600,28 +9676,72 @@ cmd_validate() {
           abort("schema_error: $.summary.warnings does not match issues") unless summary.fetch("warnings") == warnings
           abort("schema_error: $.summary.agents does not match agents") unless summary.fetch("agents") == agents.length
 
-          current = references.count { |reference| %w[active backlog].include?(reference.fetch("scope")) && reference["target_agent"] }
-          historical = references.count { |reference| reference.fetch("scope") == "archive" && reference["target_agent"] }
+          current = references.count { |reference| %w[active backlog].include?(reference.fetch("scope")) && (reference["target_agent"] || reference["target_agent_id"]) }
+          historical = references.count { |reference| reference.fetch("scope") == "archive" && (reference["target_agent"] || reference["target_agent_id"]) }
+          migration_required = references.count { |reference| %w[active backlog].include?(reference.fetch("scope")) && reference.fetch("migration_required") }
           abort("schema_error: $.summary.current_references does not match references") unless summary.fetch("current_references") == current
           abort("schema_error: $.summary.historical_references does not match references") unless summary.fetch("historical_references") == historical
+          abort("schema_error: $.summary.migration_required does not match references") unless summary.fetch("migration_required") == migration_required
+          abort("schema_error: $.summary.agents_without_id does not match agents") unless summary.fetch("agents_without_id") == agents.count { |agent| agent["id"].nil? }
 
           references.each do |reference|
             state = reference.fetch("state")
             target = reference["target_agent"]
+            target_id = reference["target_agent_id"]
             resolved = reference["resolved_agent"]
+            resolved_id = reference["resolved_agent_id"]
+            migration = reference.fetch("migration_required")
+            unless resolved.to_s.empty?
+              matching_agents = agents.select { |agent| agent.fetch("name") == resolved }
+              abort("schema_error: resolved Agent name #{resolved} must identify exactly one Agent record") unless matching_agents.length == 1
+              expected_id = matching_agents.first["id"]
+              abort("schema_error: resolved_agent_id does not match resolved_agent #{resolved}") unless resolved_id == expected_id
+            end
+            unless resolved_id.to_s.empty?
+              matching_ids = agents.select { |agent| agent["id"] == resolved_id }
+              abort("schema_error: resolved Agent ID #{resolved_id} must identify exactly one Agent record") unless matching_ids.length == 1
+              abort("schema_error: resolved_agent does not match resolved_agent_id #{resolved_id}") unless matching_ids.first.fetch("name") == resolved
+            end
             if state == "resolved"
-              abort("schema_error: resolved Agent reference requires target and resolved_agent") if target.to_s.empty? || resolved.to_s.empty?
+              abort("schema_error: resolved Agent reference requires an ID or name and resolved_agent") if (target.to_s.empty? && target_id.to_s.empty?) || resolved.to_s.empty?
+              abort("schema_error: resolved Agent reference must not require migration") if migration
+              abort("schema_error: target_agent_id does not match resolved_agent_id") if !target_id.to_s.empty? && target_id != resolved_id
+            elsif state == "legacy"
+              abort("schema_error: legacy Agent reference requires a name without target_agent_id") if target.to_s.empty? || !target_id.to_s.empty?
+              abort("schema_error: legacy Agent reference requires resolved_agent") if resolved.to_s.empty?
+              abort("schema_error: legacy Agent reference must match by name") unless reference["matched_by"] == "name"
+              current_scope = %w[active backlog].include?(reference.fetch("scope"))
+              abort("schema_error: current legacy reference must require migration") if current_scope && !migration
+            elsif state == "alias"
+              abort("schema_error: alias Agent reference requires target and resolved_agent") if target.to_s.empty? || resolved.to_s.empty?
+              abort("schema_error: alias Agent reference must match by ID or alias") unless %w[id alias].include?(reference["matched_by"])
+              abort("schema_error: alias target_agent_id does not match resolved_agent_id") if !target_id.to_s.empty? && target_id != resolved_id
+              current_scope = %w[active backlog].include?(reference.fetch("scope"))
+              abort("schema_error: current alias reference must require migration") if current_scope && !migration
+            elsif state == "mismatch"
+              abort("schema_error: mismatched Agent reference requires both ID and name") if target.to_s.empty? || target_id.to_s.empty?
+              abort("schema_error: mismatched Agent reference must match by ID") unless reference["matched_by"] == "id"
+              abort("schema_error: mismatched Agent reference must not resolve") if resolved || resolved_id || migration
             elsif state == "unassigned"
-              abort("schema_error: unassigned Agent reference must not contain names") if target || resolved
-            elsif resolved
-              abort("schema_error: unresolved or ambiguous Agent reference must not contain resolved_agent")
+              abort("schema_error: unassigned Agent reference must not contain identity values") if target || target_id || resolved || resolved_id || migration
+            else
+              abort("schema_error: unresolved or ambiguous Agent reference requires an ID or name") if target.to_s.empty? && target_id.to_s.empty?
+              abort("schema_error: unresolved or ambiguous Agent reference must not contain resolved_agent") if resolved || resolved_id || migration
             end
 
             next if %w[resolved unassigned].include?(state)
             historical_reference = reference.fetch("scope") == "archive"
-            expected_level = historical_reference ? "warning" : "error"
+            next if historical_reference && %w[legacy alias].include?(state)
+            expected_level = if %w[legacy alias].include?(state)
+                               "warning"
+                             elsif historical_reference
+                               "warning"
+                             else
+                               "error"
+                             end
             matched = issues.any? do |issue|
-              issue.fetch("level") == expected_level && issue["task_id"] == reference.fetch("task_id") && issue["agent"] == target
+              issue.fetch("level") == expected_level && issue["task_id"] == reference.fetch("task_id") &&
+                (issue["agent"] == target || issue["agent_id"] == target_id)
             end
             abort("schema_error: Agent reference issue missing for #{reference.fetch("task_id")}") unless matched
           end
@@ -10619,6 +10739,7 @@ cmd_action() {
             "status" => task["status"] || legacy_field(task_file, "status"),
             "workflow" => task["workflow"] || legacy_field(task_file, "workflow"),
             "target_role" => target_role,
+            "target_agent_id" => task["target_agent_id"] || legacy_field(task_file, "target_agent_id"),
             "target_agent" => task["target_agent"] || legacy_field(task_file, "target_agent")
           },
           "intended_actions" => intended_actions.uniq,
@@ -11504,22 +11625,50 @@ cmd_role() {
       fi
 
       task_target_agent=""
+      task_target_agent_id=""
       task_target_role=""
       if [ -n "$task_file" ]; then
         task_target_agent="$(task_yaml_field "$task_file" target_agent)"
+        task_target_agent_id="$(task_yaml_field "$task_file" target_agent_id)"
         task_target_role="$(task_yaml_field "$task_file" target_role)"
         case "$task_target_agent" in null|~) task_target_agent="" ;; esac
+        case "$task_target_agent_id" in null|~) task_target_agent_id="" ;; esac
         case "$task_target_role" in null|~) task_target_role="" ;; esac
         if [ -n "$task_target_role" ] && [ "$task_target_role" != "$role" ]; then
           die "requested role $role does not match Task target_role $task_target_role"
         fi
-        if [ -n "$agent" ] && [ -n "$task_target_agent" ] && [ "$agent" != "$task_target_agent" ]; then
-          die "--agent $agent does not match Task target_agent $task_target_agent"
-        fi
       fi
 
-      if [ -z "$agent" ] && [ -n "$task_target_agent" ]; then
-        agent="$task_target_agent"
+      resolved_task_agent=""
+      if [ -f "$registry_file" ] && { [ -n "$task_target_agent" ] || [ -n "$task_target_agent_id" ]; }; then
+        resolution="$(registry_resolve_identity "$registry_file" "$task_target_agent" "$task_target_agent_id" task 2>/dev/null || true)"
+        resolution_state="$(printf '%s\n' "$resolution" | sed -n '1p')"
+        resolved_task_agent="$(printf '%s\n' "$resolution" | sed -n '2p')"
+        case "$resolution_state" in
+          resolved|legacy|alias) ;;
+          invalid) die "agent registry identity configuration is invalid; run aiops agent inspect" ;;
+          mismatch) die "Task target_agent_id $task_target_agent_id does not match target_agent $task_target_agent" ;;
+          ambiguous) die "Task Agent reference is ambiguous: ${task_target_agent_id:-$task_target_agent}" ;;
+          *) die "Task Agent is not registered: ${task_target_agent_id:-$task_target_agent}" ;;
+        esac
+      elif [ -n "$task_target_agent" ]; then
+        resolved_task_agent="$task_target_agent"
+      fi
+
+      if [ -f "$registry_file" ] && [ -n "$agent" ]; then
+        explicit_resolution="$(registry_resolve_identity "$registry_file" "$agent" "" any 2>/dev/null || true)"
+        explicit_state="$(printf '%s\n' "$explicit_resolution" | sed -n '1p')"
+        explicit_agent="$(printf '%s\n' "$explicit_resolution" | sed -n '2p')"
+        [ "$explicit_state" != "invalid" ] || die "agent registry identity configuration is invalid; run aiops agent inspect"
+        [ "$explicit_state" = "resolved" ] || die "agent not registered or ambiguous: $agent"
+        if [ -n "$resolved_task_agent" ] && [ "$explicit_agent" != "$resolved_task_agent" ]; then
+          die "--agent $agent does not match Task target_agent ${task_target_agent:-$task_target_agent_id}"
+        fi
+        agent="$explicit_agent"
+      fi
+
+      if [ -z "$agent" ] && [ -n "$resolved_task_agent" ]; then
+        agent="$resolved_task_agent"
       fi
 
       if [ -z "$agent" ]; then
@@ -12098,6 +12247,7 @@ cmd_export() {
               "status" => data["status"],
               "workflow" => data["workflow"],
               "target_role" => data["target_role"],
+              "target_agent_id" => data["target_agent_id"],
               "target_agent" => data["target_agent"],
               "required_capabilities" => data["required_capabilities"] || [],
               "allowed_paths" => data["allowed_paths"] || [],
@@ -12126,7 +12276,9 @@ cmd_export() {
               "task_id" => data["task_id"],
               "from_role" => data["from_role"],
               "to_role" => data["to_role"],
+              "from_agent_id" => data["from_agent_id"],
               "from_agent" => data["from_agent"],
+              "to_agent_id" => data["to_agent_id"],
               "to_agent" => data["to_agent"],
               "current_status" => data["current_status"],
               "next_action" => data["next_action"],
