@@ -36,6 +36,7 @@ Need
 - Task 실행은 Agent 표시 이름보다 안정 `target_agent_id`, 세션 Role과 Task의 `workflow`, `status`, `target_role` 조합을 우선한다.
 - `target_agent_id`는 불변 Agent identity이며, `target_agent`는 현재 표시 이름과 기존 프로젝트 호환 projection이다.
 - ID가 없으면 현재 이름과 단일 alias를 legacy 참조로 해석하고 identity migration 대상으로 보고한다.
+- ID 이관과 표시 이름 변경은 `aiops agent migrate-identities`와 `aiops agent rename`의 check/apply 절차로 수행한다. 현재 Registry와 active/backlog Task만 갱신하고 archive·report·QA·handoff·receipt의 과거 이름은 보존한다.
 - `target_role`은 vNext에서 도입할 명시적 Role 라우팅 필드다.
 - `target_agent_id` 또는 `target_agent`가 존재하면 기존 호환성을 위해 `target_role`만으로 다른 Agent를 선택하지 않는다.
 - Capability가 맞더라도 `target_agent` 또는 `target_role`이 현재 Role과 맞지 않으면 실행하지 않는다.

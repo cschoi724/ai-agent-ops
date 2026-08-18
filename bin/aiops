@@ -27,6 +27,8 @@ Usage:
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
   aiops agent inspect [--target DIR] [--json] [--locale ko|en]
+  aiops agent rename AGENT_ID --to NAME [--target DIR] [--check|--apply] [--locale ko|en] [--json]
+  aiops agent migrate-identities [--target DIR] [--map NAME=ID] [--check|--apply] [--locale ko|en] [--json]
   aiops role prompt ROLE [--target DIR] [--task TASK_ID] [--adapter codex|claude|generic] [--agent NAME]
   aiops model recommend --role ROLE [--target DIR] [--task TASK_ID] [--provider codex|claude-code|PROVIDER] [--model MODEL] [--effort EFFORT] [--locale ko|en] [--json]
   aiops action plan --role ROLE --task TASK_ID [--target DIR] [--intends LIST] [--paths LIST] --json
@@ -41,6 +43,10 @@ Usage:
   aiops validate model-overrides FILE
   aiops validate model-recommendation FILE
   aiops validate agent-identity-audit FILE
+  aiops validate agent-rename-plan FILE
+  aiops validate agent-rename-receipt FILE
+  aiops validate agent-identity-migration-plan FILE
+  aiops validate agent-identity-migration-receipt FILE
   aiops validate task-cleanup-plan FILE
   aiops validate task-cleanup-receipt FILE
   aiops validate policy-rules [--core DIR]
@@ -154,6 +160,8 @@ Examples:
   aiops session-guide
   aiops agent inspect
   aiops agent inspect --json
+  aiops agent migrate-identities --check --json
+  aiops agent rename builder-agent --to "Build Platform Agent" --check --json
   aiops role prompt execution --task T-YYYYMMDD-001 --adapter codex
   aiops model recommend --role execution --task T-YYYYMMDD-001
   aiops model recommend --role verification --task T-YYYYMMDD-001 --provider claude-code --json
@@ -645,14 +653,16 @@ EOF
       ;;
     agent:en|agent-inspect:en)
       cat <<'EOF'
-aiops agent inspect
+aiops agent
 
-Checks current and historical Task references against the Agent Registry before lifecycle routing fails.
+Inspects Agent references, migrates legacy stable IDs, and safely renames an Agent by immutable ID.
 
 Examples:
   aiops agent inspect
   aiops agent inspect --target ./CookLog
   aiops agent inspect --json
+  aiops agent migrate-identities --check
+  aiops agent rename builder-agent --to "Build Platform Agent" --check
 
 Related:
   aiops agents             Agent and role dashboard
@@ -661,14 +671,16 @@ EOF
       ;;
     agent:*|agent-inspect:*)
       cat <<'EOF'
-aiops agent inspect
+aiops agent
 
-상태 전이 전에 현재·과거 Task의 Agent 참조가 Agent Registry와 일치하는지 점검합니다.
+Agent 참조를 점검하고, legacy 안정 ID 이관과 불변 ID 기반 이름 변경을 안전하게 수행합니다.
 
 사용 예:
   aiops agent inspect
   aiops agent inspect --target ./CookLog
   aiops agent inspect --json
+  aiops agent migrate-identities --check
+  aiops agent rename builder-agent --to "Build Platform Agent" --check
 
 비슷한 명령:
   aiops agents             Agent와 Role 현황
@@ -9291,7 +9303,7 @@ cmd_validate() {
       ' "$catalog"
       info "ok: workflow catalog"
       ;;
-    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets|dashboard-locale|transition-receipt|task-transition-plan|task-risk-profile|task-cleanup-plan|task-cleanup-receipt|model-catalog|model-overrides|model-recommendation|agent-identity-audit)
+    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets|dashboard-locale|transition-receipt|task-transition-plan|task-risk-profile|task-cleanup-plan|task-cleanup-receipt|model-catalog|model-overrides|model-recommendation|agent-identity-audit|agent-rename-plan|agent-rename-receipt|agent-identity-migration-plan|agent-identity-migration-receipt)
       file=""
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -9369,6 +9381,22 @@ cmd_validate() {
         agent-identity-audit)
           schema="$core/schemas/agent_identity_audit.schema.json"
           label="Agent identity audit"
+          ;;
+        agent-rename-plan)
+          schema="$core/schemas/agent_rename_plan.schema.json"
+          label="Agent rename plan"
+          ;;
+        agent-rename-receipt)
+          schema="$core/schemas/agent_rename_receipt.schema.json"
+          label="Agent rename receipt"
+          ;;
+        agent-identity-migration-plan)
+          schema="$core/schemas/agent_identity_migration_plan.schema.json"
+          label="Agent identity migration plan"
+          ;;
+        agent-identity-migration-receipt)
+          schema="$core/schemas/agent_identity_migration_receipt.schema.json"
+          label="Agent identity migration receipt"
           ;;
       esac
       [ -f "$schema" ] || die "$label schema not found: $schema"
@@ -9565,6 +9593,36 @@ cmd_validate() {
           puts "ok: cleanup semantics"
         ' "$file" "$subject"
       fi
+      case "$subject" in
+        agent-rename-plan|agent-rename-receipt|agent-identity-migration-plan|agent-identity-migration-receipt)
+          ruby -rjson -e '
+            data = JSON.parse(File.read(ARGV[0]))
+            subject = ARGV[1]
+            actions = data.fetch("actions")
+            names = actions.map { |action| action.fetch("action") }
+            expected = %w[update_registry update_current_tasks validate_identity write_receipt]
+            duplicates = names.each_with_object(Hash.new(0)) { |name, out| out[name] += 1 }.select { |_name, count| count > 1 }.keys
+            missing = expected - names
+            extra = names - expected
+            unless duplicates.empty? && missing.empty? && extra.empty? && names.length == expected.length
+              abort("schema_error: $.actions must contain each Agent identity action exactly once; missing=#{missing.join(",")} extra=#{extra.join(",")} duplicate=#{duplicates.join(",")}")
+            end
+            if subject.start_with?("agent-rename-")
+              matching = data.fetch("changes").select { |change| change.fetch("agent_id") == data.fetch("agent_id") }
+              no_op = data.fetch("writes").empty? && data.fetch("from_name") == data.fetch("to_name")
+              unless no_op
+                abort("schema_error: rename document must contain exactly one matching Agent change") unless matching.length == 1
+                change = matching.first
+                abort("schema_error: rename from_name does not match change") unless change.fetch("from_name") == data.fetch("from_name")
+                abort("schema_error: rename to_name does not match change") unless change.fetch("to_name") == data.fetch("to_name")
+              end
+            end
+            writes = data.fetch("writes")
+            abort("schema_error: $.writes contains duplicate paths") unless writes.uniq.length == writes.length
+            puts "ok: Agent identity operation semantics"
+          ' "$file" "$subject"
+          ;;
+      esac
       if [ "$subject" = "dashboard-presets" ]; then
         presets_runtime="$core/runtime/dashboard_presets.rb"
         [ -f "$presets_runtime" ] || die "dashboard preset runtime not found: $presets_runtime"
@@ -11521,7 +11579,7 @@ cmd_policy() {
 
 cmd_agent() {
   action="${1:-}"
-  [ "$#" -gt 0 ] || die "agent requires an action: inspect"
+  [ "$#" -gt 0 ] || die "agent requires an action: inspect, rename, or migrate-identities"
   shift
 
   case "$action" in
@@ -11534,6 +11592,12 @@ cmd_agent() {
       [ -f "$runtime" ] || die "Agent identity runtime not found: $runtime"
       command -v ruby >/dev/null 2>&1 || die "ruby is required for Agent reference inspection"
       ruby "$runtime" "$@"
+      ;;
+    rename|migrate-identities)
+      runtime="$(default_core_dir)/runtime/agent_identity_migration.rb"
+      [ -f "$runtime" ] || die "Agent identity migration runtime not found: $runtime"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for Agent identity changes"
+      ruby "$runtime" "$action" "$@"
       ;;
     -h|--help)
       usage_command_help "agent" "${AIOPS_LOCALE:-ko}"
@@ -12556,6 +12620,10 @@ cmd_release_check() {
     "$core/schemas/model_overrides.schema.json" \
     "$core/schemas/model_recommendation.schema.json" \
     "$core/schemas/agent_identity_audit.schema.json" \
+    "$core/schemas/agent_rename_plan.schema.json" \
+    "$core/schemas/agent_rename_receipt.schema.json" \
+    "$core/schemas/agent_identity_migration_plan.schema.json" \
+    "$core/schemas/agent_identity_migration_receipt.schema.json" \
     "$core/schemas/agent_registry.schema.json" \
     "$core/schemas/operating_model.schema.json" \
     "$core/schemas/bootstrap_options.schema.json" \
@@ -12592,6 +12660,7 @@ cmd_release_check() {
     "$core/runtime/task_cleanup.rb" \
     "$core/runtime/model_advisor.rb" \
     "$core/runtime/agent_identity.rb" \
+    "$core/runtime/agent_identity_migration.rb" \
     "$core/runtime/model_catalog.json" \
     "$core/templates/reports/transition_receipt.json" \
     "$core/templates/reports/task_cleanup_receipt.json" \

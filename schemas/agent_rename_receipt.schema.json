@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://ai-agent-ops.local/schemas/agent_rename_receipt.schema.json", "title": "AI Ops Agent Rename Receipt", "type": "object", "additionalProperties": false,
+  "required": ["schema", "generated_at", "applied_at", "operation", "check_only", "target", "actor", "agent_id", "from_name", "to_name", "changes", "writes", "historical_references_preserved", "receipt_path", "result", "actions", "blockers"],
+  "properties": {
+    "schema": { "const": "aiops.agent_rename_receipt.v1" }, "generated_at": { "type": "string", "minLength": 1 }, "applied_at": { "type": "string", "minLength": 1 }, "operation": { "const": "rename" }, "check_only": { "const": false }, "target": { "type": "string", "minLength": 1 }, "actor": { "type": "string", "minLength": 1 }, "agent_id": { "$ref": "#/$defs/agentId" }, "from_name": { "type": "string", "minLength": 1 }, "to_name": { "type": "string", "minLength": 1 }, "changes": { "$ref": "#/$defs/changes" }, "writes": { "$ref": "#/$defs/paths" }, "historical_references_preserved": { "type": "integer", "minimum": 0 }, "receipt_path": { "$ref": "#/$defs/receiptPath" }, "result": { "const": "complete" }, "actions": { "$ref": "#/$defs/resultActions" }, "blockers": { "type": "array", "maxItems": 0 }
+  },
+  "$defs": {
+    "agentId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" }, "paths": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "change": { "type": "object", "additionalProperties": false, "required": ["agent_id", "from_name", "to_name", "aliases_added", "task_ids"], "properties": { "agent_id": { "$ref": "#/$defs/agentId" }, "from_name": { "type": "string", "minLength": 1 }, "to_name": { "type": "string", "minLength": 1 }, "aliases_added": { "$ref": "#/$defs/paths" }, "task_ids": { "$ref": "#/$defs/paths" } } }, "changes": { "type": "array", "items": { "$ref": "#/$defs/change" } },
+    "resultAction": { "type": "object", "additionalProperties": false, "required": ["action", "result", "detail"], "properties": { "action": { "enum": ["update_registry", "update_current_tasks", "validate_identity", "write_receipt"] }, "result": { "enum": ["complete", "skipped"] }, "detail": { "type": "string", "minLength": 1 } } }, "resultActions": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "$ref": "#/$defs/resultAction" } },
+    "receiptPath": { "type": "string", "pattern": "^\\.ai_project/\\.runtime/agent_identity/rename-[0-9]{8}T[0-9]{12}Z-receipt\\.json$" }
+  }
+}
