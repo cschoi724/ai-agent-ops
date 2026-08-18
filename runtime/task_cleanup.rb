@@ -653,12 +653,12 @@ class TaskCleanup
   end
 
   def shared_task_ids
-    Dir.glob(File.join(@target, ".ai_project", "tasks", "**", "*.md")).sort.filter_map do |path|
+    Dir.glob(File.join(@target, ".ai_project", "tasks", "**", "*.md")).sort.map do |path|
       data, = read_front_matter(path)
       next if data["id"] == @task_id
       task_branch = data["branch"]
       data["id"] if task_branch.is_a?(Hash) && task_branch["name"].to_s == @branch
-    end
+    end.compact
   end
 
   def merged_pull_request(expected_head_sha)

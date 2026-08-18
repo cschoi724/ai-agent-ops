@@ -105,7 +105,10 @@ EOF
 git -C "$tmpdir" add .ai .ai_project >/dev/null
 git -C "$tmpdir" commit -m "seed relationship fixture" >/dev/null
 
-"$repo_root/bin/aiops" validate project --target "$tmpdir" --strict >/tmp/aiops-e2e-validate-relationships.out
+if "$repo_root/bin/aiops" validate project --target "$tmpdir" --strict >/tmp/aiops-e2e-validate-relationships.out 2>&1; then
+  printf '%s\n' "strict validation accepted an unregistered current target_agent" >&2
+  exit 1
+fi
 
 grep -q 'validate: relationships' /tmp/aiops-e2e-validate-relationships.out || {
   printf '%s\n' "relationship validation section missing" >&2
@@ -136,7 +139,34 @@ grep -q 'canonical_status_ref does not resolve locally' /tmp/aiops-e2e-validate-
   exit 1
 }
 grep -q 'ok: relationship validation report_only' /tmp/aiops-e2e-validate-relationships.out || {
-  printf '%s\n' "relationship validation should be report_only" >&2
+  printf '%s\n' "non-Agent relationship validation should remain report_only" >&2
+  exit 1
+}
+
+"$repo_root/bin/aiops" validate project --target "$tmpdir" >/dev/null
+
+cat > "$tmpdir/.ai_project/tasks/archive/T-20260805-002.md" <<'EOF'
+---
+schema: aiops.task.v1
+id: T-20260805-002
+title: Historical Agent reference
+status: done
+workflow: feature
+target_agent: Retired Agent
+target_role: Execution Role
+required_capabilities:
+  - implementation
+---
+
+# Historical Agent reference
+EOF
+
+perl -0pi -e 's/target_agent: Missing Agent/target_agent: Development Agent/' \
+  "$tmpdir/.ai_project/tasks/active/T-20260805-001.md"
+
+"$repo_root/bin/aiops" validate project --target "$tmpdir" --strict > /tmp/aiops-e2e-validate-historical-agent.out
+grep -q 'archived target_agent is historical: Retired Agent' /tmp/aiops-e2e-validate-historical-agent.out || {
+  printf '%s\n' "historical Agent reference note missing" >&2
   exit 1
 }
 

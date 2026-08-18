@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/agent_identity_audit.schema.json",
+  "title": "AI Ops Agent Identity Audit",
+  "description": "Current and historical Task references to project Agent names.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "generated_at", "target", "ready", "summary", "agents", "references", "issues", "next"],
+  "properties": {
+    "schema": {"const": "aiops.agent_identity_audit.v1"},
+    "generated_at": {"type": "string", "minLength": 1},
+    "target": {"type": "string", "minLength": 1},
+    "ready": {"type": "boolean"},
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agents", "current_references", "historical_references", "errors", "warnings"],
+      "properties": {
+        "agents": {"type": "integer", "minimum": 0},
+        "current_references": {"type": "integer", "minimum": 0},
+        "historical_references": {"type": "integer", "minimum": 0},
+        "errors": {"type": "integer", "minimum": 0},
+        "warnings": {"type": "integer", "minimum": 0}
+      }
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "roles", "current_reference_count"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "status": {"type": "string"},
+          "roles": {"$ref": "#/$defs/stringList"},
+          "current_reference_count": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["task_id", "path", "scope", "target_agent", "state", "resolved_agent"],
+        "properties": {
+          "task_id": {"type": "string", "minLength": 1},
+          "path": {"type": "string", "minLength": 1},
+          "scope": {"type": "string", "enum": ["active", "backlog", "archive"]},
+          "target_agent": {"type": ["string", "null"]},
+          "state": {"type": "string", "enum": ["resolved", "unresolved", "ambiguous", "unassigned"]},
+          "resolved_agent": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["level", "code", "message", "path", "task_id", "agent"],
+        "properties": {
+          "level": {"type": "string", "enum": ["error", "warning"]},
+          "code": {"type": "string", "minLength": 1},
+          "message": {"type": "string", "minLength": 1},
+          "path": {"type": ["string", "null"]},
+          "task_id": {"type": ["string", "null"]},
+          "agent": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "next": {"$ref": "#/$defs/stringList"}
+  },
+  "$defs": {
+    "stringList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

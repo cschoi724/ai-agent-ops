@@ -26,6 +26,7 @@ Usage:
   aiops policy evaluate [--target DIR|--snapshot FILE] [--strict-level LEVEL] --json
   aiops bootstrap-guide [--target DIR]
   aiops session-guide [--target DIR]
+  aiops agent inspect [--target DIR] [--json] [--locale ko|en]
   aiops role prompt ROLE [--target DIR] [--task TASK_ID] [--adapter codex|claude|generic] [--agent NAME]
   aiops model recommend --role ROLE [--target DIR] [--task TASK_ID] [--provider codex|claude-code|PROVIDER] [--model MODEL] [--effort EFFORT] [--locale ko|en] [--json]
   aiops action plan --role ROLE --task TASK_ID [--target DIR] [--intends LIST] [--paths LIST] --json
@@ -39,6 +40,7 @@ Usage:
   aiops validate model-catalog FILE
   aiops validate model-overrides FILE
   aiops validate model-recommendation FILE
+  aiops validate agent-identity-audit FILE
   aiops validate task-cleanup-plan FILE
   aiops validate task-cleanup-receipt FILE
   aiops validate policy-rules [--core DIR]
@@ -150,6 +152,8 @@ Examples:
   aiops export runtime
   aiops bootstrap-guide
   aiops session-guide
+  aiops agent inspect
+  aiops agent inspect --json
   aiops role prompt execution --task T-YYYYMMDD-001 --adapter codex
   aiops model recommend --role execution --task T-YYYYMMDD-001
   aiops model recommend --role verification --task T-YYYYMMDD-001 --provider claude-code --json
@@ -255,6 +259,7 @@ These commands expose machine-readable contracts or low-level workflow controls.
   aiops policy evaluate --json
   aiops action plan --role ROLE --task TASK_ID --json
   aiops model recommend --role ROLE --task TASK_ID --json
+  aiops agent inspect --json
   aiops task close TASK_ID --check --json
   aiops validate project-dashboard FILE
   aiops validate project-snapshot FILE
@@ -279,6 +284,7 @@ Agent / 자동화용 명령
   aiops policy evaluate --json
   aiops action plan --role ROLE --task TASK_ID --json
   aiops model recommend --role ROLE --task TASK_ID --json
+  aiops agent inspect --json
   aiops task close TASK_ID --check --json
   aiops validate project-dashboard FILE
   aiops validate project-snapshot FILE
@@ -637,6 +643,38 @@ aiops session-guide
   aiops work        현재 일감과 담당 확인
 EOF
       ;;
+    agent:en|agent-inspect:en)
+      cat <<'EOF'
+aiops agent inspect
+
+Checks current and historical Task references against the Agent Registry before lifecycle routing fails.
+
+Examples:
+  aiops agent inspect
+  aiops agent inspect --target ./CookLog
+  aiops agent inspect --json
+
+Related:
+  aiops agents             Agent and role dashboard
+  aiops validate --strict  Strict project validation
+EOF
+      ;;
+    agent:*|agent-inspect:*)
+      cat <<'EOF'
+aiops agent inspect
+
+상태 전이 전에 현재·과거 Task의 Agent 참조가 Agent Registry와 일치하는지 점검합니다.
+
+사용 예:
+  aiops agent inspect
+  aiops agent inspect --target ./CookLog
+  aiops agent inspect --json
+
+비슷한 명령:
+  aiops agents             Agent와 Role 현황
+  aiops validate --strict  프로젝트 엄격 검증
+EOF
+      ;;
     *)
       die "unknown help topic: $topic"
       ;;
@@ -671,7 +709,7 @@ cmd_help() {
     quick) usage_quick "$locale" ;;
     all) usage_all ;;
     ai|machine) usage_machine "$locale" ;;
-    status|work|risks|agents|release|dashboard|doctor|sync-status|sync|bootstrap-guide|session-guide|guide)
+    status|work|risks|agents|release|dashboard|doctor|sync-status|sync|bootstrap-guide|session-guide|guide|agent|agent-inspect)
       usage_command_help "$topic" "$locale"
       ;;
     *)
@@ -1192,12 +1230,28 @@ validate_task_file() {
 
 validate_project_relationships() {
   target="$1"
+  strict="${2:-no}"
   project_dir="$target/.ai_project"
+  identity_runtime="$(default_core_dir)/runtime/agent_identity.rb"
+  identity_failed=0
 
   info ""
   info "validate: relationships"
 
   if command -v ruby >/dev/null 2>&1; then
+    if [ -f "$identity_runtime" ]; then
+      if [ "$strict" = "yes" ]; then
+        if ! ruby "$identity_runtime" --target "$target" --validation --strict; then
+          identity_failed=1
+        fi
+      elif ! ruby "$identity_runtime" --target "$target" --validation; then
+        identity_failed=1
+      fi
+    else
+      info "warn: Agent identity runtime missing: $identity_runtime"
+      identity_failed=1
+    fi
+
     ruby -ryaml -rdate -rfind -ropen3 -e '
       target = ARGV[0]
       project_dir = File.join(target, ".ai_project")
@@ -1259,7 +1313,6 @@ validate_project_relationships() {
       operating = front_matter(File.join(project_dir, "operating_model.md"))
       registry = front_matter(File.join(project_dir, "agent_registry.md"))
       agents = registry["agents"].is_a?(Array) ? registry["agents"] : []
-      agent_names = agents.map { |agent| agent.is_a?(Hash) ? agent["agent"].to_s : nil }.compact.reject(&:empty?)
       agent_roles = agents.flat_map { |agent| agent.is_a?(Hash) ? list(agent["roles"]) : [] }.uniq
       declared_roles = list(operating["active_roles"]) + list(operating["deferred_roles"]) + agent_roles
       declared_roles = declared_roles.uniq
@@ -1314,15 +1367,10 @@ validate_project_relationships() {
       tasks.each do |task|
         label = task["relative"]
         role = task["target_role"]
-        agent = task["target_agent"]
         workflow = task["workflow"]
 
         if !blankish?(role) && !declared_roles.include?(role.to_s)
           warnings += warn("#{label} target_role not declared in operating_model or agent_registry: #{role}")
-        end
-
-        if !blankish?(agent) && !agent_names.include?(agent.to_s)
-          warnings += warn("#{label} target_agent not registered: #{agent}")
         end
 
         if !blankish?(workflow) && !workflow_names.include?(workflow.to_s)
@@ -1362,6 +1410,8 @@ validate_project_relationships() {
   else
     info "note: ruby not available; relationship validation skipped"
   fi
+
+  [ "$identity_failed" -eq 0 ]
 }
 
 validate_project_status_requirements() {
@@ -1631,7 +1681,7 @@ validate_project() {
     done || failed=1
   fi
 
-  validate_project_relationships "$target"
+  validate_project_relationships "$target" "$strict" || failed=1
   validate_project_status_requirements "$target"
 
   [ "$failed" -eq 0 ] || return 1
@@ -4761,11 +4811,11 @@ cmd_project() {
           groups = items.group_by { |task| task_area(task) }
           active_groups = active_items.group_by { |task| task_area(task) }
           by_id = items.each_with_object({}) { |task, out| out[task["id"].to_s] = task }
-          edges = dashboard_dependency_edges(items).filter_map do |from, to|
+          edges = dashboard_dependency_edges(items).map do |from, to|
             from_area = task_area(by_id[from] || { "id" => from })
             to_area = task_area(by_id[to] || { "id" => to })
             [from_area, to_area] unless from_area == to_area
-          end.uniq
+          end.compact.uniq
 
           puts "flowchart LR"
           groups.keys.sort.each do |area|
@@ -5037,11 +5087,11 @@ cmd_project() {
           groups = items.group_by { |task| task_area(task) }
           active_groups = active_items.group_by { |task| task_area(task) }
           by_id = items.each_with_object({}) { |task, out| out[task["id"].to_s] = task }
-          edges = dashboard_dependency_edges(items).filter_map do |from, to|
+          edges = dashboard_dependency_edges(items).map do |from, to|
             from_area = task_area(by_id[from] || { "id" => from })
             to_area = task_area(by_id[to] || { "id" => to })
             { "from" => from_area, "to" => to_area, "type" => "area_dependency" } unless from_area == to_area
-          end.uniq
+          end.compact.uniq
 
           {
             "type" => "summary",
@@ -9165,7 +9215,7 @@ cmd_validate() {
       ' "$catalog"
       info "ok: workflow catalog"
       ;;
-    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets|dashboard-locale|transition-receipt|task-transition-plan|task-risk-profile|task-cleanup-plan|task-cleanup-receipt|model-catalog|model-overrides|model-recommendation)
+    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets|dashboard-locale|transition-receipt|task-transition-plan|task-risk-profile|task-cleanup-plan|task-cleanup-receipt|model-catalog|model-overrides|model-recommendation|agent-identity-audit)
       file=""
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -9239,6 +9289,10 @@ cmd_validate() {
         model-recommendation)
           schema="$core/schemas/model_recommendation.schema.json"
           label="model recommendation"
+          ;;
+        agent-identity-audit)
+          schema="$core/schemas/agent_identity_audit.schema.json"
+          label="Agent identity audit"
           ;;
       esac
       [ -f "$schema" ] || die "$label schema not found: $schema"
@@ -9408,8 +9462,9 @@ cmd_validate() {
           subject = ARGV[1]
           actions = data["actions"]
           abort("schema_error: $.actions must be an array") unless actions.is_a?(Array)
-          names = actions.filter_map { |action| action.is_a?(Hash) ? action["action"] : nil }
-          duplicates = names.tally.select { |_name, count| count > 1 }.keys.sort
+          names = actions.map { |action| action.is_a?(Hash) ? action["action"] : nil }.compact
+          counts = names.each_with_object(Hash.new(0)) { |name, out| out[name] += 1 }
+          duplicates = counts.select { |_name, count| count > 1 }.keys.sort
           abort("schema_error: $.actions contains duplicate actions: #{duplicates.join(", ")}") unless duplicates.empty?
 
           if subject == "task-cleanup-plan"
@@ -9529,6 +9584,55 @@ cmd_validate() {
             abort("schema_error: launch command for #{purpose} contains control characters") if command.any? { |arg| arg.match?(/[\x00-\x1f\x7f]/) }
           end
           puts "ok: model recommendation semantics"
+        ' "$file"
+      fi
+      if [ "$subject" = "agent-identity-audit" ]; then
+        ruby -rjson -e '
+          data = JSON.parse(File.read(ARGV[0]))
+          issues = data.fetch("issues")
+          references = data.fetch("references")
+          agents = data.fetch("agents")
+          summary = data.fetch("summary")
+          errors = issues.count { |issue| issue.fetch("level") == "error" }
+          warnings = issues.count { |issue| issue.fetch("level") == "warning" }
+          abort("schema_error: $.ready must match Agent identity errors") unless data.fetch("ready") == errors.zero?
+          abort("schema_error: $.summary.errors does not match issues") unless summary.fetch("errors") == errors
+          abort("schema_error: $.summary.warnings does not match issues") unless summary.fetch("warnings") == warnings
+          abort("schema_error: $.summary.agents does not match agents") unless summary.fetch("agents") == agents.length
+
+          current = references.count { |reference| %w[active backlog].include?(reference.fetch("scope")) && reference["target_agent"] }
+          historical = references.count { |reference| reference.fetch("scope") == "archive" && reference["target_agent"] }
+          abort("schema_error: $.summary.current_references does not match references") unless summary.fetch("current_references") == current
+          abort("schema_error: $.summary.historical_references does not match references") unless summary.fetch("historical_references") == historical
+
+          references.each do |reference|
+            state = reference.fetch("state")
+            target = reference["target_agent"]
+            resolved = reference["resolved_agent"]
+            if state == "resolved"
+              abort("schema_error: resolved Agent reference requires target and resolved_agent") if target.to_s.empty? || resolved.to_s.empty?
+            elsif state == "unassigned"
+              abort("schema_error: unassigned Agent reference must not contain names") if target || resolved
+            elsif resolved
+              abort("schema_error: unresolved or ambiguous Agent reference must not contain resolved_agent")
+            end
+
+            next if %w[resolved unassigned].include?(state)
+            historical_reference = reference.fetch("scope") == "archive"
+            expected_level = historical_reference ? "warning" : "error"
+            matched = issues.any? do |issue|
+              issue.fetch("level") == expected_level && issue["task_id"] == reference.fetch("task_id") && issue["agent"] == target
+            end
+            abort("schema_error: Agent reference issue missing for #{reference.fetch("task_id")}") unless matched
+          end
+
+          agents.each do |agent|
+            expected = references.count do |reference|
+              %w[active backlog].include?(reference.fetch("scope")) && reference["resolved_agent"] == agent.fetch("name")
+            end
+            abort("schema_error: Agent current_reference_count mismatch for #{agent.fetch("name")}") unless agent.fetch("current_reference_count") == expected
+          end
+          puts "ok: Agent identity audit semantics"
         ' "$file"
       fi
       info "ok: $label"
@@ -11294,6 +11398,31 @@ cmd_policy() {
   esac
 }
 
+cmd_agent() {
+  action="${1:-}"
+  [ "$#" -gt 0 ] || die "agent requires an action: inspect"
+  shift
+
+  case "$action" in
+    inspect)
+      if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+        usage_command_help "agent" "${AIOPS_LOCALE:-ko}"
+        exit 0
+      fi
+      runtime="$(default_core_dir)/runtime/agent_identity.rb"
+      [ -f "$runtime" ] || die "Agent identity runtime not found: $runtime"
+      command -v ruby >/dev/null 2>&1 || die "ruby is required for Agent reference inspection"
+      ruby "$runtime" "$@"
+      ;;
+    -h|--help)
+      usage_command_help "agent" "${AIOPS_LOCALE:-ko}"
+      ;;
+    *)
+      die "unknown agent action: $action"
+      ;;
+  esac
+}
+
 cmd_model() {
   action="${1:-}"
   [ "$#" -gt 0 ] || die "model requires an action: recommend"
@@ -12274,6 +12403,7 @@ cmd_release_check() {
     "$core/schemas/model_catalog.schema.json" \
     "$core/schemas/model_overrides.schema.json" \
     "$core/schemas/model_recommendation.schema.json" \
+    "$core/schemas/agent_identity_audit.schema.json" \
     "$core/schemas/agent_registry.schema.json" \
     "$core/schemas/operating_model.schema.json" \
     "$core/schemas/bootstrap_options.schema.json" \
@@ -12309,6 +12439,7 @@ cmd_release_check() {
     "$core/runtime/task_lifecycle.rb" \
     "$core/runtime/task_cleanup.rb" \
     "$core/runtime/model_advisor.rb" \
+    "$core/runtime/agent_identity.rb" \
     "$core/runtime/model_catalog.json" \
     "$core/templates/reports/transition_receipt.json" \
     "$core/templates/reports/task_cleanup_receipt.json" \
@@ -12364,36 +12495,36 @@ cmd_release_check() {
   rm -rf "$release_tmp"
   if (
     set -eu
-    mkdir -p "$release_tmp"
-    "$core/bin/aiops" seed --target "$release_tmp" --adapter both --mode link --core "$core" >/dev/null
-    cp -R "$core/templates/ai_project/fast_track" "$release_tmp/.ai_project"
+    mkdir -p "$release_tmp" || exit 1
+    "$core/bin/aiops" seed --target "$release_tmp" --adapter both --mode link --core "$core" >/dev/null || exit 1
+    cp -R "$core/templates/ai_project/fast_track" "$release_tmp/.ai_project" || exit 1
     mkdir -p \
       "$release_tmp/.ai_project/tasks/active" \
       "$release_tmp/.ai_project/tasks/backlog" \
       "$release_tmp/.ai_project/tasks/archive" \
-      "$release_tmp/.ai_project/handoffs"
-    "$core/bin/aiops" knowledge init --target "$release_tmp" --mode minimal >/dev/null
-    "$core/bin/aiops" doctor --target "$release_tmp" --strict >/dev/null
-    "$core/bin/aiops" validate --target "$release_tmp" --strict >/dev/null
-    "$core/bin/aiops" migrate --target "$release_tmp" --plan >/dev/null
-    "$core/bin/aiops" knowledge lint --target "$release_tmp" >/dev/null
-    "$core/bin/aiops" export runtime --target "$release_tmp" >/dev/null
-    "$core/bin/aiops" project snapshot --target "$release_tmp" --json > "$release_tmp/project_snapshot.json"
-    "$core/bin/aiops" validate project-snapshot "$release_tmp/project_snapshot.json" >/dev/null
-    "$core/bin/aiops" project dashboard --target "$release_tmp" --json > "$release_tmp/project_dashboard.json"
-    "$core/bin/aiops" validate project-dashboard "$release_tmp/project_dashboard.json" >/dev/null
-    risk_task_id="$(ruby -rjson -e 'data = JSON.parse(File.read(ARGV[0])); task = data.dig("tasks", "items")&.first; puts task && task["id"]' "$release_tmp/project_snapshot.json")"
+      "$release_tmp/.ai_project/handoffs" || exit 1
+    "$core/bin/aiops" knowledge init --target "$release_tmp" --mode minimal >/dev/null || exit 1
+    "$core/bin/aiops" doctor --target "$release_tmp" --strict >/dev/null || exit 1
+    "$core/bin/aiops" validate --target "$release_tmp" --strict >/dev/null || exit 1
+    "$core/bin/aiops" migrate --target "$release_tmp" --plan >/dev/null || exit 1
+    "$core/bin/aiops" knowledge lint --target "$release_tmp" >/dev/null || exit 1
+    "$core/bin/aiops" export runtime --target "$release_tmp" >/dev/null || exit 1
+    "$core/bin/aiops" project snapshot --target "$release_tmp" --json > "$release_tmp/project_snapshot.json" || exit 1
+    "$core/bin/aiops" validate project-snapshot "$release_tmp/project_snapshot.json" >/dev/null || exit 1
+    "$core/bin/aiops" project dashboard --target "$release_tmp" --json > "$release_tmp/project_dashboard.json" || exit 1
+    "$core/bin/aiops" validate project-dashboard "$release_tmp/project_dashboard.json" >/dev/null || exit 1
+    risk_task_id="$(ruby -rjson -e 'data = JSON.parse(File.read(ARGV[0])); task = data.dig("tasks", "items")&.first; puts task && task["id"]' "$release_tmp/project_snapshot.json")" || exit 1
     if [ -n "$risk_task_id" ]; then
-      "$core/bin/aiops" task profile "$risk_task_id" --target "$release_tmp" --json > "$release_tmp/task_risk_profile.json"
-      "$core/bin/aiops" validate task-risk-profile "$release_tmp/task_risk_profile.json" >/dev/null
+      "$core/bin/aiops" task profile "$risk_task_id" --target "$release_tmp" --json > "$release_tmp/task_risk_profile.json" || exit 1
+      "$core/bin/aiops" validate task-risk-profile "$release_tmp/task_risk_profile.json" >/dev/null || exit 1
     fi
-    "$core/bin/aiops" validate model-catalog "$core/runtime/model_catalog.json" >/dev/null
-    printf '\n' > "$release_tmp/empty-codex-config.toml"
-    "$core/bin/aiops" model recommend --target "$release_tmp" --role "Lead Role" --provider codex --codex-config "$release_tmp/empty-codex-config.toml" --json > "$release_tmp/model_recommendation.json"
-    "$core/bin/aiops" validate model-recommendation "$release_tmp/model_recommendation.json" >/dev/null
-    "$core/bin/aiops" policy evaluate --target "$release_tmp" --json > "$release_tmp/policy_evaluation.json"
-    "$core/bin/aiops" validate policy-evaluation "$release_tmp/policy_evaluation.json" >/dev/null
-    printf '{}\n' > "$release_tmp/invalid_project_snapshot.json"
+    "$core/bin/aiops" validate model-catalog "$core/runtime/model_catalog.json" >/dev/null || exit 1
+    printf '\n' > "$release_tmp/empty-codex-config.toml" || exit 1
+    "$core/bin/aiops" model recommend --target "$release_tmp" --role "Lead Role" --provider codex --codex-config "$release_tmp/empty-codex-config.toml" --json > "$release_tmp/model_recommendation.json" || exit 1
+    "$core/bin/aiops" validate model-recommendation "$release_tmp/model_recommendation.json" >/dev/null || exit 1
+    "$core/bin/aiops" policy evaluate --target "$release_tmp" --json > "$release_tmp/policy_evaluation.json" || exit 1
+    "$core/bin/aiops" validate policy-evaluation "$release_tmp/policy_evaluation.json" >/dev/null || exit 1
+    printf '{}\n' > "$release_tmp/invalid_project_snapshot.json" || exit 1
     if "$core/bin/aiops" policy evaluate --snapshot "$release_tmp/invalid_project_snapshot.json" --json >/dev/null 2>&1; then
       exit 1
     fi
@@ -12765,6 +12896,7 @@ main() {
     project) cmd_project "$@" ;;
     bootstrap-guide) cmd_bootstrap_guide "$@" ;;
     session-guide) cmd_session_guide "$@" ;;
+    agent) cmd_agent "$@" ;;
     role) cmd_role "$@" ;;
     model) cmd_model "$@" ;;
     policy) cmd_policy "$@" ;;

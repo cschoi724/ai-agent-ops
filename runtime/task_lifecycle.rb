@@ -11,6 +11,7 @@ require "pathname"
 require "tempfile"
 require "tmpdir"
 require "yaml"
+require_relative "agent_identity"
 require_relative "task_risk_profile"
 
 class LifecycleError < StandardError; end
@@ -145,6 +146,14 @@ class TaskLifecycle
     raise LifecycleError, ".ai_project/agent_registry.md is required for task #{@command}" unless File.file?(registry_path)
     registry, = read_front_matter(registry_path)
     @agents = Array(registry["agents"]).select { |entry| entry.is_a?(Hash) }
+    @agent_identity = AgentIdentity::Registry.new(@agents)
+    unless @agent_identity.unnamed_agents.empty?
+      raise LifecycleError, "agent registry contains an Agent without a name"
+    end
+    duplicates = @agent_identity.duplicate_names
+    unless duplicates.empty?
+      raise LifecycleError, "agent registry has duplicate Agent name: #{duplicates.join(', ')}"
+    end
 
     catalog_path = if File.file?(File.join(@target, ".ai", "runtime", "workflows.json"))
                      File.join(@target, ".ai", "runtime", "workflows.json")
@@ -797,11 +806,14 @@ class TaskLifecycle
   end
 
   def find_agent(name)
-    @agents.find { |agent| agent_name(agent) == name }
+    resolution = @agent_identity.resolve(name)
+    raise LifecycleError, "agent reference is ambiguous: #{name}" if resolution.state == "ambiguous"
+
+    resolution.agent
   end
 
   def agent_name(agent)
-    (agent["agent"] || agent["id"]).to_s
+    @agent_identity.name(agent)
   end
 
   def role_slug(role)
