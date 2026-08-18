@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+## 0.15.1 - 2026-08-18
+
 ### Fixed
 
 - Restore `aiops bootstrap-guide` to the default help as the first-time project entry point, and provide matching localized topic and command help.
