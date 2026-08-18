@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+## 0.16.0 - 2026-08-18
+
 ### Added
 
 - Add `aiops agent inspect` and `aiops.agent_identity_audit.v1` to report current and historical Task references to Agent Registry names before lifecycle routing.
