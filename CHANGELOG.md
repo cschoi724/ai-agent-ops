@@ -25,6 +25,7 @@
 
 - Keep Agent reference inspection, lifecycle routing, dashboard helpers, and cleanup validation compatible with the supported Ruby 2.6 runtime.
 - Make strict release checks propagate seeded-project command failures instead of reporting a false successful gate.
+- Validate optional Agent IDs in handoff metadata and reject Agent identity audits whose resolved name and ID do not identify the same Registry record.
 
 ## 0.15.1 - 2026-08-18
 

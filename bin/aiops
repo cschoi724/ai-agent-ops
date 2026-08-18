@@ -1223,6 +1223,13 @@ validate_front_matter() {
         say("schema_error: invalid current_status #{data["current_status"]}")
         failed = true
       end
+      %w[from_agent_id to_agent_id].each do |field|
+        next unless data.key?(field) && !data[field].nil?
+        unless data[field].is_a?(String) && data[field].match?(agent_id_pattern)
+          say("schema_error: invalid #{field} #{data[field]}")
+          failed = true
+        end
+      end
       %w[from_role to_role].each do |field|
         next unless data[field]
         next if roles.include?(data[field]) && data[field] != "any"
@@ -9684,9 +9691,21 @@ cmd_validate() {
             resolved = reference["resolved_agent"]
             resolved_id = reference["resolved_agent_id"]
             migration = reference.fetch("migration_required")
+            unless resolved.to_s.empty?
+              matching_agents = agents.select { |agent| agent.fetch("name") == resolved }
+              abort("schema_error: resolved Agent name #{resolved} must identify exactly one Agent record") unless matching_agents.length == 1
+              expected_id = matching_agents.first["id"]
+              abort("schema_error: resolved_agent_id does not match resolved_agent #{resolved}") unless resolved_id == expected_id
+            end
+            unless resolved_id.to_s.empty?
+              matching_ids = agents.select { |agent| agent["id"] == resolved_id }
+              abort("schema_error: resolved Agent ID #{resolved_id} must identify exactly one Agent record") unless matching_ids.length == 1
+              abort("schema_error: resolved_agent does not match resolved_agent_id #{resolved_id}") unless matching_ids.first.fetch("name") == resolved
+            end
             if state == "resolved"
               abort("schema_error: resolved Agent reference requires an ID or name and resolved_agent") if (target.to_s.empty? && target_id.to_s.empty?) || resolved.to_s.empty?
               abort("schema_error: resolved Agent reference must not require migration") if migration
+              abort("schema_error: target_agent_id does not match resolved_agent_id") if !target_id.to_s.empty? && target_id != resolved_id
             elsif state == "legacy"
               abort("schema_error: legacy Agent reference requires a name without target_agent_id") if target.to_s.empty? || !target_id.to_s.empty?
               abort("schema_error: legacy Agent reference requires resolved_agent") if resolved.to_s.empty?
@@ -9696,6 +9715,7 @@ cmd_validate() {
             elsif state == "alias"
               abort("schema_error: alias Agent reference requires target and resolved_agent") if target.to_s.empty? || resolved.to_s.empty?
               abort("schema_error: alias Agent reference must match by ID or alias") unless %w[id alias].include?(reference["matched_by"])
+              abort("schema_error: alias target_agent_id does not match resolved_agent_id") if !target_id.to_s.empty? && target_id != resolved_id
               current_scope = %w[active backlog].include?(reference.fetch("scope"))
               abort("schema_error: current alias reference must require migration") if current_scope && !migration
             elsif state == "mismatch"

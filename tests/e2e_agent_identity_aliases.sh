@@ -85,6 +85,22 @@ ruby -rjson -e '
   abort "current display name mismatch" unless reference["resolved_agent"] == "Builder Agent"
 ' "$tmpdir/alias.json"
 
+ruby -rjson -e '
+  source = JSON.parse(File.read(ARGV[0]))
+  wrong_id = Marshal.load(Marshal.dump(source))
+  wrong_id.fetch("references").first["resolved_agent_id"] = "verifier-agent"
+  File.write(File.join(ARGV[1], "audit-wrong-resolved-id.json"), JSON.pretty_generate(wrong_id))
+  wrong_name = Marshal.load(Marshal.dump(source))
+  wrong_name.fetch("references").first["resolved_agent"] = "Verifier Agent"
+  File.write(File.join(ARGV[1], "audit-wrong-resolved-name.json"), JSON.pretty_generate(wrong_name))
+' "$tmpdir/alias.json" "$tmpdir"
+for invalid_audit in audit-wrong-resolved-id audit-wrong-resolved-name; do
+  if "$repo_root/bin/aiops" validate agent-identity-audit "$tmpdir/$invalid_audit.json" >/dev/null 2>&1; then
+    printf '%s\n' "Agent audit accepted inconsistent resolved identity: $invalid_audit" >&2
+    exit 1
+  fi
+done
+
 "$repo_root/bin/aiops" project snapshot --target "$project" --json > "$tmpdir/snapshot.json"
 "$repo_root/bin/aiops" validate project-snapshot "$tmpdir/snapshot.json" >/dev/null
 ruby -rjson -e '
