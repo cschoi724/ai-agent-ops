@@ -1,6 +1,6 @@
 # Agent Identity and Reference Integrity Improvement Plan
 
-상태: 1차 완료 / 2차 구현 완료·독립 검증 대기 / 3~4차 미착수
+상태: 1~2차 완료 / 3~4차 미착수
 대상: Agent Registry, Task ownership, lifecycle routing, migration, validation
 작성일: 2026-08-18
 
@@ -301,7 +301,7 @@ rename과 migration은 다음 순서로 처리한다.
 
 ### 1차: 참조 감사와 strict validation
 
-진행 상태: 구현 완료, 독립 검증 대기
+진행 상태: 구현 및 독립 검증 완료
 
 구현:
 
