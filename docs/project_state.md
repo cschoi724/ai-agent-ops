@@ -116,6 +116,15 @@ aiops help all
 
 기본 `aiops help`는 `project snapshot --json` 같은 Agent/자동화용 명령을 숨긴다. 기계 계약 명령은 `aiops help ai`, 전체 명령 목록은 `aiops help all`에서 확인한다. 도움말 문구는 기본 한국어이며 `AIOPS_LOCALE=en` 또는 `--locale en`으로 영어 표시를 선택할 수 있다.
 
+Agent Registry의 이름을 바꾸기 전후에는 현재 Task 참조를 별도로 점검할 수 있다.
+
+```sh
+aiops agent inspect
+aiops agent inspect --json
+```
+
+active/backlog Task의 `target_agent`가 Registry에 없거나 같은 이름이 중복 등록되면 `aiops validate project --strict`와 자동 lifecycle 전이가 차단된다. archive Task의 과거 Agent 이름은 당시 감사 기록이므로 warning으로 표시하되 현재 라우팅을 차단하지 않는다.
+
 Main Dashboard 표시 항목은 프로젝트 진행률, readiness, canonical status sync, 운영 설정, Agent/Role 요약, blocker/warning, next command다.
 
 Work Dashboard 표시 항목은 활성 일감, status, workflow, target role, target agent, lock, 다음 Role Session 후보, detail 레벨의 allowed_paths/source_of_truth다.

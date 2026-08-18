@@ -10,6 +10,15 @@
 
 ## Unreleased
 
+### Added
+
+- Add `aiops agent inspect` and `aiops.agent_identity_audit.v1` to report current and historical Task references to Agent Registry names before lifecycle routing.
+
+### Changed
+
+- Make strict project validation fail for unregistered or ambiguous active/backlog `target_agent` references while preserving archived Agent names as historical warnings.
+- Share Agent name resolution and duplicate-name rejection between project validation and automated Task lifecycle routing.
+
 ## 0.15.1 - 2026-08-18
 
 ### Fixed

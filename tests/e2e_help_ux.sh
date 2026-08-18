@@ -110,6 +110,17 @@ cmp -s /tmp/aiops-e2e-bootstrap-help-option-en.out /tmp/aiops-e2e-help-bootstrap
   exit 1
 }
 
+"$repo_root/bin/aiops" help agent >/tmp/aiops-e2e-help-agent.out
+"$repo_root/bin/aiops" agent inspect --help >/tmp/aiops-e2e-agent-help-option.out
+cmp -s /tmp/aiops-e2e-agent-help-option.out /tmp/aiops-e2e-help-agent.out || {
+  printf '%s\n' "agent inspect --help diverges from help agent" >&2
+  exit 1
+}
+grep -q 'aiops agent inspect --json' /tmp/aiops-e2e-help-agent.out || {
+  printf '%s\n' "Agent inspection help JSON example missing" >&2
+  exit 1
+}
+
 "$repo_root/bin/aiops" help dashboard >/tmp/aiops-e2e-help-dashboard.out
 grep -q '^aiops project dashboard$' /tmp/aiops-e2e-help-dashboard.out || {
   printf '%s\n' "dashboard help title missing" >&2
