@@ -149,6 +149,7 @@ AI Ops는 seed 시 Role별 subagent와 skill을 함께 설치한다. Claude는 `
 | `aiops-status` | skill | 프로젝트 상태 점검과 사람용 요약 |
 | `aiops-next` | skill | 다음 일감, 담당, 진행 가능 여부 안내 |
 | `aiops-handoff` | skill | 상태 전이 준비 확인과 인계 상황 설명 |
+| `aiops-run` | skill | Operator Role이 있는 Agent가 한 세션에서 작업 범위 정리부터 완료까지 진행 (`aiops orchestrate plan` 사용) |
 
 Role subagent를 호출해도 Task의 `target_agent`, `target_role`, workflow 규칙은 그대로 적용된다. Execution과 Verification은 서로 다른 Agent여야 한다.
 

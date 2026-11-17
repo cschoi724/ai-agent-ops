@@ -48,6 +48,8 @@ AI Ops bootstrap 시작해줘.
 
 처음 사용한다면 전체 절차는 [QUICKSTART.md](QUICKSTART.md)를 따라가면 된다.
 
+Agent에게 Operator Role을 부여하면 한 세션에서 작업 범위 정리부터 완료까지 진행할 수 있다. 사용자는 작업 범위와 일감만 승인하고, 구현·검증·재작업(기본 1회)·완료는 Role subagent가 기존 워크플로대로 처리한다. Claude Code와 Codex 모두 `aiops-run` skill로 시작한다.
+
 운영 중에는 사용자가 모든 CLI 명령을 외울 필요가 없다. 보통은 Agent에게 자연어로 요청한다.
 
 ```text
@@ -85,6 +87,7 @@ YourProject/
 | `aiops release` | 사용자용 release readiness 요약 |
 | `aiops seed --adapter both` | 프로젝트에 AI Ops core, Agent adapter, Role subagent, skill, `.ai/` 보호 hook 연결 |
 | `aiops guard verify-core` | `.ai/` core 무결성 확인 |
+| `aiops orchestrate plan TASK_ID --operator AGENT` | Operator Role 세션의 다음 단계, 담당 subagent, 실행 명령, Owner 승인 필요 여부 계산 (읽기 전용) |
 | `aiops doctor --strict` | 설치와 운영 구성을 엄격 점검 |
 | `aiops project snapshot --json` | Agent가 먼저 읽는 프로젝트 상태 계약과 통제 신호 출력 |
 | `aiops project inspect` | 현재 프로젝트 운영 상태를 읽기 전용으로 요약 |

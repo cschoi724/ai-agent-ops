@@ -30,6 +30,7 @@ Usage:
   aiops agent rename AGENT_ID --to NAME [--target DIR] [--check|--apply] [--locale ko|en] [--json]
   aiops agent migrate-identities [--target DIR] [--map NAME=ID] [--check|--apply] [--locale ko|en] [--json]
   aiops role prompt ROLE [--target DIR] [--task TASK_ID] [--adapter codex|claude|generic] [--agent NAME]
+  aiops orchestrate plan TASK_ID [--target DIR] [--operator AGENT] [--json]
   aiops guard pre-tool-use [--provider claude-code|codex] [--target DIR] < HOOK_PAYLOAD_JSON
   aiops guard check-path PATH... [--target DIR]
   aiops guard staged [--target DIR]
@@ -43,6 +44,7 @@ Usage:
   aiops validate handoff FILE [--strict]
   aiops validate transition-receipt FILE
   aiops validate task-transition-plan FILE
+  aiops validate orchestration-plan FILE
   aiops validate task-risk-profile FILE
   aiops validate model-catalog FILE
   aiops validate model-overrides FILE
@@ -64,8 +66,8 @@ Usage:
   aiops task create --title TITLE [--target DIR] [--workflow NAME] [--profile light|standard|strict] [--role ROLE] [--capability NAME]
   aiops task status TASK_ID [--target DIR] [--source local|canonical]
   aiops task profile TASK_ID [--target DIR] [--profile light|standard|strict] [--json]
-  aiops task advance TASK_ID [--target DIR] [--by AGENT] [--role ROLE] [--next-agent AGENT] [--evidence PATH] [--check] [--json]
-  aiops task accept TASK_ID [--target DIR] [--by AGENT] [--role ROLE] [--check] [--json]
+  aiops task advance TASK_ID [--target DIR] [--by AGENT] [--role ROLE] [--next-agent AGENT] [--evidence PATH] [--dispatched-by AGENT] [--owner-approved] [--check] [--json]
+  aiops task accept TASK_ID [--target DIR] [--by AGENT] [--role ROLE] [--dispatched-by AGENT] [--check] [--json]
   aiops task close TASK_ID [--target DIR] [--by ACTOR] [--check|--apply] [--delete-remote] [--json]
   aiops task transition TASK_ID --to STATUS --role ROLE [--target DIR] [--by AGENT] [--reason TEXT] [--blocker TEXT] [--next-decision TEXT]
   aiops task lock TASK_ID --by AGENT [--target DIR] [--role ROLE] [--session ID]
@@ -9393,7 +9395,7 @@ cmd_validate() {
       ' "$catalog"
       info "ok: workflow catalog"
       ;;
-    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets|dashboard-locale|transition-receipt|task-transition-plan|task-risk-profile|task-cleanup-plan|task-cleanup-receipt|model-catalog|model-overrides|model-recommendation|agent-identity-audit|agent-rename-plan|agent-rename-receipt|agent-identity-migration-plan|agent-identity-migration-receipt)
+    project-snapshot|project-dashboard|policy-evaluation|dashboard-presets|dashboard-locale|transition-receipt|task-transition-plan|orchestration-plan|task-risk-profile|task-cleanup-plan|task-cleanup-receipt|model-catalog|model-overrides|model-recommendation|agent-identity-audit|agent-rename-plan|agent-rename-receipt|agent-identity-migration-plan|agent-identity-migration-receipt)
       file=""
       while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -9443,6 +9445,10 @@ cmd_validate() {
         task-transition-plan)
           schema="$core/schemas/task_transition_plan.schema.json"
           label="task transition plan"
+          ;;
+        orchestration-plan)
+          schema="$core/schemas/orchestration_plan.schema.json"
+          label="orchestration plan"
           ;;
         task-risk-profile)
           schema="$core/schemas/task_risk_profile.schema.json"
@@ -10432,6 +10438,14 @@ EOF
           fi
           ;;
       esac
+
+      # A Role change hands the Task to a different Role; the previous Role's Agent is no longer the owner.
+      previous_target_role="$(task_field_value "$task_file" "target_role")"
+      if [ "$to_status" != "in_progress" ] && [ "${next_role:-}" != "$previous_target_role" ]; then
+        task_update_front_matter "$transition_tmp" \
+          "target_agent=__AIOPS_NULL__" \
+          "target_agent_id=__AIOPS_NULL__"
+      fi
 
       task_append_event "$transition_tmp" "transition: $from_status -> $to_status" "$actor_label" "$reason"
       if ! validate_front_matter task "$transition_tmp" yes >/dev/null; then
@@ -11698,6 +11712,13 @@ cmd_agent() {
   esac
 }
 
+cmd_orchestrate() {
+  command -v ruby >/dev/null 2>&1 || die "ruby is required for aiops orchestrate"
+  orchestrate_runtime="$(default_core_dir)/runtime/orchestrate.rb"
+  [ -f "$orchestrate_runtime" ] || die "orchestrate runtime missing: $orchestrate_runtime"
+  exec ruby "$orchestrate_runtime" "$@"
+}
+
 cmd_guard() {
   command -v ruby >/dev/null 2>&1 || die "ruby is required for aiops guard"
   guard_runtime="$(default_core_dir)/runtime/guard.rb"
@@ -12710,6 +12731,7 @@ cmd_release_check() {
     "$core/schemas/handoff.schema.json" \
     "$core/schemas/transition_receipt.schema.json" \
     "$core/schemas/task_transition_plan.schema.json" \
+    "$core/schemas/orchestration_plan.schema.json" \
     "$core/schemas/task_risk_profile.schema.json" \
     "$core/schemas/task_cleanup_plan.schema.json" \
     "$core/schemas/task_cleanup_receipt.schema.json" \
@@ -12760,6 +12782,7 @@ cmd_release_check() {
     "$core/runtime/agent_identity_migration.rb" \
     "$core/runtime/guard.rb" \
     "$core/runtime/tool_extras.rb" \
+    "$core/runtime/orchestrate.rb" \
     "$core/runtime/model_catalog.json" \
     "$core/templates/reports/transition_receipt.json" \
     "$core/templates/reports/task_cleanup_receipt.json" \
@@ -13233,6 +13256,7 @@ main() {
     role) cmd_role "$@" ;;
     model) cmd_model "$@" ;;
     guard) cmd_guard "$@" ;;
+    orchestrate) cmd_orchestrate "$@" ;;
     policy) cmd_policy "$@" ;;
     action) cmd_action "$@" ;;
     validate) cmd_validate "$@" ;;

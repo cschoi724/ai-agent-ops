@@ -24,6 +24,9 @@
 
 ### Added
 
+- Add `aiops orchestrate plan TASK_ID [--operator AGENT] [--json]` and `aiops.orchestration_plan.v1`: a read-only planner that tells an Operator session the next Role Agent, subagent, command, verification pass/fail commands, rework count, and whether to stop for the Owner (first-run consent, Task approval, rework limit, blocked or failed checks). Validate with `aiops validate orchestration-plan FILE`.
+- Add the `aiops-run` skill for Claude Code and Codex: scope approval, Task approval, dispatched Role subagents, automatic rework within the limit, and an Owner-facing summary, using the project-language commit rules.
+- Add the optional Task `rework_limit` (default 1). Re-approval after rework keeps the earlier Owner approval within the limit; past it the lifecycle requires `--owner-approved`, which raises the recorded limit.
 - Install the same Role subagents (`aiops-direction`, `aiops-lead`, `aiops-execution`, `aiops-verification`, `aiops-completion`) and skills (`aiops-status`, `aiops-next`, `aiops-handoff`) for Claude Code (`.claude/agents`, `.claude/skills`) and Codex (`.codex/agents`, `.agents/skills`) during `aiops seed`, generated from one shared source; `--no-tool-extras` opts out.
 - Add `aiops guard` to protect the `.ai/` constitution folder: Claude Code and Codex `PreToolUse` hooks that deny edits, patches, and write-like shell commands targeting `.ai/` or its resolved core, a git pre-commit guard that rejects staged `.ai/` changes unless the Owner sets `AIOPS_ALLOW_CORE_COMMIT=1`, and `verify-core` integrity checks.
 - Record a core digest and make core files read-only when seeding in copy mode.
@@ -31,6 +34,7 @@
 
 ### Fixed
 
+- Clear `target_agent` and `target_agent_id` when `aiops task transition` hands a Task to a different Role (for example `rework_requested` or `blocked`), so the next Role is no longer blocked by the previous Role's Agent.
 - Resolve bootstrap placeholders in the release-check seeded project gate before strict validation; the gate previously passed only because of the failure-reset bug below.
 - Make `aiops validate --strict` and `aiops doctor` keep earlier failures; `check_conditional_project_files` reset the shared `failed` shell variable, so Agent Registry and operating model schema errors (and a modified core in doctor) were reported but did not fail the command.
 - Keep the requested adapter choice when `aiops seed --adapter both` installs follow-up files; the shared `adapter` shell variable was overwritten by the last adapter.
