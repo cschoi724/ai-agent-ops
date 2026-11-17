@@ -94,6 +94,7 @@
     "validation_skip_reason": { "type": "string", "minLength": 1 },
     "dispatched_by": { "type": "object", "additionalProperties": false, "required": ["agent", "role"], "properties": { "agent": { "type": "string", "minLength": 1 }, "agent_id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" }, "role": { "const": "Operator Role" } } },
     "owner_approved": { "const": true },
+    "rework_limit": { "type": "integer", "minimum": 0 },
     "risks": { "$ref": "#/$defs/stringList" },
     "blockers": { "$ref": "#/$defs/stringList" },
     "receipt_path": { "type": "string", "minLength": 1 },

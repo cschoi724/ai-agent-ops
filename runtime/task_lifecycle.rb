@@ -417,25 +417,49 @@ class TaskLifecycle
   # explicit approval, recorded as approved_by: owner.
   DEFAULT_REWORK_LIMIT = 1
 
+  # Task fields (approved_by, rework_limit, the CLI log) are editable by agents,
+  # so Owner approval and the rework limit are read from transition receipts,
+  # which agent tools cannot write (aiops guard).
+  def task_receipts
+    @task_receipts ||= Dir.glob(File.join(@target, ".ai_project", "reports", "#{@task_id}_*-transition-receipt.json")).sort.map do |path|
+      data = JSON.parse(File.read(path))
+      data.is_a?(Hash) && data["task_id"] == @task_id ? data : nil
+    rescue JSON::ParserError, SystemCallError
+      nil
+    end.compact
+  end
+
+  def owner_approval_receipts
+    task_receipts.select { |receipt| receipt["owner_approved"] == true && receipt.dig("transition", "to") == "approved" }
+  end
+
   def rework_count
-    @task_body.scan(/->\s*rework_requested\s*\|/).length
+    logged = @task_body.scan(/->\s*rework_requested\s*\|/).length
+    recorded = task_receipts.count { |receipt| receipt.dig("transition", "from") == "rework_requested" }
+    [logged, recorded].max
   end
 
   def rework_limit
-    value = @task["rework_limit"]
-    value.is_a?(Integer) && value >= 0 ? value : DEFAULT_REWORK_LIMIT
+    limits = owner_approval_receipts.map { |receipt| receipt["rework_limit"] }.select { |value| value.is_a?(Integer) && value >= 0 }
+    ([DEFAULT_REWORK_LIMIT] + limits).max
   end
 
-  # An earlier Owner approval carries over to re-approval after rework while
-  # the rework count stays within rework_limit (default 1). Past the limit the
-  # Owner must approve again, which also raises the recorded limit.
+  def operator_registered?
+    @agents.any? { |agent| agent["status"] == "enabled" && Array(agent["roles"]).include?("Operator Role") }
+  end
+
+  # Once any enabled Agent holds Operator Role, every entry into approved needs
+  # the Owner, whether or not --dispatched-by is given. An earlier Owner
+  # approval carries over to re-approval after rework while the rework count
+  # stays within the limit (default 1). Past the limit the Owner must approve
+  # again, which also raises the recorded limit.
   def validate_owner_approval
-    if @to == "approved" && @dispatcher && !@options[:owner_approved]
-      if @task["approved_by"].to_s != "owner"
-        raise LifecycleError, "Owner approval required before #{@task_id} becomes approved; ask the Owner (user) and rerun with --owner-approved"
+    if @to == "approved" && (@dispatcher || operator_registered?) && !@options[:owner_approved]
+      if owner_approval_receipts.empty?
+        raise LifecycleError, "Owner approval required before #{@task_id} becomes approved; show the command to the Owner (user) and let the Owner run it with --owner-approved"
       end
       if rework_count > rework_limit
-        raise LifecycleError, "rework limit #{rework_limit} reached (#{rework_count} reworks); the Owner (user) must approve continuing with --owner-approved"
+        raise LifecycleError, "rework limit #{rework_limit} reached (#{rework_count} reworks); the Owner (user) must run the approval with --owner-approved to continue"
       end
     end
     if @options[:owner_approved] && @to != "approved"
@@ -621,7 +645,10 @@ class TaskLifecycle
       dispatcher_id = agent_id(@dispatcher)
       @receipt["dispatched_by"]["agent_id"] = dispatcher_id unless dispatcher_id.to_s.empty?
     end
-    @receipt["owner_approved"] = true if @options[:owner_approved]
+    if @options[:owner_approved]
+      @receipt["owner_approved"] = true
+      @receipt["rework_limit"] = [rework_limit, rework_count].max
+    end
     skip_reason = @options[:validation_skip_reason].to_s
     @receipt["validation_skip_reason"] = skip_reason unless skip_reason.empty?
 
@@ -656,7 +683,7 @@ class TaskLifecycle
     task["transition_receipt_path"] = @receipt_relative
     if @options[:owner_approved]
       task["approved_by"] = "owner"
-      task["rework_limit"] = rework_count if rework_count > rework_limit
+      task["rework_limit"] = [rework_limit, rework_count].max
     end
     if @command == "accept"
       task["locked_by"] = @actor_name

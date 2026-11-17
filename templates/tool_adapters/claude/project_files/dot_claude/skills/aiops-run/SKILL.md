@@ -23,7 +23,8 @@ description: Operator Role을 가진 Agent가 한 세션에서 사용자 요청�
 ## 2. 일감 등록 (승인 ②)
 1. Lead subagent(`aiops-lead`)에게 승인된 범위를 Task로 나누고 등록하게 한다 (`aiops task create`, `allowed_paths`, `source_of_truth`, 담당 Agent).
 2. 등록된 일감 목록(ID 짧은 호칭, 제목, 범위, 담당, 순서)을 Owner에게 보여주고 **일감 승인**을 받는다.
-3. 승인되면 각 Task를 `aiops task advance TASK_ID --dispatched-by <내 Agent 이름> --owner-approved`로 approved에 올린다.
+3. 승인되면 Task마다 `aiops orchestrate plan TASK_ID --operator <내 Agent 이름>`이 알려 주는 `next.argv`(`--owner-approved` 포함)를 Owner에게 보여 주고, **Owner가 자기 터미널에서 직접 실행**하게 한다. 이 명령은 Agent가 실행하지 않는다 (guard가 차단한다).
+4. Owner가 실행했다고 알려 주면 plan을 다시 확인해 approved가 됐는지 보고 진행 루프로 간다.
 
 ## 3. 진행 루프 (Task마다, 의존 순서대로)
 반복한다:
@@ -31,7 +32,7 @@ description: Operator Role을 가진 Agent가 한 세션에서 사용자 요청�
 2. `state`에 따라:
    - `ready`: `next.argv` 명령을 그대로 실행한다.
    - `work_required`: `next.subagent`를 호출해 `next.work`를 시킨다. subagent에게 Task ID와 `--dispatched-by <내 Agent 이름>`을 전달하고, 작업이 끝나면 subagent가 `next.argv`(검증이면 `on_pass` 또는 `on_fail`)로 전이하게 한다.
-   - `needs_owner`: 멈추고 `reason`을 Owner에게 쉬운 말로 설명한 뒤 답을 기다린다.
+   - `needs_owner`: 멈추고 `reason`을 Owner에게 쉬운 말로 설명한 뒤 답을 기다린다. `next.requires_owner_approval`이 true면 `next.argv`를 Owner에게 보여 주고 Owner가 직접 실행하게 한다.
    - `stopped`: 멈추고 `reason`과 필요한 조치를 Owner에게 보고한다.
    - `done`: 다음 Task로 넘어간다.
 3. 상태가 바뀔 때마다 Owner에게 한두 줄로 알린다: 무슨 일이 있었고 다음은 누구인지.
@@ -43,7 +44,7 @@ description: Operator Role을 가진 Agent가 한 세션에서 사용자 요청�
 - blocked, 정책 위반, 작업 범위 밖 변경이 필요할 때
 - 제품 방향, MVP 범위, 핵심 UX를 바꿔야 할 때, strict 위험도 Task일 때
 - 운영 방침상 승인이 필요한 push, PR, merge, 배포
-- `.ai/` 변경, Agent Registry·Role·운영 모델 변경, Task 취소
+- `.ai/` 변경, Agent Registry·Role·운영 모델 변경, Task 취소 (Registry와 운영 모델은 Owner가 직접 고친다)
 
 ## 5. 커밋
 - Owner가 일감을 승인했으면 해당 Task 브랜치 안의 commit은 허용된 것으로 본다 (0단계에서 다르게 정했으면 그 결정을 따른다).
