@@ -65,6 +65,9 @@ YourProject/
   .ai/            # AI Ops core symlink 또는 copy
   AGENTS.md       # Codex adapter
   CLAUDE.md       # Claude adapter
+  .claude/        # Claude Code Role subagent, skill, .ai/ 보호 hook
+  .codex/         # Codex Role subagent, .ai/ 보호 hook
+  .agents/skills/ # Codex skill
   .ai_project/    # 프로젝트별 운영 상태
   .ai_knowledge/  # 선택: Agent 온보딩용 지식 계층
 ```
@@ -80,7 +83,8 @@ YourProject/
 | `aiops risks` | 사용자용 blocker/warning 요약 |
 | `aiops agents` | 사용자용 Agent/Role 배정 요약 |
 | `aiops release` | 사용자용 release readiness 요약 |
-| `aiops seed --adapter both` | 프로젝트에 AI Ops core와 Agent adapter 연결 |
+| `aiops seed --adapter both` | 프로젝트에 AI Ops core, Agent adapter, Role subagent, skill, `.ai/` 보호 hook 연결 |
+| `aiops guard verify-core` | `.ai/` core 무결성 확인 |
 | `aiops doctor --strict` | 설치와 운영 구성을 엄격 점검 |
 | `aiops project snapshot --json` | Agent가 먼저 읽는 프로젝트 상태 계약과 통제 신호 출력 |
 | `aiops project inspect` | 현재 프로젝트 운영 상태를 읽기 전용으로 요약 |
@@ -121,7 +125,8 @@ YourProject/
 
 ## Safety Rules
 
-- `.ai/`는 일반 사용자가 직접 수정하지 않는다.
+- `.ai/`는 AI Ops 헌법 폴더다. Agent는 수정할 수 없고, Claude·Codex 실행 전 hook, git pre-commit, copy 방식 읽기 전용 권한, core 무결성 검사가 함께 막는다.
+- Codex는 프로젝트 hook을 처음 한 번 `/hooks`에서 trust해야 실행한다.
 - 프로젝트별 운영 상태는 `.ai_project/`에 남긴다.
 - 승인 없는 코드 수정, commit, push, PR, merge, 배포를 하지 않는다.
 - Execution Role은 승인된 Task 밖 구현을 하지 않는다.

@@ -46,7 +46,7 @@ AI Ops를 *적용받는* 프로젝트의 운영 규칙은 `README.md`, `QUICKSTA
 | 경로 | 내용 | Formula 설치 |
 |---|---|---|
 | `bin/aiops` | **CLI 본체 (~13,100줄 POSIX sh + inline `ruby -e`)** | O |
-| `runtime/*.rb` | 분리된 Ruby 모듈 9개 (아래 §4.3) | O |
+| `runtime/*.rb` | 분리된 Ruby 모듈 11개 (아래 §4.3) | O |
 | `runtime/*.json` | workflows, policy_rules, bootstrap_options, model_catalog catalog | O |
 | `runtime/*.md` | workflow / task_queue / role_handoff 운영 문서 | O |
 | `schemas/` | `aiops.*.v1` JSON schema 약 30개 | O |
@@ -108,6 +108,8 @@ aiops (sh)
 | `model_advisor.rb` (778) | `model recommend` (codex / claude-code / custom, `model_catalog.json`) | `class ModelAdvisor` |
 | `dashboard_server.rb` (432) | `project dashboard --serve` localhost 서버 | `class DashboardServer` |
 | `dashboard_presets.rb` (430) | dashboard preset list/show/add/run | `class DashboardPresets` |
+| `guard.rb` | `aiops guard`: `.ai/` 보호 hook 판정(Claude/Codex 공통 payload), pre-commit, core 무결성(digest / git clean) | `module AiopsGuard` |
+| `tool_extras.rb` | seed·doctor용 Role subagent, skill, hook 설정 설치와 상태 점검(settings 병합) | `class ToolExtras` |
 | `github_release_status.rb` (336) | `--github` 시 `gh`로 PR/check/release 조회 (timeout 포함) | `class GitHubReleaseStatus` |
 
 공통 패턴: `OptionParser` 기반 CLI, `--json` 기계 출력 + 한국어/영어 사용자 출력, 오류는 `XxxError` → 짧은 메시지(스택트레이스 노출 금지), 테스트용 실패 주입 ENV (`AIOPS_TEST_LIFECYCLE_FAIL`, `AIOPS_TEST_LIFECYCLE_HOLD_SECONDS` 등).
@@ -173,6 +175,7 @@ bin/aiops status --target "$d"
 - [ ] 새 기계 출력이면 `schemas/<name>.schema.json` + `aiops validate <name> FILE` validator
 - [ ] 새 runtime/schema/템플릿 필수 파일이면 `cmd_release_check`의 required 목록에 추가
 - [ ] 새 최상위 디렉터리면 `Formula/ai-agent-ops.rb` install 목록과 release-check의 Formula 검사에 추가
+- [ ] 어댑터·subagent·skill·hook 변경은 `templates/tool_adapters/_source/`만 수정하고 `ruby scripts/build_adapters.rb`로 재생성 (Claude·Codex 동일 지원, parity 테스트)
 - [ ] 도움말: `usage_all` / `usage_quick` / `usage_machine` / `usage_command_help` (ko/en), `tests/e2e_help_ux.sh`
 - [ ] 사용자 출력 ko/en 라벨, Agent 고유명·기계값 비번역
 - [ ] 판단 로직 변경이면 snapshot/health/inspect/validate/doctor 사본 일관성 (§4.4)
@@ -185,7 +188,7 @@ bin/aiops status --target "$d"
 ## 7. Git / PR / 릴리스 절차
 
 - 원격: `git@github-personal:cschoi724/ai-agent-ops.git` (이 머신의 `~/.ssh/config` 별칭 → 개인 키). 기본 `github.com` 은 회사 계정이므로 쓰지 않는다. 레포 로컬 author는 `cschoi724`.
-- `gh` CLI 기본 로그인이 회사 계정일 수 있다. PR 작업 전 `gh auth status` 확인, 필요 시 `gh auth switch`.
+- `gh`는 회사 계정이 활성 상태로 유지된다. ai-agent-ops 작업의 `gh` 명령은 `GH_TOKEN="$(gh auth token --user cschoi724)" gh ...` 형태로 실행하고 `gh auth switch`는 쓰지 않는다.
 - **사용자 승인 없이 commit / push / PR 생성 / merge 하지 않는다.**
 - 브랜치: `feature/<topic>`, `fix/<topic>`, `docs/<topic>`, `release/vX.Y.Z`, `release/vX.Y.Z-formula-sha` (또는 `chore/vX.Y.Z-formula-sha`)
 - 커밋/PR 제목: `feat: ...`, `fix: ...`, `docs: ...`, `chore: ...`. PR 본문 섹션: Summary / Why / Safety / Validation (영어).

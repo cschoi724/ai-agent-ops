@@ -36,7 +36,9 @@ for adapter in codex/AGENTS.md claude/CLAUDE.md; do
     'Knowledge Mode' \
     'Install Discovery' \
     '작업 전 Action Plan' \
-    '사용자 승인 없이 `.ai/` 운영 문서를 수정하지 않는다.'
+    '`.ai/` 안의 파일을 만들거나 고치거나 지우지 않는다.' \
+    'AIOPS_ALLOW_CORE_COMMIT' \
+    'aiops-verification'
   do
     grep -qF -- "$rule" "$file" || {
       printf '%s\n' "$adapter is missing rule: $rule" >&2
@@ -44,5 +46,23 @@ for adapter in codex/AGENTS.md claude/CLAUDE.md; do
     }
   done
 done
+
+# Role subagents and skills must exist for both tools with identical instructions.
+ruby -e '
+  root = ARGV[0]
+  claude = Dir.glob(File.join(root, "claude/project_files/dot_claude/agents/*.md")).map { |path| File.basename(path, ".md") }.sort
+  codex = Dir.glob(File.join(root, "codex/project_files/dot_codex/agents/*.toml")).map { |path| File.basename(path, ".toml") }.sort
+  abort "Role subagents differ: claude=#{claude} codex=#{codex}" unless claude == codex && !claude.empty?
+  claude.each do |name|
+    claude_body = File.read(File.join(root, "claude/project_files/dot_claude/agents/#{name}.md")).split(/^---\n/, 3)[2].to_s.sub(/\A\n/, "")
+    codex_text = File.read(File.join(root, "codex/project_files/dot_codex/agents/#{name}.toml"))
+    codex_body = codex_text[/developer_instructions = \x27\x27\x27\n(.*)\x27\x27\x27/m, 1].to_s
+    abort "Role subagent #{name} instructions differ between tools" unless claude_body.chomp == codex_body.chomp
+  end
+  skills = lambda { |dir| Dir.glob(File.join(root, dir, "*", "SKILL.md")).map { |path| [File.basename(File.dirname(path)), File.read(path)] }.sort }
+  claude_skills = skills.call("claude/project_files/dot_claude/skills")
+  codex_skills = skills.call("codex/project_files/dot_agents/skills")
+  abort "skills differ between tools" unless claude_skills == codex_skills && !claude_skills.empty?
+' "$adapters" || exit 1
 
 printf '%s\n' "ok: adapter parity"

@@ -12,12 +12,22 @@
 
 ### Changed
 
+- Merge the AI Ops guard hook into existing `.claude/settings.json` and `.codex/hooks.json` files while preserving every other setting; never replace customized subagents, skills, or existing pre-commit hooks.
+- Report core integrity, missing tool extras, and pre-commit guard status in `aiops doctor`; a modified copy-mode core fails doctor and blocks lifecycle transitions, while missing extras stay notes so existing strict CI keeps passing.
+- Strengthen both adapters: `.ai/` is never created, edited, or deleted by any Role, guards must not be bypassed, and `aiops update` / `aiops seed --force` are Owner-only.
 - Generate the Codex `AGENTS.md` and Claude `CLAUDE.md` adapters from one shared source (`templates/tool_adapters/_source/adapter.md.erb`) so both tools receive identical operating rules.
 - Bring the Claude adapter to parity with the Codex adapter: per-Role Execution and Verification rules, lock and routing checks, receiver handoff blocks, template-repository detection, Knowledge Mode, Install Discovery, and Lead requirement intake. The Codex adapter output is unchanged.
 
 ### Added
 
+- Install the same Role subagents (`aiops-direction`, `aiops-lead`, `aiops-execution`, `aiops-verification`, `aiops-completion`) and skills (`aiops-status`, `aiops-next`, `aiops-handoff`) for Claude Code (`.claude/agents`, `.claude/skills`) and Codex (`.codex/agents`, `.agents/skills`) during `aiops seed`, generated from one shared source; `--no-tool-extras` opts out.
+- Add `aiops guard` to protect the `.ai/` constitution folder: Claude Code and Codex `PreToolUse` hooks that deny edits, patches, and write-like shell commands targeting `.ai/` or its resolved core, a git pre-commit guard that rejects staged `.ai/` changes unless the Owner sets `AIOPS_ALLOW_CORE_COMMIT=1`, and `verify-core` integrity checks.
+- Record a core digest and make core files read-only when seeding in copy mode.
 - Add `scripts/build_adapters.rb` with a `--check` mode, `tests/e2e_adapter_parity.sh`, and a release-check gate that fails when adapters drift from the shared source or from each other.
+
+### Fixed
+
+- Keep the requested adapter choice when `aiops seed --adapter both` installs follow-up files; the shared `adapter` shell variable was overwritten by the last adapter.
 
 ## 0.16.0 - 2026-08-18
 

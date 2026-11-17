@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|apply_patch|Edit|Write)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; \"$root/.ai/bin/aiops\" guard pre-tool-use --provider codex",
+            "statusMessage": "AI Ops: .ai/ 보호 경로 점검"
+          }
+        ]
+      }
+    ]
+  }
+}
