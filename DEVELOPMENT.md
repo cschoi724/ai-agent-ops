@@ -76,6 +76,8 @@ aiops (sh)
 - **Ruby 2.6 호환 필수** (macOS 기본 ruby, CI `macos-latest`). `filter_map`, `tally`, pattern matching, endless method, `Hash#except` 등 2.7+ 기능 금지.
 - inline Ruby 안에서는 sh 작은따옴표 때문에 `'` 를 쓸 수 없다 → `34.chr`/`39.chr`, `%w[]`, 큰따옴표로 우회한다(기존 코드 패턴 참고).
 - 의존성 없음(gem 설치 없음). stdlib만 사용.
+- **POSIX sh에는 지역 변수가 없다.** 함수 안에서 `failed`, `adapter`, `target` 같은 흔한 이름에 값을 넣으면 호출한 쪽 값이 바뀐다. 실제로 `check_conditional_project_files`의 `failed=0`이 validate/doctor 실패를 지웠고, `seed_adapter`의 `adapter=`가 `--adapter both`를 덮어썼다. 헬퍼 함수는 고유한 변수 이름을 쓴다.
+- Ruby heredoc(`<<~X`, `%(...)`) 안에 sh 코드를 넣으면 ``가 Ruby 보간으로 바뀌고 들여쓰기가 지워진다. bin/aiops 수정은 Edit 도구나 작은따옴표 heredoc을 쓴다.
 
 ### 4.2 `bin/aiops` 지도 (v0.16.0 기준 대략 줄 번호)
 

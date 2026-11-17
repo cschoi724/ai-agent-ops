@@ -38,7 +38,8 @@ for adapter in codex/AGENTS.md claude/CLAUDE.md; do
     '작업 전 Action Plan' \
     '`.ai/` 안의 파일을 만들거나 고치거나 지우지 않는다.' \
     'AIOPS_ALLOW_CORE_COMMIT' \
-    'aiops-verification'
+    'aiops-verification' \
+    '--owner-approved'
   do
     grep -qF -- "$rule" "$file" || {
       printf '%s\n' "$adapter is missing rule: $rule" >&2

@@ -27,6 +27,8 @@
 - 커밋, push, 배포, 외부 설정 변경은 사용자 승인 후 진행한다.
 - 프로젝트가 `.ai/policies/branch_pr_policy.md` 기준으로 branch/PR 전략을 명시한 경우, task branch 안의 commit/push/PR 권한은 해당 프로젝트 설정을 따른다.
 - 어떤 설정에서도 default branch 직접 push는 금지한다.
+- 기본값: Owner의 일감 승인은 해당 Task 브랜치 안의 commit까지 허용한다. push, PR, merge는 프로젝트 운영 방침을 따르고, 방침이 없으면 Owner 승인을 받는다.
+- 커밋 메시지 기본 규칙은 `branch_pr_policy.md` §8을 따른다. AI Ops 관련 내용은 넣지 않는다.
 
 ## 4. 커밋 분리 기준
 
@@ -56,3 +58,4 @@
 | 2026-06-29 | `.ai_project/` Git 포함 기본값과 로컬 전용 예외 기록 기준 명확화 |
 | 2026-07-09 | branch/PR 정책과 프로젝트별 권한 설정 참조 추가 |
 | 2026-07-09 | vNext Role 기반 적용 주체로 개정 |
+| 2026-11-17 | 일감 승인 시 Task 브랜치 commit 허용 기본값과 커밋 메시지 규칙 추가 |

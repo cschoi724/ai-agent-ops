@@ -83,6 +83,14 @@ if "$aiops" doctor --target "$copy" > "$tmpdir/doctor.out" 2>&1; then
 fi
 grep -q 'error: .ai core modified' "$tmpdir/doctor.out" || fail "doctor did not report modified core"
 
+# Later doctor checks must not reset the core failure (POSIX sh shares the "failed" variable).
+cp -R "$repo_root/templates/ai_project/fast_track" "$copy/.ai_project"
+mkdir -p "$copy/.ai_project/tasks/active" "$copy/.ai_project/tasks/backlog" "$copy/.ai_project/tasks/archive" "$copy/.ai_project/handoffs"
+if "$aiops" doctor --target "$copy" > "$tmpdir/doctor-project.out" 2>&1; then
+  fail "doctor passed with modified core when .ai_project exists"
+fi
+rm -rf "$copy/.ai_project"
+
 "$aiops" seed --target "$copy" --adapter codex --mode copy --core "$repo_root" --force >/dev/null
 "$aiops" guard verify-core --target "$copy" | grep -q 'core_integrity: ok' || fail "reseed did not restore core integrity"
 

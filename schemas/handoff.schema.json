@@ -130,6 +130,14 @@
         "null"
       ]
     },
+    "dispatched_by": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "dispatched_by_id": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
     "created_by": {
       "type": [
         "string",

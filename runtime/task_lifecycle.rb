@@ -87,6 +87,8 @@ class TaskLifecycle
       opts.on("--by AGENT") { |value| @options[:actor] = value }
       opts.on("--role ROLE") { |value| @options[:role] = value }
       opts.on("--next-agent AGENT") { |value| @options[:next_agent] = value }
+      opts.on("--dispatched-by AGENT") { |value| @options[:dispatched_by] = value }
+      opts.on("--owner-approved") { @options[:owner_approved] = true }
       opts.on("--summary TEXT") { |value| @options[:summary] = value }
       opts.on("--next-action TEXT") { |value| @options[:next_action] = value }
       opts.on("--evidence PATH") { |value| @options[:evidence] << value }
@@ -371,6 +373,8 @@ class TaskLifecycle
     check("task", true, "Task metadata loaded")
     check("risk_profile", true, "#{@risk_profile['selected_profile']} profile selected from #{@risk_profile['selection_source']}")
     validate_core_integrity
+    validate_dispatch
+    validate_owner_approval
     validate_dependencies
     validate_sources
     validate_changed_paths
@@ -383,13 +387,51 @@ class TaskLifecycle
     check("receiver", true, "#{next_label} is ready")
   end
 
-def validate_core_integrity
-  state = AiopsGuard.core_state(AiopsGuard::Project.new(@target))
-  if state["state"] == "modified"
-    raise LifecycleError, "AI Ops core (.ai/) was modified: #{state['detail']}"
+  SEPARATED_ROLES = ["Execution Role", "Verification Role"].freeze
+
+  # Operator Role is a permission added to an existing Agent. It lets that
+  # Agent drive the workflow in one session by dispatching other Role Agents,
+  # but it never performs Execution or Verification work itself.
+  def validate_dispatch
+    requested = @options[:dispatched_by].to_s
+    if requested.empty?
+      @dispatcher = nil
+      return
+    end
+    @dispatcher = find_agent(requested)
+    raise LifecycleError, "dispatcher is not registered: #{requested}" unless @dispatcher
+    raise LifecycleError, "dispatcher is not enabled: #{agent_name(@dispatcher)}" unless @dispatcher["status"] == "enabled"
+    unless Array(@dispatcher["roles"]).include?("Operator Role")
+      raise LifecycleError, "#{agent_name(@dispatcher)} does not have Operator Role; only the Owner can grant it in the Agent Registry"
+    end
+    if SEPARATED_ROLES.include?(@actor_role) && @actor == @dispatcher
+      raise LifecycleError, "Operator #{agent_name(@dispatcher)} cannot perform #{@actor_role} work; dispatch a separate #{@actor_role} Agent"
+    end
+    if @next_agent && SEPARATED_ROLES.include?(@next_role) && @next_agent == @dispatcher
+      raise LifecycleError, "Operator #{agent_name(@dispatcher)} cannot receive #{@next_role} work; choose another Agent with --next-agent"
+    end
+    check("dispatch", true, "dispatched by #{agent_name(@dispatcher)} / Operator Role")
   end
-  check("core_integrity", true, ".ai core #{state['state']}")
-end
+
+  # Entering approved under an Operator-driven session requires the Owner's
+  # explicit approval, recorded as approved_by: owner.
+  def validate_owner_approval
+    if @to == "approved" && @dispatcher && !@options[:owner_approved]
+      raise LifecycleError, "Owner approval required before #{@task_id} becomes approved; ask the Owner (user) and rerun with --owner-approved"
+    end
+    if @options[:owner_approved] && @to != "approved"
+      raise LifecycleError, "--owner-approved only applies to transitions into approved"
+    end
+    check("owner_approval", true, @options[:owner_approved] ? "Owner approved the Task" : "Owner approval not required for this transition")
+  end
+
+  def validate_core_integrity
+    state = AiopsGuard.core_state(AiopsGuard::Project.new(@target))
+    if state["state"] == "modified"
+      raise LifecycleError, "AI Ops core (.ai/) was modified: #{state['detail']}"
+    end
+    check("core_integrity", true, ".ai core #{state['state']}")
+  end
 
   def validate_dependencies
     Array(@task["depends_on"]).each do |dependency_id|
@@ -555,6 +597,12 @@ end
     @receipt["actor"]["agent_id"] = @actor_id unless @actor_id.to_s.empty?
     receipt_next_id = @next_agent_id || @actor_id
     @receipt["next"]["agent_id"] = receipt_next_id unless receipt_next_id.to_s.empty?
+    if @dispatcher
+      @receipt["dispatched_by"] = { "agent" => agent_name(@dispatcher), "role" => "Operator Role" }
+      dispatcher_id = agent_id(@dispatcher)
+      @receipt["dispatched_by"]["agent_id"] = dispatcher_id unless dispatcher_id.to_s.empty?
+    end
+    @receipt["owner_approved"] = true if @options[:owner_approved]
     skip_reason = @options[:validation_skip_reason].to_s
     @receipt["validation_skip_reason"] = skip_reason unless skip_reason.empty?
 
@@ -587,6 +635,7 @@ end
     end
     task["updated_at"] = @date_only
     task["transition_receipt_path"] = @receipt_relative
+    task["approved_by"] = "owner" if @options[:owner_approved]
     if @command == "accept"
       task["locked_by"] = @actor_name
       task["locked_at"] = @date_only
@@ -652,6 +701,11 @@ end
       "created_by" => @actor_name
     }
     data["from_agent_id"] = @actor_id unless @actor_id.to_s.empty?
+    if @dispatcher
+      data["dispatched_by"] = agent_name(@dispatcher)
+      dispatcher_id = agent_id(@dispatcher)
+      data["dispatched_by_id"] = dispatcher_id unless dispatcher_id.to_s.empty?
+    end
     data["to_agent_id"] = @next_agent_id unless @next_agent_id.to_s.empty?
     YAML.dump(data) + <<~MD
       ---
@@ -807,6 +861,8 @@ end
     puts "상태: #{@from} -> #{@to}"
     puts "처리: #{@actor_name} / #{@actor_role}"
     puts "다음: #{@next_agent_name || '없음'} / #{@next_role || '없음'}"
+    puts "진행 지시: #{agent_name(@dispatcher)} / Operator Role" if @dispatcher
+    puts "Owner 승인: 기록됨 (approved_by: owner)" if @options[:owner_approved]
     puts "결과: #{@options[:check] ? '전이 준비 완료, 파일 변경 없음' : @summary}"
     puts "근거: #{@evidence.empty? ? @options[:validation_skip_reason] : @evidence.join(', ')}"
     puts "위험: #{@options[:risks].empty? ? '없음' : @options[:risks].join('; ')}"

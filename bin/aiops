@@ -928,13 +928,14 @@ check_conditional_project_files() {
   target="$1"
   project_dir="$2"
   operating_model="$3"
-  failed=0
+  # POSIX sh has no local variables; a separate name keeps the caller's "failed" intact.
+  conditional_failed=0
 
   for file_name in branch_pr_strategy.md workflow_overrides.md ops_migration_plan.md; do
     path="$project_dir/$file_name"
     label="${path#$target/}"
     if conditional_project_file_required "$file_name" "$operating_model"; then
-      check_required_file "$path" "$label" || failed=1
+      check_required_file "$path" "$label" || conditional_failed=1
     elif [ -e "$path" ]; then
       info "ok: optional $label"
     else
@@ -943,7 +944,7 @@ check_conditional_project_files() {
     fi
   done
 
-  [ "$failed" -eq 0 ]
+  [ "$conditional_failed" -eq 0 ]
 }
 
 task_has_field() {
@@ -1180,10 +1181,26 @@ validate_front_matter() {
           end
           if agent["roles"].is_a?(Array)
             agent["roles"].each do |role|
+              if role == "Owner Role"
+                say("schema_error: agents[#{idx}].roles Owner Role belongs only to the user and cannot be registered for an Agent")
+                failed = true
+                next
+              end
+              next if role == "Operator Role"
               next if roles.include?(role) && role != "Product Owner" && role != "any"
               say("schema_error: invalid agents[#{idx}].roles #{role}")
               failed = true
             end
+            if agent["roles"].include?("Operator Role") && (agent["roles"] - ["Operator Role"]).empty?
+              say("schema_error: agents[#{idx}] Operator Role is a permission added to an existing Role; assign at least one workflow Role")
+              failed = true
+            end
+          end
+          { "provider" => %w[codex claude-code any], "runtime" => %w[session subagent] }.each do |field, allowed|
+            next unless agent.key?(field)
+            next if allowed.include?(agent[field])
+            say("schema_error: invalid agents[#{idx}].#{field} #{agent[field]}; expected one of #{allowed.join(", ")}")
+            failed = true
           end
           if agent.key?("id") && (!agent["id"].is_a?(String) || agent["id"] !~ agent_id_pattern)
             say("schema_error: invalid agents[#{idx}].id #{agent["id"]}")
@@ -5589,7 +5606,8 @@ cmd_project() {
                 "Execution Role" => "구현/실행",
                 "Verification Role" => "검증",
                 "Completion Role" => "완료 판정",
-                "Ops Governance Role" => "운영 관리"
+                "Ops Governance Role" => "운영 관리",
+                "Operator Role" => "한 세션 진행 권한"
               },
               "team" => {
                 "Product Team" => "제품팀",
@@ -5913,7 +5931,7 @@ cmd_project() {
               "role" => {
                 "Direction Role" => "Product direction", "Lead Role" => "Planning / coordination",
                 "Execution Role" => "Implementation / execution", "Verification Role" => "Verification",
-                "Completion Role" => "Completion decision", "Ops Governance Role" => "Operations governance"
+                "Completion Role" => "Completion decision", "Ops Governance Role" => "Operations governance", "Operator Role" => "Single-session operator"
               },
               "project_setting" => {
                 "multi_team" => "Multiple teams", "single_team" => "Single team", "standard_vnext" => "Standard workflow",

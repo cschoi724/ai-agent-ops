@@ -152,6 +152,16 @@ AI Ops는 seed 시 Role별 subagent와 skill을 함께 설치한다. Claude는 `
 
 Role subagent를 호출해도 Task의 `target_agent`, `target_role`, workflow 규칙은 그대로 적용된다. Execution과 Verification은 서로 다른 Agent여야 한다.
 
+Owner Role은 사용자 본인이다. 어떤 Agent도 Owner Role을 가지거나 Owner 승인을 대신하지 않는다.
+
+Operator Role은 기존 Role을 가진 Agent에게 Owner가 추가로 부여하는 한 세션 진행 권한이다. 현재 Agent가 Operator Role을 가진 경우에만 한 세션에서 Role subagent를 호출해 워크플로를 진행할 수 있다.
+
+- 상태 전이는 실제로 일한 Role Agent 이름으로 하고 `--dispatched-by <Operator Agent>`를 붙인다.
+- Operator Agent는 Execution과 Verification을 직접 하지 않는다.
+- Task가 `approved`가 되기 전에는 반드시 Owner(사용자)에게 작업 범위와 일감 승인을 받고 `--owner-approved`로 기록한다.
+- Owner 승인은 기본적으로 해당 Task 브랜치 안의 commit까지 포함한다. push, PR, merge는 프로젝트 운영 방침을 따른다.
+- 커밋 메시지는 프로젝트 언어로 쓰고 Role, Agent 이름, Task ID 같은 AI Ops 내용은 넣지 않는다.
+
 실제 파일 수정, 빌드, 테스트 범위는 Task의 `allowed_paths`가 결정하고, 기준 문서는 `source_of_truth`가 결정한다. 현재 작업 디렉토리와 `allowed_paths`가 다르면 작업 전에 기준 경로를 명확히 보고하고 `allowed_paths` 안에서만 작업한다.
 
 다중 worktree 환경에서는 현재 worktree의 `.ai_project/` 문서를 최신 공용 상태로 가정하지 않는다. 프로젝트에 `canonical_status_ref`가 있으면 작업 시작 전 `aiops status-ref`, `aiops sync-status`, 필요한 경우 `aiops task status TASK_ID --source canonical`로 기준 ref와 SHA를 확인하고 보고한다. `.ai_project/.runtime/status_ref`는 로컬 runtime cache이므로 commit/PR에 포함하지 않는다.

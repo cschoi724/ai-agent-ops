@@ -36,7 +36,8 @@
         "Verification Role",
         "Completion Role",
         "Release Role",
-        "Ops Governance Role"
+        "Ops Governance Role",
+        "Operator Role"
       ]
     },
     "agentStatus": {
@@ -109,6 +110,21 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "codex",
+            "claude-code",
+            "any"
+          ]
+        },
+        "runtime": {
+          "type": "string",
+          "enum": [
+            "session",
+            "subagent"
           ]
         }
       }

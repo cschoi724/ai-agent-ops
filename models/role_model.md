@@ -57,6 +57,13 @@ Role Session의 Agent 선택 우선순위:
 | Release Role | 배포와 운영 인계를 관리함 | release checklist, rollback, 배포 승인 |
 | Ops Governance Role | 운영체계 준수를 점검함 | Role 경계, workflow, schema, migration, 정책 점검 |
 
+권한 Role:
+
+| Role | 누가 | 의미 |
+|---|---|---|
+| Owner Role | 사용자 본인만 | 최종 승인권자. Agent Registry에 등록할 수 없다. 이 Role의 승인이 사용자 승인이다. |
+| Operator Role | Owner가 지정한 기존 Agent | 업무 Role이 아닌 추가 권한. 한 세션에서 워크플로 전체를 진행할 수 있다. |
+
 ## 4. 상태별 책임
 
 상태값과 전이 규칙의 canonical 정의는 `schemas/workflow.schema.json`과 `runtime/workflow.md`를 따른다.
@@ -157,6 +164,46 @@ Release Role은 실제 배포 책임이 있을 때만 활성화한다.
 
 Ops Governance Role은 제품 방향을 대신 정하지 않는다.
 
+## 11.1 Owner Role
+
+Owner Role은 사용자 본인이다. Agent는 Owner Role을 가질 수 없고 Registry에 등록하면 strict validation이 차단한다.
+
+Owner만 할 수 있는 일:
+
+- 작업 범위 승인과 일감 승인 (`approved_by: owner`)
+- 재작업 허용 횟수 확대, Task 취소, 차단·정책 위반 수용
+- 제품 방향, MVP 범위, 핵심 UX 변경 확정
+- strict 위험도 Task 승인 (보안, schema, migration, release)
+- 운영 방침상 승인이 필요한 commit, push, PR, merge, 배포
+- Agent Registry, Role, 운영 모델 변경과 Operator Role 부여
+- `.ai/` core 변경 (`aiops update`, `aiops seed --force`, `AIOPS_ALLOW_CORE_COMMIT`)
+
+## 11.2 Operator Role
+
+Operator Role은 업무 Role이 아니라 기존 Role을 가진 Agent에게 Owner가 추가로 부여하는 **진행 권한**이다.
+
+```yaml
+- agent: Lead Agent
+  roles:
+    - Lead Role
+    - Completion Role
+    - Operator Role
+```
+
+Operator 권한이 있는 Agent는:
+
+- 자기 세션 하나에서 워크플로 전체를 진행한다.
+- 단계마다 그 Role을 가진 Agent를 subagent로 호출해 일을 시키고 `aiops task accept/advance --dispatched-by OPERATOR`로 넘긴다.
+- 기록에는 실제로 일한 Agent와 `active_role`이 남고, Operator는 `dispatched_by`로만 남는다.
+
+Operator 권한이 해주지 않는 것:
+
+- 자기 Role이 아닌 단계의 업무를 대신 하지 않는다. 각 상태 전이는 기존 Role 규칙을 그대로 따른다.
+- Execution과 Verification을 직접 수행하거나 받지 않는다. lifecycle이 차단한다.
+- Owner 승인을 대신하지 않는다. Operator가 진행하는 Task가 `approved`가 되려면 Owner 승인(`--owner-approved`)이 필요하다.
+
+Operator Role만 단독으로 가진 Agent는 등록할 수 없다.
+
 ## 12. Bootstrap Agent 매핑
 
 초기 매핑은 프로젝트 상황에 따라 달라진다.
@@ -189,6 +236,8 @@ Ops Governance Role은 제품 방향을 대신 정하지 않는다.
 - Verification Role 없이 위험한 코드 변경을 done 처리하지 않는다.
 - Release 책임이 없는데 Release Role을 기본 활성화하지 않는다.
 - Ops Governance Role이 제품 결정을 임의로 확정하지 않는다.
+- Agent에게 Owner Role을 부여하지 않는다.
+- Operator Role을 이유로 다른 Role의 업무나 Owner 승인을 대신하지 않는다.
 
 ## 15. 변경 이력
 
@@ -197,3 +246,4 @@ Ops Governance Role은 제품 방향을 대신 정하지 않는다.
 | 2026-07-10 | vNext Role 책임 모델 추가 |
 | 2026-07-27 | schema/runtime 중복 내용을 줄이고 slim reference로 압축 |
 | 2026-08-13 | 다중 Role Agent의 assigned_roles와 active_role 계약 추가 |
+| 2026-11-17 | Owner Role(사용자 전용)과 Operator Role(한 세션 진행 권한) 추가 |

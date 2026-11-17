@@ -101,7 +101,10 @@ Execution Role은 작업 단위가 검증 가능해졌을 때 commit할 수 있�
 권장:
 
 - 하나의 commit은 하나의 명확한 변경 목적을 가진다.
-- Task ID를 commit 메시지에 포함한다.
+- 기본적으로 Owner의 일감 승인은 해당 Task 브랜치 안의 commit까지 허용한 것으로 본다. 프로젝트 `branch_pr_strategy.md`가 다르게 정하면 그 방침을 따른다.
+- commit 메시지는 프로젝트에서 쓰는 언어로 쓴다. 기본값은 사용자의 언어(예: 한국어)다.
+- commit 메시지에는 프로젝트, 작업 내용, 작업 범위, 상태만 쓴다. AI Ops 관련 내용(Role, Agent 이름, Task ID, receipt, handoff, `.ai_project` 경로, AI Ops 용어)은 넣지 않는다.
+- Owner가 요청하거나 프로젝트 방침이 정하면 형식과 내용(예: Task ID 포함)을 바꿀 수 있다.
 - generated artifact와 source 변경을 구분한다.
 - 사용자 승인 없이 unrelated cleanup을 섞지 않는다.
 
