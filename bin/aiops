@@ -12665,6 +12665,8 @@ cmd_release_check() {
     "$core/templates/reports/transition_receipt.json" \
     "$core/templates/reports/task_cleanup_receipt.json" \
     "$core/templates/ci/github-actions/aiops.yml" \
+    "$core/templates/tool_adapters/_source/adapter.md.erb" \
+    "$core/scripts/build_adapters.rb" \
     "$core/templates/tool_adapters/codex/AGENTS.md" \
     "$core/templates/tool_adapters/claude/CLAUDE.md"
   do
@@ -12696,6 +12698,15 @@ cmd_release_check() {
     fi
   else
     info "note: ruby not available; schema JSON syntax not checked"
+  fi
+
+  if command -v ruby >/dev/null 2>&1 && [ -f "$core/scripts/build_adapters.rb" ]; then
+    if ruby "$core/scripts/build_adapters.rb" --check >/dev/null 2>&1; then
+      info "ok: tool adapters match shared source"
+    else
+      info "warn: tool adapters are stale; run ruby scripts/build_adapters.rb"
+      warnings=$((warnings + 1))
+    fi
   fi
 
   if "$core/bin/aiops" validate workflow-catalog --core "$core" >/dev/null 2>&1; then
