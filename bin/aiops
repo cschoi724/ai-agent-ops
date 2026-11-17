@@ -11,7 +11,7 @@ Usage:
   aiops risks [--target DIR] [--level compact|standard|detail] [--locale ko|en] [--locale-file FILE] [--color auto|always|never] [--no-color]
   aiops agents [--target DIR] [--level compact|standard|detail] [--locale ko|en] [--locale-file FILE] [--color auto|always|never] [--no-color]
   aiops release [--target DIR] [--level compact|standard|detail] [--github] [--repo OWNER/NAME] [--locale ko|en] [--locale-file FILE] [--color auto|always|never] [--no-color]
-  aiops seed [--adapter codex|claude|both] [--mode link|copy] [--target DIR] [--core DIR] [--force]
+  aiops seed [--adapter codex|claude|both] [--mode link|copy] [--target DIR] [--core DIR] [--force] [--no-tool-extras]
   aiops doctor [--target DIR] [--strict]
   aiops migrate [--target DIR] [--plan|--apply]
   aiops project inspect [--target DIR] [--json]
@@ -30,6 +30,11 @@ Usage:
   aiops agent rename AGENT_ID --to NAME [--target DIR] [--check|--apply] [--locale ko|en] [--json]
   aiops agent migrate-identities [--target DIR] [--map NAME=ID] [--check|--apply] [--locale ko|en] [--json]
   aiops role prompt ROLE [--target DIR] [--task TASK_ID] [--adapter codex|claude|generic] [--agent NAME]
+  aiops guard pre-tool-use [--provider claude-code|codex] [--target DIR] < HOOK_PAYLOAD_JSON
+  aiops guard check-path PATH... [--target DIR]
+  aiops guard staged [--target DIR]
+  aiops guard install-git-hook [--target DIR] [--check]
+  aiops guard verify-core [--target DIR] [--json]
   aiops model recommend --role ROLE [--target DIR] [--task TASK_ID] [--provider codex|claude-code|PROVIDER] [--model MODEL] [--effort EFFORT] [--locale ko|en] [--json]
   aiops action plan --role ROLE --task TASK_ID [--target DIR] [--intends LIST] [--paths LIST] --json
   aiops action validate FILE
@@ -3437,9 +3442,13 @@ cmd_seed() {
   target="$(pwd)"
   core="$(default_core_dir)"
   force="no"
+  tool_extras="yes"
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --no-tool-extras)
+        tool_extras="no"
+        ;;
       --adapter)
         shift
         [ "$#" -gt 0 ] || die "--adapter requires a value"
@@ -3485,6 +3494,9 @@ cmd_seed() {
 
   if [ -e "$target_ai" ] || [ -L "$target_ai" ]; then
     if [ "$force" = "yes" ]; then
+      if [ -d "$target_ai" ] && [ ! -L "$target_ai" ]; then
+        chmod -R u+w "$target_ai" 2>/dev/null || true
+      fi
       rm -rf "$target_ai"
     else
       info "skip: .ai already exists"
@@ -3499,7 +3511,12 @@ cmd_seed() {
         ;;
       copy)
         copy_core "$core" "$target_ai"
-        info "created: $target_ai"
+        if command -v ruby >/dev/null 2>&1; then
+          ruby "$core/runtime/guard.rb" write-core-digest --core "$target_ai" || die "failed to record core digest"
+        fi
+        # Read-only files keep agents and editors from changing the constitution folder in place.
+        find "$target_ai" -type f -exec chmod a-w {} +
+        info "created: $target_ai (read-only core files)"
         ;;
       *)
         die "unknown mode: $mode"
@@ -3507,6 +3524,8 @@ cmd_seed() {
     esac
   fi
 
+  # seed_adapter reuses the global name "adapter"; keep the requested choice separately.
+  seed_adapter_choice="$adapter"
   case "$adapter" in
     codex)
       seed_adapter "$core" "$target" codex "$force"
@@ -3527,6 +3546,19 @@ cmd_seed() {
     info "updated: .gitignore ignores .ai_project/.runtime/"
   else
     info "ok: .gitignore ignores .ai_project/.runtime/"
+  fi
+
+  if [ "$tool_extras" = "yes" ]; then
+    if command -v ruby >/dev/null 2>&1; then
+      set -- install --core "$core" --target "$target" --adapter "$seed_adapter_choice"
+      [ "$force" = "no" ] || set -- "$@" --force
+      ruby "$core/runtime/tool_extras.rb" "$@" || die "failed to install tool extras"
+      ruby "$core/runtime/guard.rb" install-git-hook --target "$target" || die "failed to install pre-commit guard"
+    else
+      info "note: ruby not found; Role subagents, skills, and .ai/ guard hooks were not installed"
+    fi
+  else
+    info "skip: tool extras (--no-tool-extras)"
   fi
 
   info ""
@@ -3617,6 +3649,44 @@ cmd_doctor() {
     fi
   else
     info "note: CLAUDE.md missing"
+  fi
+
+  if command -v ruby >/dev/null 2>&1 && [ -f "$ai/runtime/guard.rb" ]; then
+    core_integrity="$(ruby "$ai/runtime/guard.rb" verify-core --target "$target" --json | ruby -rjson -e 'data = JSON.parse(STDIN.read); puts "#{data["state"]}|#{data["detail"]}"')" || core_integrity="modified|core integrity check failed"
+    case "${core_integrity%%|*}" in
+      ok) info "ok: .ai core integrity (${core_integrity#*|})" ;;
+      modified)
+        info "error: .ai core modified: ${core_integrity#*|}"
+        failed=1
+        ;;
+      *) info "note: .ai core integrity ${core_integrity%%|*}: ${core_integrity#*|}" ;;
+    esac
+
+    if [ -f "$ai/runtime/tool_extras.rb" ]; then
+      extras_missing=0
+      extras_report="$(ruby "$ai/runtime/tool_extras.rb" status --core "$ai" --target "$target" --adapter auto)" || extras_report=""
+      if [ -n "$extras_report" ]; then
+        printf '%s\n' "$extras_report" | while IFS= read -r line; do
+          case "$line" in
+            ok:*) info "$line" ;;
+            *) info "note: ${line#*: }" ;;
+          esac
+        done
+        if printf '%s\n' "$extras_report" | grep -q -v '^ok:'; then
+          extras_missing=1
+        fi
+      fi
+      if [ "$extras_missing" -eq 1 ]; then
+        info "note: Role subagents, skills, or .ai/ guard hooks are missing or customized; rerun aiops seed --adapter both to add missing files (existing files are kept)"
+      fi
+    fi
+
+    git_hook_report="$(ruby "$ai/runtime/guard.rb" install-git-hook --target "$target" --check)" || git_hook_report=""
+    case "$git_hook_report" in
+      ok:*) info "$git_hook_report" ;;
+      "") ;;
+      *) info "note: ${git_hook_report#*: }" ;;
+    esac
   fi
 
   if [ -d "$target/.ai_project" ]; then
@@ -11610,6 +11680,13 @@ cmd_agent() {
   esac
 }
 
+cmd_guard() {
+  command -v ruby >/dev/null 2>&1 || die "ruby is required for aiops guard"
+  guard_runtime="$(default_core_dir)/runtime/guard.rb"
+  [ -f "$guard_runtime" ] || die "guard runtime missing: $guard_runtime"
+  exec ruby "$guard_runtime" "$@"
+}
+
 cmd_model() {
   action="${1:-}"
   [ "$#" -gt 0 ] || die "model requires an action: recommend"
@@ -12663,6 +12740,8 @@ cmd_release_check() {
     "$core/runtime/model_advisor.rb" \
     "$core/runtime/agent_identity.rb" \
     "$core/runtime/agent_identity_migration.rb" \
+    "$core/runtime/guard.rb" \
+    "$core/runtime/tool_extras.rb" \
     "$core/runtime/model_catalog.json" \
     "$core/templates/reports/transition_receipt.json" \
     "$core/templates/reports/task_cleanup_receipt.json" \
@@ -13133,6 +13212,7 @@ main() {
     agent) cmd_agent "$@" ;;
     role) cmd_role "$@" ;;
     model) cmd_model "$@" ;;
+    guard) cmd_guard "$@" ;;
     policy) cmd_policy "$@" ;;
     action) cmd_action "$@" ;;
     validate) cmd_validate "$@" ;;

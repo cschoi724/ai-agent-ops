@@ -1,6 +1,6 @@
 # Single Session Orchestration and Dual Provider Plan
 
-상태: 확정 / PR A 착수 전
+상태: 확정 / PR A 리뷰 중(#67) / PR B 구현·로컬 검증 완료
 대상: Claude·Codex 동일 지원, 한 세션 워크플로 진행(Operator Role), Owner 승인, 팀 협업 충돌 방지
 기준 버전: v0.16.0
 작성일: 2026-11-17

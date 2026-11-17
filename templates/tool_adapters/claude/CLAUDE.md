@@ -10,7 +10,7 @@
 - Role 전환 또는 Task 인계가 있으면 `.ai/runtime/role_handoff.md`를 읽는다.
 - 세션 분리 또는 보조 위임이 있으면 `.ai/policies/session_orchestration_policy.md`를 읽는다.
 - 여러 worktree 또는 task branch가 있으면 `.ai/policies/shared_status_policy.md`를 읽는다.
-- `.ai/`는 운영 가이드북이며 사용자 승인 없이 수정하지 않는다.
+- `.ai/`는 AI Ops 헌법 폴더다. 어떤 Role도 `.ai/` 안의 파일을 만들거나 고치거나 지우지 않는다. core 변경이 필요하면 작업을 멈추고 Owner(사용자)에게 알린다.
 - 프로젝트별 실행 Task와 협업 기록은 `.ai_project/`를 확인한다.
 - 커밋, push, 배포, 외부 설정 변경은 사용자 승인 후 진행한다.
 
@@ -141,6 +141,17 @@ Agent Role은 사용자가 세션에 부여한다. PM/Development/QA/AI Ops는 �
 
 한 세션 안에서 보조 작업자나 subagent를 사용할 수 있어도, 이는 독립 Role Session을 대체하지 않는다. 구현, 검증, 완료 판단처럼 책임 분리가 필요한 작업은 별도 Role Session으로 넘긴다.
 
+AI Ops는 seed 시 Role별 subagent와 skill을 함께 설치한다. Claude는 `.claude/agents/`와 `.claude/skills/`, Codex는 `.codex/agents/`와 `.agents/skills/`에 같은 내용이 있다.
+
+| 이름 | 종류 | 용도 |
+|---|---|---|
+| `aiops-direction`, `aiops-lead`, `aiops-execution`, `aiops-verification`, `aiops-completion` | Role subagent | 해당 Role의 책임 경계와 CLI 절차를 따르는 Agent |
+| `aiops-status` | skill | 프로젝트 상태 점검과 사람용 요약 |
+| `aiops-next` | skill | 다음 일감, 담당, 진행 가능 여부 안내 |
+| `aiops-handoff` | skill | 상태 전이 준비 확인과 인계 상황 설명 |
+
+Role subagent를 호출해도 Task의 `target_agent`, `target_role`, workflow 규칙은 그대로 적용된다. Execution과 Verification은 서로 다른 Agent여야 한다.
+
 실제 파일 수정, 빌드, 테스트 범위는 Task의 `allowed_paths`가 결정하고, 기준 문서는 `source_of_truth`가 결정한다. 현재 작업 디렉토리와 `allowed_paths`가 다르면 작업 전에 기준 경로를 명확히 보고하고 `allowed_paths` 안에서만 작업한다.
 
 다중 worktree 환경에서는 현재 worktree의 `.ai_project/` 문서를 최신 공용 상태로 가정하지 않는다. 프로젝트에 `canonical_status_ref`가 있으면 작업 시작 전 `aiops status-ref`, `aiops sync-status`, 필요한 경우 `aiops task status TASK_ID --source canonical`로 기준 ref와 SHA를 확인하고 보고한다. `.ai_project/.runtime/status_ref`는 로컬 runtime cache이므로 commit/PR에 포함하지 않는다.
@@ -234,7 +245,10 @@ Ops Governance Role은 제품 Task 생성, 승인, 상태 변경, 코드 수정,
 
 ## 10. 금지사항
 
-- 사용자 승인 없이 `.ai/` 운영 문서를 수정하지 않는다.
+- `.ai/` 안의 파일을 만들거나 고치거나 지우지 않는다. 셸 명령, 스크립트, patch, git 명령으로 우회하지 않는다.
+- `.ai/` 보호 hook, git pre-commit guard, 읽기 전용 권한을 끄거나 제거하거나 우회하지 않는다.
+- `AIOPS_ALLOW_CORE_COMMIT` 환경 변수를 설정하지 않는다. 이 값은 Owner(사용자)만 사용한다.
+- `aiops update`, `aiops seed --force`는 Owner(사용자)가 직접 실행한다.
 - 사용자 승인 없이 커밋하지 않는다.
 - 사용자 승인 없이 push하지 않는다.
 - 민감정보를 로그나 문서에 남기지 않는다.

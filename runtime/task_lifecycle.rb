@@ -12,6 +12,7 @@ require "tempfile"
 require "tmpdir"
 require "yaml"
 require_relative "agent_identity"
+require_relative "guard"
 require_relative "task_risk_profile"
 
 class LifecycleError < StandardError; end
@@ -369,6 +370,7 @@ class TaskLifecycle
   def validate_readiness
     check("task", true, "Task metadata loaded")
     check("risk_profile", true, "#{@risk_profile['selected_profile']} profile selected from #{@risk_profile['selection_source']}")
+    validate_core_integrity
     validate_dependencies
     validate_sources
     validate_changed_paths
@@ -380,6 +382,14 @@ class TaskLifecycle
     next_label = @next_role ? "#{@next_agent_name} / #{@next_role}" : "terminal"
     check("receiver", true, "#{next_label} is ready")
   end
+
+def validate_core_integrity
+  state = AiopsGuard.core_state(AiopsGuard::Project.new(@target))
+  if state["state"] == "modified"
+    raise LifecycleError, "AI Ops core (.ai/) was modified: #{state['detail']}"
+  end
+  check("core_integrity", true, ".ai core #{state['state']}")
+end
 
   def validate_dependencies
     Array(@task["depends_on"]).each do |dependency_id|
