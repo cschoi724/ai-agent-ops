@@ -12829,6 +12829,8 @@ cmd_release_check() {
     mkdir -p "$release_tmp" || exit 1
     "$core/bin/aiops" seed --target "$release_tmp" --adapter both --mode link --core "$core" >/dev/null || exit 1
     cp -R "$core/templates/ai_project/fast_track" "$release_tmp/.ai_project" || exit 1
+    # Resolve the bootstrap decisions that the template leaves as placeholders, as bootstrap Apply would.
+    perl -0pi -e 's/\{\{START_CONTEXT\}\}/ops_setup_only/g; s/\{\{READINESS_LEVEL\}\}/ops_only/g' "$release_tmp/.ai_project/operating_model.md" || exit 1
     mkdir -p \
       "$release_tmp/.ai_project/tasks/active" \
       "$release_tmp/.ai_project/tasks/backlog" \

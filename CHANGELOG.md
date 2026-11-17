@@ -31,6 +31,7 @@
 
 ### Fixed
 
+- Resolve bootstrap placeholders in the release-check seeded project gate before strict validation; the gate previously passed only because of the failure-reset bug below.
 - Make `aiops validate --strict` and `aiops doctor` keep earlier failures; `check_conditional_project_files` reset the shared `failed` shell variable, so Agent Registry and operating model schema errors (and a modified core in doctor) were reported but did not fail the command.
 - Keep the requested adapter choice when `aiops seed --adapter both` installs follow-up files; the shared `adapter` shell variable was overwritten by the last adapter.
 
