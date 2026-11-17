@@ -10,6 +10,15 @@
 
 ## Unreleased
 
+### Changed
+
+- Generate the Codex `AGENTS.md` and Claude `CLAUDE.md` adapters from one shared source (`templates/tool_adapters/_source/adapter.md.erb`) so both tools receive identical operating rules.
+- Bring the Claude adapter to parity with the Codex adapter: per-Role Execution and Verification rules, lock and routing checks, receiver handoff blocks, template-repository detection, Knowledge Mode, Install Discovery, and Lead requirement intake. The Codex adapter output is unchanged.
+
+### Added
+
+- Add `scripts/build_adapters.rb` with a `--check` mode, `tests/e2e_adapter_parity.sh`, and a release-check gate that fails when adapters drift from the shared source or from each other.
+
 ## 0.16.0 - 2026-08-18
 
 ### Added
