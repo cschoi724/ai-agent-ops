@@ -17,8 +17,16 @@ Role 모델은 책임을 정의하고, 이 문서는 그 책임을 한 세션에
 | `role_session` | 사용자가 특정 Role을 부여한 독립 Agent 세션 |
 | `orchestration_session` | Lead 또는 Direction Role이 Task, 우선순위, 인계를 조율하는 세션 |
 | `delegated_worker` | 현재 세션 안에서 호출되는 보조 작업자 또는 subagent |
+| `operated_session` | Operator Role을 가진 Agent의 세션 하나에서 Role Agent들을 subagent로 호출해 워크플로를 진행하는 세션 |
 
 `delegated_worker`는 독립 `role_session`을 대체하지 않는다.
+
+예외: `operated_session`에서 Registry에 등록된 Role Agent를 subagent로 호출하고 `--dispatched-by`로 기록하면, 그 subagent는 해당 Role의 독립 세션으로 인정한다. 조건은 다음과 같다.
+
+- 호출되는 subagent는 Registry에 등록된 별도 Agent이고 해당 Role을 가진다.
+- Verification subagent에게는 Task, 변경 diff, 작업 보고서만 넘기고 Execution의 추론 과정은 넘기지 않는다.
+- Operator Agent 자신은 Execution과 Verification을 수행하거나 받지 않는다.
+- `approved` 진입은 Owner 승인(`--owner-approved`)이 있어야 한다.
 
 ## 3. 기본 원칙
 
@@ -134,3 +142,4 @@ Delegation Record:
 |---|---|
 | 2026-07-23 | Agent 세션 분리와 보조 위임 기준 추가 |
 | 2026-08-13 | continuous multi-role session과 독립 분리 조합 명시 |
+| 2026-11-17 | Operator Role 기반 `operated_session` 추가 |

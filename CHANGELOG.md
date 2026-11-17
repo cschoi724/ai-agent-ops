@@ -12,6 +12,10 @@
 
 ### Changed
 
+- Add the Owner Role (the user only; cannot be registered for an Agent) and the Operator Role (a permission added to an existing Agent that lets one session drive the workflow by dispatching Role Agents as subagents).
+- Add `--dispatched-by AGENT` and `--owner-approved` to `aiops task accept/advance`. Dispatchers must hold Operator Role, never perform or receive Execution/Verification work, and Operator-driven Tasks need Owner approval before `approved`. Receipts record `dispatched_by` and `owner_approved`, handoffs record `dispatched_by`, and Tasks record `approved_by: owner`.
+- Allow optional Agent Registry `provider` (`codex`, `claude-code`, `any`) and `runtime` (`session`, `subagent`) fields; strict validation rejects Owner Role entries, Operator-only Agents, and unknown values.
+- Default commit rules: Owner Task approval allows commits on that Task branch, commit messages use the project language and exclude AI Ops terms (Role, Agent, Task ID, receipt, handoff, `.ai_project` paths) unless the Owner asks otherwise.
 - Merge the AI Ops guard hook into existing `.claude/settings.json` and `.codex/hooks.json` files while preserving every other setting; never replace customized subagents, skills, or existing pre-commit hooks.
 - Report core integrity, missing tool extras, and pre-commit guard status in `aiops doctor`; a modified copy-mode core fails doctor and blocks lifecycle transitions, while missing extras stay notes so existing strict CI keeps passing.
 - Strengthen both adapters: `.ai/` is never created, edited, or deleted by any Role, guards must not be bypassed, and `aiops update` / `aiops seed --force` are Owner-only.
@@ -27,6 +31,8 @@
 
 ### Fixed
 
+- Resolve bootstrap placeholders in the release-check seeded project gate before strict validation; the gate previously passed only because of the failure-reset bug below.
+- Make `aiops validate --strict` and `aiops doctor` keep earlier failures; `check_conditional_project_files` reset the shared `failed` shell variable, so Agent Registry and operating model schema errors (and a modified core in doctor) were reported but did not fail the command.
 - Keep the requested adapter choice when `aiops seed --adapter both` installs follow-up files; the shared `adapter` shell variable was overwritten by the last adapter.
 
 ## 0.16.0 - 2026-08-18

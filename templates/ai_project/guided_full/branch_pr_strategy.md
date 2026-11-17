@@ -30,6 +30,17 @@ permissions:
   merge_owner: Lead Role
 ```
 
+## 3.1 Commit Rules
+
+```yaml
+commit:
+  task_approval_allows_commit: true   # Owner의 일감 승인 = 해당 Task 브랜치 commit 허용
+  message_language: ko                # 프로젝트에서 쓰는 언어
+  exclude_ai_ops_terms: true          # Role, Agent 이름, Task ID, receipt, handoff, .ai_project 경로 제외
+```
+
+커밋 메시지에는 프로젝트, 작업 내용, 작업 범위, 상태만 쓴다. Owner가 요청하면 형식과 내용을 바꿀 수 있다.
+
 ## 4. Pull Request Rules
 
 ```yaml
