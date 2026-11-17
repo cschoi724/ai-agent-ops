@@ -3396,6 +3396,8 @@ copy_core() {
     cd "$target_ai"
     tar -xf -
   )
+  # Core repository contributor files must not act as instructions inside a target project's .ai/.
+  rm -f "$target_ai/CLAUDE.md" "$target_ai/AGENTS.md" "$target_ai/DEVELOPMENT.md"
 }
 
 seed_adapter() {
