@@ -200,7 +200,8 @@ Operator 권한이 해주지 않는 것:
 
 - 자기 Role이 아닌 단계의 업무를 대신 하지 않는다. 각 상태 전이는 기존 Role 규칙을 그대로 따른다.
 - Execution과 Verification을 직접 수행하거나 받지 않는다. lifecycle이 차단한다.
-- Owner 승인을 대신하지 않는다. Operator가 진행하는 Task가 `approved`가 되려면 Owner 승인(`--owner-approved`)이 필요하다.
+- Owner 승인을 대신하지 않는다. Operator가 등록된 프로젝트에서 Task가 `approved`가 되려면 Owner가 직접 실행한 승인(`--owner-approved`)이 필요하다.
+- 자기 권한을 바꾸지 않는다. `agent_registry.md`와 `operating_model.md`는 Owner만 고친다.
 
 Operator Role만 단독으로 가진 Agent는 등록할 수 없다.
 

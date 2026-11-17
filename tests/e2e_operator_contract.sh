@@ -135,6 +135,14 @@ expect_fail "unknown dispatcher" "dispatcher is not registered" \
 # --- Operator-driven approval needs the Owner ---
 expect_fail "approval without Owner" "Owner approval required" \
   "$aiops" task advance "$task" --target "$project" --dispatched-by "Lead Agent" --next-agent "Dev Agent" --check
+# Leaving out --dispatched-by does not skip the Owner gate while an Operator is registered.
+expect_fail "approval without dispatcher" "Owner approval required" \
+  "$aiops" task advance "$task" --target "$project" --next-agent "Dev Agent" --check
+# A hand-edited approved_by is not an Owner approval; only receipts count.
+sed -i.bak 's/^approved_by:$/approved_by: owner/' "$project/.ai_project/tasks/active/$task.md"
+expect_fail "forged approved_by" "Owner approval required" \
+  "$aiops" task advance "$task" --target "$project" --dispatched-by "Lead Agent" --next-agent "Dev Agent" --check
+mv "$project/.ai_project/tasks/active/$task.md.bak" "$project/.ai_project/tasks/active/$task.md"
 
 "$aiops" task advance "$task" --target "$project" --dispatched-by "Lead Agent" --next-agent "Dev Agent" \
   --owner-approved --json > "$tmpdir/approve.json"

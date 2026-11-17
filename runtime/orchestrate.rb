@@ -125,13 +125,33 @@ class OrchestrationPlan
     agent
   end
 
+  # Same rules as the lifecycle engine: approval and limits come from receipts.
+  def task_receipts
+    @task_receipts ||= Dir.glob(File.join(@target, ".ai_project", "reports", "#{@task_id}_*-transition-receipt.json")).sort.map do |path|
+      data = JSON.parse(File.read(path))
+      data.is_a?(Hash) && data["task_id"] == @task_id ? data : nil
+    rescue JSON::ParserError, SystemCallError
+      nil
+    end.compact
+  end
+
+  def owner_approved?
+    task_receipts.any? { |receipt| receipt["owner_approved"] == true && receipt.dig("transition", "to") == "approved" }
+  end
+
   def rework_count
-    @body.scan(/->\s*rework_requested\s*\|/).length
+    logged = @body.scan(/->\s*rework_requested\s*\|/).length
+    recorded = task_receipts.count { |receipt| receipt.dig("transition", "from") == "rework_requested" }
+    [logged, recorded].max
   end
 
   def rework_limit
-    value = @task["rework_limit"]
-    value.is_a?(Integer) && value >= 0 ? value : DEFAULT_REWORK_LIMIT
+    limits = task_receipts.select { |receipt| receipt["owner_approved"] == true }.map { |receipt| receipt["rework_limit"] }
+    ([DEFAULT_REWORK_LIMIT] + limits.select { |value| value.is_a?(Integer) && value >= 0 }).max
+  end
+
+  def operator_registered?
+    @agents.any? { |agent| agent["status"] == "enabled" && Array(agent["roles"]).include?("Operator Role") }
   end
 
   def consent_recorded?
@@ -152,7 +172,8 @@ class OrchestrationPlan
   def owner_approval_needed?
     # Only the scoped -> approved transition enters approved on the automatic path.
     return false unless @status == "scoped"
-    return true if @task["approved_by"].to_s != "owner"
+    return false unless @operator_name || operator_registered?
+    return true unless owner_approved?
 
     rework_count > rework_limit
   end
@@ -216,10 +237,10 @@ class OrchestrationPlan
       next_step["argv"] = argv + ["--owner-approved"]
       if plan["state"].nil?
         plan["state"] = "needs_owner"
-        plan["reason"] = if rework_count > rework_limit && @task["approved_by"].to_s == "owner"
-                           "rework limit #{rework_limit} reached (#{rework_count} reworks); the Owner decides whether to continue"
+        plan["reason"] = if owner_approved?
+                           "rework limit #{rework_limit} reached (#{rework_count} reworks); the Owner decides whether to continue and runs next.argv"
                          else
-                           "Owner approval of the work scope and Task is required before approved"
+                           "Owner approval of the work scope and Task is required before approved; the Owner runs next.argv"
                          end
       end
     end
@@ -258,7 +279,7 @@ class OrchestrationPlan
     puts "명령: #{step['argv'].join(' ')}"
     puts "통과 시: #{step['on_pass'].join(' ')}" if step["on_pass"]
     puts "실패 시: #{step['on_fail'].join(' ')}" if step["on_fail"]
-    puts "Owner 승인 필요" if step["requires_owner_approval"]
+    puts "Owner 승인 필요: 위 명령은 Owner(사용자)가 직접 실행합니다" if step["requires_owner_approval"]
   end
 end
 

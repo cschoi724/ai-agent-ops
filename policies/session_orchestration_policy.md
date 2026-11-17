@@ -26,7 +26,9 @@ Role 모델은 책임을 정의하고, 이 문서는 그 책임을 한 세션에
 - 호출되는 subagent는 Registry에 등록된 별도 Agent이고 해당 Role을 가진다.
 - Verification subagent에게는 Task, 변경 diff, 작업 보고서만 넘기고 Execution의 추론 과정은 넘기지 않는다.
 - Operator Agent 자신은 Execution과 Verification을 수행하거나 받지 않는다.
-- `approved` 진입은 Owner 승인(`--owner-approved`)이 있어야 한다. 재작업 후 재승인은 재작업 횟수가 Task `rework_limit`(기본 1) 이내면 처음 승인을 유지하고, 넘으면 Owner가 다시 승인한다.
+- `approved` 진입은 Owner 승인(`--owner-approved`)이 있어야 한다. Registry에 enabled Operator Role이 하나라도 있으면 `--dispatched-by` 유무와 관계없이 적용된다.
+- `--owner-approved` 명령은 Owner가 자기 터미널에서 직접 실행한다. Agent 도구 호출로는 guard가 차단한다.
+- 승인 여부와 재작업 허용 횟수는 Owner 승인이 기록된 transition receipt로 판단한다. Task의 `approved_by`, `rework_limit`, CLI 기록은 표시용이다. 재작업 횟수가 허용 횟수(기본 1) 이내면 처음 승인을 유지하고, 넘으면 Owner가 다시 승인한다.
 - 진행 순서는 `aiops orchestrate plan TASK_ID --operator AGENT --json`이 계산한다. Operator는 plan의 `state`가 `needs_owner` 또는 `stopped`이면 멈추고 Owner에게 보고한다.
 - 프로젝트에서 처음 `operated_session`을 시작할 때 Owner에게 commit 범위, push·PR·merge 방침, 재작업 횟수를 묻고 `.ai_project/ops_decisions.md`에 `aiops:operated-session-consent`로 기록한다.
 - Claude Code와 Codex 모두 `aiops-run` skill이 이 절차를 따른다.

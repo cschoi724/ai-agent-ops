@@ -36,6 +36,8 @@ Usage:
   aiops guard staged [--target DIR]
   aiops guard install-git-hook [--target DIR] [--check]
   aiops guard verify-core [--target DIR] [--json]
+  aiops guard allow-structure-edit [--minutes N] [--target DIR]
+  aiops guard lock-structure [--target DIR]
   aiops model recommend --role ROLE [--target DIR] [--task TASK_ID] [--provider codex|claude-code|PROVIDER] [--model MODEL] [--effort EFFORT] [--locale ko|en] [--json]
   aiops action plan --role ROLE --task TASK_ID [--target DIR] [--intends LIST] [--paths LIST] --json
   aiops action validate FILE

@@ -201,6 +201,14 @@ if "$aiops" task advance "$task" --target "$project" --dispatched-by "Lead Agent
   fail "lifecycle allowed re-approval past the rework limit without the Owner"
 fi
 grep -q 'rework limit 1 reached' "$tmpdir/limit.err" || fail "lifecycle did not explain the rework limit"
+# A hand-edited rework_limit does not raise the limit; only Owner-approved receipts do.
+sed -i.bak 's/^rework_limit: .*/rework_limit: 99/' "$task_file"
+grep -q '^rework_limit: 99$' "$task_file" || fail "fixture did not forge rework_limit"
+if "$aiops" task advance "$task" --target "$project" --dispatched-by "Lead Agent" >/dev/null 2>&1; then
+  fail "forged rework_limit let the Task past the limit"
+fi
+mv "$task_file.bak" "$task_file"
+expect_state needs_owner
 run_step next.argv
 [ "$(status)" = "approved" ] || fail "Owner re-approval failed"
 grep -q '^rework_limit: 2$' "$task_file" || fail "Owner re-approval did not raise rework_limit"

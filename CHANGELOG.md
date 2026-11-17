@@ -26,14 +26,35 @@
 
 - Add `aiops orchestrate plan TASK_ID [--operator AGENT] [--json]` and `aiops.orchestration_plan.v1`: a read-only planner that tells an Operator session the next Role Agent, subagent, command, verification pass/fail commands, rework count, and whether to stop for the Owner (first-run consent, Task approval, rework limit, blocked or failed checks). Validate with `aiops validate orchestration-plan FILE`.
 - Add the `aiops-run` skill for Claude Code and Codex: scope approval, Task approval, dispatched Role subagents, automatic rework within the limit, and an Owner-facing summary, using the project-language commit rules.
-- Add the optional Task `rework_limit` (default 1). Re-approval after rework keeps the earlier Owner approval within the limit; past it the lifecycle requires `--owner-approved`, which raises the recorded limit.
+- Add the rework limit (default 1). Re-approval after rework keeps the earlier Owner approval within the limit; past it the lifecycle requires `--owner-approved`, which raises the limit recorded in the receipt (and shown as Task `rework_limit`).
 - Install the same Role subagents (`aiops-direction`, `aiops-lead`, `aiops-execution`, `aiops-verification`, `aiops-completion`) and skills (`aiops-status`, `aiops-next`, `aiops-handoff`) for Claude Code (`.claude/agents`, `.claude/skills`) and Codex (`.codex/agents`, `.agents/skills`) during `aiops seed`, generated from one shared source; `--no-tool-extras` opts out.
 - Add `aiops guard` to protect the `.ai/` constitution folder: Claude Code and Codex `PreToolUse` hooks that deny edits, patches, and write-like shell commands targeting `.ai/` or its resolved core, a git pre-commit guard that rejects staged `.ai/` changes unless the Owner sets `AIOPS_ALLOW_CORE_COMMIT=1`, and `verify-core` integrity checks.
 - Record a core digest and make core files read-only when seeding in copy mode.
 - Add `scripts/build_adapters.rb` with a `--check` mode, `tests/e2e_adapter_parity.sh`, and a release-check gate that fails when adapters drift from the shared source or from each other.
 
+### Security
+
+- Require Owner approval for every entry into `approved` once any enabled Agent holds Operator Role, with or without `--dispatched-by`.
+- Read Owner approval and the rework limit from transition receipts instead of Task fields: a hand-edited `approved_by: owner` or `rework_limit` no longer counts. Owner-approved receipts now record `rework_limit`, and the rework count also counts receipts leaving `rework_requested`.
+- Make `--owner-approved` Owner-only: the Claude Code and Codex hooks deny agent commands that carry it, and the `aiops-run` skill hands the command to the Owner to run in their own terminal. Codex hooks do not support an `ask` decision, so both tools use the same deny-and-hand-over flow.
+- Protect `.ai_project/agent_registry.md` and `.ai_project/operating_model.md` as Owner-only files. Bootstrap may still create them; changing an existing file needs the Owner to run `aiops guard allow-structure-edit [--minutes N]` (default 30, stored under the git common dir) or edit by hand. `aiops guard lock-structure` locks them again. `aiops agent rename` and `migrate-identities` with `--apply` are Owner-only.
+- Deny agent writes to transition receipts, `.git/hooks/`, `.git/config`, and `.git/aiops/` (including the shared git dir of linked worktrees).
+- Deny `git commit` / `merge` / `am` with `--no-verify` (including `-n` clusters and abbreviations), `core.hooksPath` changes through `git config`, `git -c`, or `GIT_CONFIG_*`, and `aiops guard write-core-digest`.
+- Close shell bypasses in the hook inspector: `cd`/`pushd` into `.ai/`, `$(...)`, backticks, process substitution, `eval`, `sh -c` / `bash -c`, `find -delete` / `-exec`, `tar -x -C`, `unzip -d`, recursive `rm` / `chmod` on a directory that contains a copied core (or the `.ai` link), and shell or interpreter script files that target protected paths.
+- Fail closed: an empty, malformed, or non-object hook payload, or an inspector error, now denies the tool call instead of allowing it.
+- Never write the pre-commit guard into a custom `core.hooksPath` directory (husky and similar are usually tracked); report `needs_user_decision` with the line to add, and recognize that line once added.
+
+### Upgrade notes
+
+- Existing projects keep working unchanged after the core update: Task lifecycle, `aiops status`, and `aiops validate --strict` results stay the same, and no guard is active until the Owner opts in.
+- To enable the new protection, the Owner runs `aiops seed --adapter both` (adds hooks, subagents, skills, and the pre-commit guard). Existing `CLAUDE.md` / `AGENTS.md` are skipped; use `aiops seed --adapter both --force` to replace them with this release's adapters, otherwise `aiops doctor --strict` reports adapter drift. Codex needs a one-time `/hooks` trust.
+- `aiops validate --strict` and `aiops doctor` now fail on Agent Registry and operating model schema errors that earlier versions only printed (see Fixed). Run them once before relying on strict CI.
+- Projects with an enabled Operator Role now need the Owner to run Task approval commands with `--owner-approved`.
+
 ### Fixed
 
+- Stop the guard from treating `.ai_project/...` paths inside interpreter code (`python3 -c`, `ruby -e`) as `.ai/` paths.
+- Parse `git -c NAME=VALUE` as a global option in the guard so the real subcommand is inspected.
 - Clear `target_agent` and `target_agent_id` when `aiops task transition` hands a Task to a different Role (for example `rework_requested` or `blocked`), so the next Role is no longer blocked by the previous Role's Agent.
 - Resolve bootstrap placeholders in the release-check seeded project gate before strict validation; the gate previously passed only because of the failure-reset bug below.
 - Make `aiops validate --strict` and `aiops doctor` keep earlier failures; `check_conditional_project_files` reset the shared `failed` shell variable, so Agent Registry and operating model schema errors (and a modified core in doctor) were reported but did not fail the command.
