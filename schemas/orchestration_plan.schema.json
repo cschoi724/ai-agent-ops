@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-agent-ops.local/schemas/orchestration_plan.schema.json",
+  "title": "AI Ops orchestration plan",
+  "description": "Read-only next-step plan for an Operator-driven single-session workflow run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "task_id", "title", "status", "operator", "consent_recorded", "rework", "state", "reason", "next"],
+  "properties": {
+    "schema": { "const": "aiops.orchestration_plan.v1" },
+    "task_id": { "type": "string", "minLength": 1 },
+    "title": { "type": "string" },
+    "status": { "type": "string", "minLength": 1 },
+    "operator": { "type": ["string", "null"] },
+    "consent_recorded": { "type": "boolean" },
+    "rework": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "limit"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "limit": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "state": { "enum": ["ready", "work_required", "needs_owner", "stopped", "done"] },
+    "reason": { "type": "string", "minLength": 1 },
+    "next": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/step" }
+      ]
+    }
+  },
+  "$defs": {
+    "argv": {
+      "type": "array",
+      "minItems": 3,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "kind", "role", "agent", "subagent", "work", "argv", "requires_owner_approval"],
+      "properties": {
+        "command": { "enum": ["accept", "advance"] },
+        "kind": { "enum": ["gate", "work"] },
+        "role": { "type": "string" },
+        "agent": { "type": "string" },
+        "subagent": { "type": ["string", "null"] },
+        "work": { "type": "string", "minLength": 1 },
+        "argv": { "$ref": "#/$defs/argv" },
+        "requires_owner_approval": { "type": "boolean" },
+        "on_pass": { "$ref": "#/$defs/argv" },
+        "on_fail": { "$ref": "#/$defs/argv" },
+        "check": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ready"],
+          "properties": {
+            "ready": { "type": "boolean" },
+            "error": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

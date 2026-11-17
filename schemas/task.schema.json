@@ -72,6 +72,10 @@
         "strict"
       ]
     },
+    "rework_limit": {
+      "type": "integer",
+      "minimum": 0
+    },
     "risk_profile_reason": {
       "type": [
         "string",

@@ -111,6 +111,7 @@ aiops (sh)
 | `dashboard_server.rb` (432) | `project dashboard --serve` localhost 서버 | `class DashboardServer` |
 | `dashboard_presets.rb` (430) | dashboard preset list/show/add/run | `class DashboardPresets` |
 | `guard.rb` | `aiops guard`: `.ai/` 보호 hook 판정(Claude/Codex 공통 payload), pre-commit, core 무결성(digest / git clean) | `module AiopsGuard` |
+| `orchestrate.rb` | `aiops orchestrate plan`: Operator 세션의 다음 단계·담당 subagent·명령·Owner 정지 지점 계산(읽기 전용, gate 단계는 lifecycle `--check`로 사전 확인) | `class OrchestrationPlan` |
 | `tool_extras.rb` | seed·doctor용 Role subagent, skill, hook 설정 설치와 상태 점검(settings 병합) | `class ToolExtras` |
 | `github_release_status.rb` (336) | `--github` 시 `gh`로 PR/check/release 조회 (timeout 포함) | `class GitHubReleaseStatus` |
 
@@ -153,6 +154,9 @@ bin/aiops version
 # 전체 테스트 (이 머신 약 2분 45초, 2026-11-17 main 기준 전부 통과 / release-check warnings 0)
 sh scripts/test.sh
 #  = sh -n, schema JSON 파싱, runtime ruby -cw, release-check(작업트리 clean일 때만), tests/e2e_*.sh 전부
+
+# 주의: scripts/test.sh 는 작업 트리가 dirty면 release-check를 건너뛴다.
+#       커밋한 뒤 release-check --strict --allow-pending-release 를 다시 돌려 PR 전에 확인한다.
 
 # 단일 테스트
 sh tests/e2e_task_lifecycle.sh

@@ -415,9 +415,28 @@ class TaskLifecycle
 
   # Entering approved under an Operator-driven session requires the Owner's
   # explicit approval, recorded as approved_by: owner.
+  DEFAULT_REWORK_LIMIT = 1
+
+  def rework_count
+    @task_body.scan(/->\s*rework_requested\s*\|/).length
+  end
+
+  def rework_limit
+    value = @task["rework_limit"]
+    value.is_a?(Integer) && value >= 0 ? value : DEFAULT_REWORK_LIMIT
+  end
+
+  # An earlier Owner approval carries over to re-approval after rework while
+  # the rework count stays within rework_limit (default 1). Past the limit the
+  # Owner must approve again, which also raises the recorded limit.
   def validate_owner_approval
     if @to == "approved" && @dispatcher && !@options[:owner_approved]
-      raise LifecycleError, "Owner approval required before #{@task_id} becomes approved; ask the Owner (user) and rerun with --owner-approved"
+      if @task["approved_by"].to_s != "owner"
+        raise LifecycleError, "Owner approval required before #{@task_id} becomes approved; ask the Owner (user) and rerun with --owner-approved"
+      end
+      if rework_count > rework_limit
+        raise LifecycleError, "rework limit #{rework_limit} reached (#{rework_count} reworks); the Owner (user) must approve continuing with --owner-approved"
+      end
     end
     if @options[:owner_approved] && @to != "approved"
       raise LifecycleError, "--owner-approved only applies to transitions into approved"
@@ -635,7 +654,10 @@ class TaskLifecycle
     end
     task["updated_at"] = @date_only
     task["transition_receipt_path"] = @receipt_relative
-    task["approved_by"] = "owner" if @options[:owner_approved]
+    if @options[:owner_approved]
+      task["approved_by"] = "owner"
+      task["rework_limit"] = rework_count if rework_count > rework_limit
+    end
     if @command == "accept"
       task["locked_by"] = @actor_name
       task["locked_at"] = @date_only

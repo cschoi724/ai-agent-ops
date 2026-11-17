@@ -12,7 +12,7 @@ fail() {
 }
 
 roles="aiops-direction aiops-lead aiops-execution aiops-verification aiops-completion"
-skills="aiops-status aiops-next aiops-handoff"
+skills="aiops-status aiops-next aiops-handoff aiops-run"
 
 # --- both adapters get the same Role subagents, skills, and guard hooks ---
 both="$tmpdir/both"
