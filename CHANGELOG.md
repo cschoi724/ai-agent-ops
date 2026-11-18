@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+## 0.17.3 - 2026-11-18
+
 ### Fixed
 
 - `aiops orchestrate plan` text output quotes arguments, so commands with Agent names that contain spaces can be copied as-is.
