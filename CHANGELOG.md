@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+## 0.18.0 - 2026-11-18
+
 ### Added
 
 - Parallel Tasks. The Owner sets per-team running-Task limits with `parallel_tasks: { TEAM: N }` in the operating model front matter (teams with an Operator default to 1, other teams stay unlimited). When a Task starts (approved -> in_progress) the lifecycle enforces the limit and, for limits above 1, requires the Task's own worktree and no `allowed_paths` overlap with running Tasks of the team. `done` is blocked while the Task worktree is still active.
