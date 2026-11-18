@@ -10,6 +10,15 @@
 
 ## Unreleased
 
+### Fixed
+
+- `aiops orchestrate plan` text output quotes arguments, so commands with Agent names that contain spaces can be copied as-is.
+
+### Added
+
+- Add `aiops approve [TASK_ID|SUFFIX] [--target DIR]`, the Owner's short approval command. It finds the project from the current folder, picks the only Task waiting for Owner approval (or matches an ID suffix such as `007`), fills in the team's Operator as `--dispatched-by`, shows the Task, and runs the `--owner-approved` transition. The guard denies it in agent tool calls.
+- `aiops orchestrate plan` adds `next.owner_command` (for example `aiops approve 007`) and tells the Owner to type `! aiops approve 007` in Claude Code; adapters and the `aiops-run` skill now ask the Owner for this short command instead of the full `--owner-approved` command.
+
 ## 0.17.2 - 2026-11-18
 
 ### Changed

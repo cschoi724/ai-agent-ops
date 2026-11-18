@@ -150,8 +150,18 @@ fi
 expect_state needs_owner
 [ "$(field next.requires_owner_approval)" = "true" ] || fail "scoped Task did not require Owner approval"
 field next.argv | grep -q -- '--owner-approved' || fail "plan argv missing --owner-approved"
-run_step next.argv
-[ "$(status)" = "approved" ] || fail "Owner-approved step did not approve the Task"
+[ "$(field next.owner_command | tr "\n" " ")" = "aiops approve 001 " ] || fail "plan should offer the short Owner command"
+"$aiops" orchestrate plan "$task" --target "$project" --operator "Lead Agent" | grep -q '! aiops approve 001' || fail "plan output should show the short Owner command"
+# The Owner's short command: no Task ID needed when only one Task waits; runs from a subfolder.
+mkdir -p "$project/src/deep"
+(cd "$project/src/deep" && "$aiops" approve) > "$tmpdir/approve.out" 2>&1 || { cat "$tmpdir/approve.out" >&2; fail "aiops approve failed"; }
+grep -q "Owner 승인: $task" "$tmpdir/approve.out" || fail "aiops approve did not show the Task"
+[ "$(status)" = "approved" ] || fail "aiops approve did not approve the Task"
+(cd "$project" && "$aiops" approve) > "$tmpdir/approve.out" 2>&1 || fail "aiops approve with nothing waiting should succeed"
+grep -q '승인을 기다리는 Task가 없습니다' "$tmpdir/approve.out" || fail "aiops approve should say nothing is waiting"
+if "$aiops" approve 001 --target "$project" >/dev/null 2>&1; then
+  fail "aiops approve accepted a Task that is not waiting for approval"
+fi
 grep -q '^approved_by: owner$' "$task_file" || fail "approved_by owner missing"
 
 cycle_to_verification() {
@@ -209,7 +219,7 @@ if "$aiops" task advance "$task" --target "$project" --dispatched-by "Lead Agent
 fi
 mv "$task_file.bak" "$task_file"
 expect_state needs_owner
-run_step next.argv
+"$aiops" approve 001 --target "$project" > "$tmpdir/approve.out" 2>&1 || { cat "$tmpdir/approve.out" >&2; fail "aiops approve by suffix failed"; }
 [ "$(status)" = "approved" ] || fail "Owner re-approval failed"
 grep -q '^rework_limit: 2$' "$task_file" || fail "Owner re-approval did not raise rework_limit"
 

@@ -568,6 +568,10 @@ module AiopsGuard
       if sub == "agent" && args.include?("--apply") && (args.include?("rename") || args.include?("migrate-identities"))
         return "aiops agent rename/migrate-identities --apply 는 Agent Registry를 바꾸므로 Owner(사용자)가 직접 실행해야 합니다. --check 결과를 Owner에게 보여 주세요."
       end
+      if sub == "approve" || (sub == "orchestrate" && args.include?("approve"))
+        return "aiops approve 는 Owner(사용자) 승인 명령입니다. Agent가 실행할 수 없습니다. " \
+               "Owner에게 `! aiops approve TASK` (Claude Code) 또는 터미널에서 `aiops approve TASK` 를 입력해 달라고 하고 기다리세요."
+      end
       if sub == "guard" && args.include?("allow-structure-edit")
         return "aiops guard allow-structure-edit 는 Operator Role 변경을 허용하므로 Owner(사용자)가 직접 실행해야 합니다."
       end

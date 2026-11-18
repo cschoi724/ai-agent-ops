@@ -4,6 +4,7 @@
 # Read-only planner for Operator-driven single-session workflow runs.
 #
 #   orchestrate.rb plan TASK_ID [--target DIR] [--operator AGENT] [--json]
+#   orchestrate.rb approve [TASK_ID|SUFFIX] [--target DIR]   (Owner only; `aiops approve`)
 #
 # The plan tells the Operator session which Role Agent (subagent) acts next,
 # which aiops command records the transition, and when to stop for the Owner.
@@ -60,6 +61,7 @@ class OrchestrationPlan
   end
 
   def run
+    return OwnerApproval.new(@argv).run if @action == "approve"
     raise OrchestrationError, "usage: aiops orchestrate plan TASK_ID [--target DIR] [--operator AGENT] [--json]" unless @action == "plan"
 
     parse!
@@ -69,6 +71,12 @@ class OrchestrationPlan
   rescue OrchestrationError, OptionParser::ParseError => e
     warn "aiops orchestrate: #{e.message}"
     1
+  end
+
+  # Plan for one Task without printing it (used by OwnerApproval).
+  def plan_data
+    parse!
+    build
   end
 
   private
@@ -252,6 +260,7 @@ class OrchestrationPlan
     }
     if next_step["requires_owner_approval"]
       next_step["argv"] = argv + ["--owner-approved"]
+      next_step["owner_command"] = ["aiops", "approve", OwnerApproval.short_id(@task_id, task_ids)]
       if plan["state"].nil?
         plan["state"] = "needs_owner"
         plan["reason"] = if owner_approved?
@@ -293,10 +302,178 @@ class OrchestrationPlan
 
     puts "다음 담당: #{step['agent']} / #{step['role']} (subagent: #{step['subagent'] || '없음'})"
     puts "할 일: #{step['work']}"
-    puts "명령: #{step['argv'].join(' ')}"
-    puts "통과 시: #{step['on_pass'].join(' ')}" if step["on_pass"]
-    puts "실패 시: #{step['on_fail'].join(' ')}" if step["on_fail"]
-    puts "Owner 승인 필요: 위 명령은 Owner(사용자)가 직접 실행합니다" if step["requires_owner_approval"]
+    puts "명령: #{shell_line(step['argv'])}"
+    puts "통과 시: #{shell_line(step['on_pass'])}" if step["on_pass"]
+    puts "실패 시: #{shell_line(step['on_fail'])}" if step["on_fail"]
+    return unless step["requires_owner_approval"]
+
+    short = step["owner_command"].join(" ")
+    puts "Owner 승인 필요: Owner(사용자)가 직접 `#{short}` 를 실행합니다 (Claude Code 대화창에서는 `! #{short}`)"
+  end
+
+  # Quotes arguments with spaces as "..." so the line can be copied into a shell.
+  def shell_line(argv)
+    argv.map do |arg|
+      arg.match?(%r{\A[\w./:=@%+,-]+\z}) ? arg : "\"#{arg.gsub(/(["\\$`])/) { "\\#{Regexp.last_match(1)}" }}\""
+    end.join(" ")
+  end
+
+  def task_ids
+    Dir.glob(File.join(@target, ".ai_project", "tasks", "**", "T-*.md")).map { |path| File.basename(path, ".md")[/\AT-\d{8}-\d{3,}/] }.compact.uniq
+  end
+end
+
+# `aiops approve`: the Owner's short command for Task approval. It finds the
+# Task waiting for Owner approval (by full ID, an ID suffix such as 007, or the
+# only waiting Task), fills in --target and the team's Operator, and runs
+# `aiops task advance ... --owner-approved`. Agents cannot run it (guard).
+class OwnerApproval
+  def self.short_id(task_id, all_ids)
+    suffix = task_id[/-(\d{3,})\z/, 1]
+    return task_id unless suffix
+
+    matches = all_ids.count { |id| id.end_with?("-#{suffix}") }
+    matches == 1 ? suffix : task_id
+  end
+
+  def initialize(argv)
+    @argv = argv.dup
+    @target = nil
+  end
+
+  def run
+    parse!
+    tasks = load_tasks
+    raise OrchestrationError, "Task가 없습니다: #{relative_tasks_dir}" if tasks.empty?
+
+    chosen = @query ? find(tasks) : only_pending(tasks)
+    return 0 unless chosen
+
+    approve(chosen)
+  rescue OrchestrationError, OptionParser::ParseError => e
+    warn "aiops approve: #{e.message}"
+    1
+  end
+
+  private
+
+  def parse!
+    remaining = OptionParser.new do |opts|
+      opts.banner = "usage: aiops approve [TASK_ID|SUFFIX] [--target DIR]"
+      opts.on("--target DIR") { |value| @target = File.expand_path(value) }
+    end.parse(@argv)
+    raise OrchestrationError, "Task는 하나만 지정하세요" if remaining.length > 1
+
+    @query = remaining.first
+    @target ||= find_root(Dir.pwd)
+  end
+
+  def find_root(dir)
+    current = File.expand_path(dir)
+    loop do
+      return current if File.directory?(File.join(current, ".ai_project"))
+
+      parent = File.dirname(current)
+      raise OrchestrationError, "AI Ops 프로젝트(.ai_project)를 찾을 수 없습니다. 프로젝트 폴더에서 실행하거나 --target 을 주세요." if parent == current
+
+      current = parent
+    end
+  end
+
+  def relative_tasks_dir
+    File.join(@target, ".ai_project", "tasks")
+  end
+
+  def registry_agents
+    path = File.join(@target, ".ai_project", "agent_registry.md")
+    return [] unless File.file?(path)
+
+    match = File.read(path).match(/\A---\n(.*?)\n---\n/m)
+    data = match ? YAML.safe_load(match[1], permitted_classes: [Date, Time], aliases: true) : {}
+    Array(data && data["agents"]).select { |agent| agent.is_a?(Hash) }
+  end
+
+  def load_tasks
+    paths = Dir.glob(File.join(relative_tasks_dir, "**", "T-*.md")).reject { |path| path.include?("/archive/") }.sort
+    paths.map do |path|
+      match = File.read(path).match(/\A---\n(.*?)\n---\n/m)
+      next nil unless match
+
+      data = YAML.safe_load(match[1], permitted_classes: [Date, Time], aliases: true) || {}
+      data.is_a?(Hash) && data["id"].to_s.match?(/\AT-\d{8}-\d{3,}\z/) ? data : nil
+    end.compact
+  end
+
+  # The Operator of the Task's team, else the only Operator without a team.
+  def operator_for(task)
+    team = task["team"].to_s.strip.downcase
+    operators = registry_agents.select { |agent| agent["status"] == "enabled" && Array(agent["roles"]).include?("Operator Role") }
+    same_team = team.empty? ? [] : operators.select { |agent| agent["team"].to_s.strip.downcase == team }
+    candidates = same_team.empty? ? operators.select { |agent| agent["team"].to_s.strip.empty? } : same_team
+    candidates.length == 1 ? candidates.first["agent"].to_s : nil
+  end
+
+  def plan_for(task)
+    argv = ["plan", task["id"], "--target", @target]
+    operator = operator_for(task)
+    argv += ["--operator", operator] if operator
+    OrchestrationPlan.new(argv).plan_data
+  end
+
+  def pending(tasks)
+    tasks.select { |task| task["status"] == "scoped" }.map do |task|
+      plan = plan_for(task)
+      plan["next"] && plan["next"]["requires_owner_approval"] ? [task, plan] : nil
+    end.compact
+  end
+
+  def only_pending(tasks)
+    waiting = pending(tasks)
+    if waiting.empty?
+      puts "Owner 승인을 기다리는 Task가 없습니다."
+      return nil
+    end
+    return waiting.first if waiting.length == 1
+
+    ids = tasks.map { |task| task["id"] }
+    puts "Owner 승인을 기다리는 Task가 여러 개입니다. 하나를 골라 실행하세요:"
+    waiting.each do |task, _plan|
+      puts "  aiops approve #{self.class.short_id(task['id'], ids)}   # #{task['team']} / #{task['title']}"
+    end
+    raise OrchestrationError, "승인할 Task를 지정하세요"
+  end
+
+  def find(tasks)
+    matches = tasks.select { |task| task["id"] == @query || task["id"].end_with?("-#{@query.sub(/\A-/, '')}") }
+    raise OrchestrationError, "Task를 찾을 수 없습니다: #{@query}" if matches.empty?
+    if matches.length > 1
+      raise OrchestrationError, "#{@query} 에 맞는 Task가 여러 개입니다: #{matches.map { |task| task['id'] }.join(', ')}. 전체 ID를 쓰세요."
+    end
+
+    task = matches.first
+    unless task["status"] == "scoped"
+      raise OrchestrationError, "#{task['id']} 는 승인 단계가 아닙니다 (status: #{task['status']})"
+    end
+
+    [task, plan_for(task)]
+  end
+
+  def approve(chosen)
+    task, plan = chosen
+    step = plan["next"] || {}
+    argv = Array(step["argv"]).dup
+    raise OrchestrationError, "#{task['id']} 의 승인 명령을 만들 수 없습니다: #{plan['reason']}" unless argv[0, 3] == %w[aiops task advance]
+
+    argv << "--owner-approved" unless argv.include?("--owner-approved")
+    puts "Owner 승인: #{task['id']} #{task['title']}"
+    puts "  팀: #{task['team']}" unless task["team"].to_s.empty?
+    puts "  담당: #{task['target_agent']} / #{task['target_role']}"
+    paths = Array(task["allowed_paths"])
+    puts "  작업 범위: #{paths.join(', ')}" unless paths.empty?
+    puts "  Operator: #{plan['operator']}" if plan["operator"]
+    puts ""
+    aiops = File.expand_path("../bin/aiops", __dir__)
+    system(aiops, *argv[1..-1], "--target", @target) ? 0 : 1
   end
 end
 

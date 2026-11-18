@@ -31,6 +31,7 @@ Usage:
   aiops agent migrate-identities [--target DIR] [--map NAME=ID] [--check|--apply] [--locale ko|en] [--json]
   aiops role prompt ROLE [--target DIR] [--task TASK_ID] [--adapter codex|claude|generic] [--agent NAME]
   aiops orchestrate plan TASK_ID [--target DIR] [--operator AGENT] [--json]
+  aiops approve [TASK_ID|SUFFIX] [--target DIR]   (Owner only)
   aiops guard pre-tool-use [--provider claude-code|codex] [--target DIR] < HOOK_PAYLOAD_JSON
   aiops guard check-path PATH... [--target DIR]
   aiops guard staged [--target DIR]
@@ -13265,6 +13266,7 @@ main() {
     model) cmd_model "$@" ;;
     guard) cmd_guard "$@" ;;
     orchestrate) cmd_orchestrate "$@" ;;
+    approve) cmd_orchestrate approve "$@" ;;
     policy) cmd_policy "$@" ;;
     action) cmd_action "$@" ;;
     validate) cmd_validate "$@" ;;
