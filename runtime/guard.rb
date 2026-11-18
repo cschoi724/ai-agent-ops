@@ -1,8 +1,9 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# AI Ops core guard: keeps the constitution folder (.ai/), the Owner-only
-# project files, transition receipts and git hooks read-only for agents.
+# AI Ops core guard: keeps the constitution folder (.ai/), the Operator Role
+# holders in the Agent Registry, transition receipts and git hooks read-only
+# for agents.
 #
 #   guard.rb pre-tool-use [--provider claude-code|codex] [--target DIR] < hook-payload.json
 #   guard.rb check-path PATH... [--target DIR]
@@ -23,6 +24,8 @@ require "json"
 require "open3"
 require "optparse"
 require "shellwords"
+require "yaml"
+require "date"
 
 module AiopsGuard
   GIT_HOOK_MARKER = "# aiops-guard: protects .ai/ (managed by aiops guard install-git-hook)"
@@ -46,15 +49,20 @@ module AiopsGuard
   MAX_SHELL_DEPTH = 6
   MAX_SCRIPT_BYTES = 1_000_000
 
-  # Files under the project root that agents must not change directly.
-  # The Owner edits them by hand; aiops commands write receipts.
-  STRUCTURE_FILES = %w[.ai_project/agent_registry.md .ai_project/operating_model.md].freeze
+  # Agents may edit the Agent Registry with file-edit tools as long as the
+  # enabled Operator Role holders stay the same; shell writes cannot be checked.
+  REGISTRY_FILE = ".ai_project/agent_registry.md"
+  STRUCTURE_FILES = [REGISTRY_FILE].freeze
   STRUCTURE_UNLOCK_FILE = "structure_edit_until"
+  RUNTIME_UNLOCK_PATH = ".ai_project/.runtime/#{STRUCTURE_UNLOCK_FILE}"
+  OPERATOR_ROLE = "Operator Role"
+  EDIT_TOOLS = %w[Edit Write MultiEdit].freeze
   RECEIPT_PATTERN = %r{\A\.ai_project/reports/[^/]+-transition-receipt\.json\z}i.freeze
 
   LABELS = {
     core: "AI Ops 헌법 폴더(.ai/)",
-    structure: "Owner 전용 파일(Agent Registry·운영 모델)",
+    structure: "Agent Registry(셸 수정 불가)",
+    unlock: "Owner 잠금 해제 기록",
     receipt: "aiops가 기록하는 transition receipt",
     git: "git hook·설정"
   }.freeze
@@ -109,6 +117,7 @@ module AiopsGuard
 
         lowered = relative.downcase
         # Bootstrap creates these files; changing an existing one needs the Owner's unlock.
+        return :unlock if lowered == RUNTIME_UNLOCK_PATH.downcase
         return :structure if STRUCTURE_FILES.include?(lowered) && File.exist?(item) && !structure_edit_allowed?
         return :receipt if lowered.match?(RECEIPT_PATTERN)
       end
@@ -128,9 +137,10 @@ module AiopsGuard
       @git_common_dir = nil
     end
 
+    # Shared by all worktrees in a git repository; inside .ai_project otherwise.
     def structure_unlock_path
       dir = git_common_dir
-      dir ? File.join(dir, "aiops", STRUCTURE_UNLOCK_FILE) : nil
+      dir ? File.join(dir, "aiops", STRUCTURE_UNLOCK_FILE) : File.join(@root, RUNTIME_UNLOCK_PATH)
     end
 
     def structure_edit_allowed?
@@ -234,6 +244,13 @@ module AiopsGuard
         next unless value.is_a?(String) && !value.empty?
 
         kind = protection(value)
+        next unless kind
+        if kind == :structure && key == "file_path" && EDIT_TOOLS.include?(payload["tool_name"].to_s)
+          reason = registry_edit_reason(value) { |text| RegistryCheck.apply_tool_edit(text, payload["tool_name"].to_s, input) }
+          return reason if reason
+
+          next
+        end
         return "#{value} 는 #{LABELS[kind]}에 속합니다." if kind
       end
 
@@ -259,12 +276,44 @@ module AiopsGuard
     end
 
     def patch_reason(text)
-      text.each_line do |line|
-        match = line.match(/\A\*\*\* (?:Add File|Update File|Delete File|Move to): (.+?)\s*\z/)
-        next unless match
-        return "patch가 #{label(match[1])}의 #{match[1]} 를 수정합니다." if protection(match[1])
+      RegistryCheck.patch_sections(text).each do |section|
+        kind = protection(section[:path])
+        moved = section[:move_to] && protection(section[:move_to])
+        return "patch가 #{label(section[:move_to])}의 #{section[:move_to]} 를 수정합니다." if moved
+        next unless kind
+
+        if kind == :structure && %w[Update Add].include?(section[:op]) && section[:move_to].nil?
+          reason = registry_edit_reason(section[:path]) { |current| RegistryCheck.apply_patch_section(current, section) }
+          return reason if reason
+
+          next
+        end
+        return "patch가 #{label(section[:path])}의 #{section[:path]} 를 수정합니다."
       end
       nil
+    end
+
+    # Allows a file-edit tool change to the Agent Registry unless it changes
+    # the enabled Operator Role holders (the Owner approval gate depends on them).
+    def registry_edit_reason(path)
+      current = File.read(File.expand_path(path, @cwd))
+      before = RegistryCheck.operator_signature(current)
+      updated = yield(current)
+      return "Agent Registry 수정 결과를 계산할 수 없어 차단합니다. 파일을 다시 읽고 정확한 내용으로 고치세요." if updated.nil?
+
+      after = begin
+        RegistryCheck.operator_signature(updated)
+      rescue RegistryCheck::Invalid => e
+        return "수정 후 Agent Registry front matter가 올바르지 않습니다(#{e.message}). YAML을 바르게 고쳐 다시 시도하세요."
+      end
+      return nil if before == after
+
+      "Operator Role을 가진 Agent(추가·제거·비활성화·이름 변경)는 Owner(사용자)만 바꿀 수 있습니다. " \
+        "필요하면 Owner에게 aiops guard allow-structure-edit 를 직접 실행해 달라고 요청하세요. 다른 Agent·팀 수정은 그대로 할 수 있습니다."
+    rescue RegistryCheck::Invalid => e
+      "현재 Agent Registry front matter가 올바르지 않아(#{e.message}) 안전하게 검사할 수 없습니다. Owner(사용자)에게 알리세요."
+    rescue SystemCallError => e
+      "Agent Registry를 읽을 수 없어 차단합니다: #{e.message}"
     end
 
     def shell_reason(command)
@@ -520,7 +569,7 @@ module AiopsGuard
         return "aiops agent rename/migrate-identities --apply 는 Agent Registry를 바꾸므로 Owner(사용자)가 직접 실행해야 합니다. --check 결과를 Owner에게 보여 주세요."
       end
       if sub == "guard" && args.include?("allow-structure-edit")
-        return "aiops guard allow-structure-edit 는 Owner 전용 파일 수정을 허용하므로 Owner(사용자)가 직접 실행해야 합니다."
+        return "aiops guard allow-structure-edit 는 Operator Role 변경을 허용하므로 Owner(사용자)가 직접 실행해야 합니다."
       end
 
       nil
@@ -578,6 +627,150 @@ module AiopsGuard
 
         protection(word)
       end
+    end
+  end
+
+  # Computes Agent Registry edits before they happen so only Operator Role
+  # changes need the Owner.
+  module RegistryCheck
+    class Invalid < StandardError; end
+
+    module_function
+
+    # Sorted identities of enabled Agents holding Operator Role, matching
+    # the lifecycle's operator lookup (agent, id, aliases).
+    def operator_signature(text)
+      text = text.to_s.gsub("\r\n", "\n")
+      raise Invalid, "YAML front matter가 없습니다" unless text.start_with?("---\n")
+
+      lines = text.lines
+      closing = lines[1..-1].index { |line| line.chomp == "---" }
+      raise Invalid, "front matter 닫는 --- 가 없습니다" unless closing
+
+      data = YAML.safe_load(lines[1..closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
+      raise Invalid, "front matter가 객체가 아닙니다" unless data.is_a?(Hash)
+
+      Array(data["agents"]).select { |agent| agent.is_a?(Hash) }.map do |agent|
+        roles = Array(agent["roles"]).map(&:to_s)
+        next nil unless roles.include?(OPERATOR_ROLE) || roles.any? { |role| role.strip.casecmp?(OPERATOR_ROLE) }
+
+        [agent["status"].to_s, agent["agent"].to_s, agent["id"].to_s, Array(agent["aliases"]).map(&:to_s).sort, roles.include?(OPERATOR_ROLE)]
+      end.compact.select { |status, *_rest| status.strip.casecmp?("enabled") }.sort
+    rescue Psych::Exception => e
+      raise Invalid, e.message.lines.first.to_s.strip
+    end
+
+    # Claude Code Edit / Write / MultiEdit results; nil when they cannot apply.
+    def apply_tool_edit(text, tool, input)
+      case tool
+      when "Write"
+        input["content"].is_a?(String) ? input["content"] : nil
+      when "Edit"
+        replace(text, input["old_string"], input["new_string"], input["replace_all"])
+      when "MultiEdit"
+        edits = input["edits"]
+        return nil unless edits.is_a?(Array) && !edits.empty?
+
+        edits.reduce(text) do |current, edit|
+          return nil unless current && edit.is_a?(Hash)
+
+          replace(current, edit["old_string"], edit["new_string"], edit["replace_all"])
+        end
+      end
+    end
+
+    def replace(text, old, new, all)
+      return nil unless old.is_a?(String) && new.is_a?(String) && !old.empty? && text.include?(old)
+
+      all ? text.gsub(old) { new } : text.sub(old) { new }
+    end
+
+    # Splits a Codex apply_patch body into per-file sections.
+    def patch_sections(text)
+      sections = []
+      text.each_line do |raw|
+        line = raw.chomp
+        if (match = line.match(/\A\*\*\* (Add|Update|Delete) File: (.+?)\s*\z/))
+          sections << { op: match[1], path: match[2], move_to: nil, lines: [] }
+        elsif (match = line.match(/\A\*\*\* Move to: (.+?)\s*\z/))
+          sections.last[:move_to] = match[1] if sections.last
+        elsif line.start_with?("*** End Patch", "*** Begin Patch")
+          next
+        elsif sections.last
+          sections.last[:lines] << line
+        end
+      end
+      sections
+    end
+
+    # Applies one Add or Update section; nil when a hunk does not match.
+    def apply_patch_section(text, section)
+      if section[:op] == "Add"
+        return section[:lines].map { |line| line.sub(/\A\+/, "") }.join("\n") + "\n"
+      end
+
+      lines = text.split("\n", -1)
+      trailing = lines.last == "" ? lines.pop : nil
+      cursor = 0
+      hunks(section[:lines]).each do |hunk|
+        if hunk[:header] && !hunk[:header].empty?
+          found = (cursor...lines.length).find { |index| lines[index].strip == hunk[:header].strip }
+          return nil unless found
+
+          cursor = found + 1
+        end
+        if hunk[:old].empty?
+          position = hunk[:eof] ? lines.length : cursor
+          lines.insert(position, *hunk[:new])
+          cursor = position + hunk[:new].length
+          next
+        end
+        index = find_chunk(lines, hunk[:old], cursor)
+        return nil unless index
+
+        lines[index, hunk[:old].length] = hunk[:new]
+        cursor = index + hunk[:new].length
+      end
+      result = lines.join("\n")
+      trailing ? "#{result}\n" : result
+    end
+
+    def hunks(lines)
+      result = []
+      current = nil
+      lines.each do |line|
+        if line.start_with?("@@")
+          current = { header: line.sub(/\A@@\s?/, ""), old: [], new: [], eof: false }
+          result << current
+          next
+        end
+        if line == "*** End of File"
+          current[:eof] = true if current
+          next
+        end
+        current ||= { header: nil, old: [], new: [], eof: false }.tap { |hunk| result << hunk }
+        case line[0]
+        when "+" then current[:new] << line[1..-1]
+        when "-" then current[:old] << line[1..-1]
+        else
+          body = line.empty? ? "" : line[1..-1]
+          current[:old] << body
+          current[:new] << body
+        end
+      end
+      result
+    end
+
+    def find_chunk(lines, chunk, start)
+      [->(value) { value }, ->(value) { value.rstrip }, ->(value) { value.strip }].each do |normalize|
+        target = chunk.map(&normalize)
+        [start, 0].uniq.each do |from|
+          (from..(lines.length - chunk.length)).each do |index|
+            return index if lines[index, chunk.length].map(&normalize) == target
+          end
+        end
+      end
+      nil
     end
   end
 
@@ -722,7 +915,7 @@ module AiopsGuard
 
     def deny(reason)
       warn "AI Ops 차단: #{reason}"
-      warn "보호 대상(.ai/, Owner 전용 파일, receipt, git hook)은 Agent가 바꿀 수 없습니다. 꼭 필요하면 작업을 멈추고 Owner(사용자)에게 알리세요."
+      warn "보호 대상(.ai/, Operator Role, receipt, git hook)은 Agent가 바꿀 수 없습니다. Agent Registry의 다른 내용은 Edit/Write나 apply_patch로 고치세요. 꼭 필요하면 작업을 멈추고 Owner(사용자)에게 알리세요."
       2
     end
 
@@ -818,7 +1011,7 @@ module AiopsGuard
       0
     end
 
-    # Owner-only: lets agents edit agent_registry.md / operating_model.md for a while.
+    # Owner-only: lets agents change Operator Role holders for a while.
     def allow_structure_edit
       parse!
       minutes = @options[:minutes] || 30
@@ -828,7 +1021,7 @@ module AiopsGuard
       until_time = Time.now + minutes * 60
       FileUtils.mkdir_p(File.dirname(path))
       File.write(path, "#{until_time.to_i}\n")
-      puts "ok: Agent가 Owner 전용 파일(agent_registry.md, operating_model.md)을 #{until_time.strftime('%H:%M')}까지 고칠 수 있습니다."
+      puts "ok: #{until_time.strftime('%H:%M')}까지 Agent가 Operator Role 변경과 Agent Registry 셸 수정을 할 수 있습니다."
       puts "끝나면 aiops guard lock-structure 로 바로 잠그세요."
       0
     end
@@ -837,13 +1030,15 @@ module AiopsGuard
       parse!
       path = structure_unlock_path
       File.delete(path) if File.file?(path)
-      puts "ok: Owner 전용 파일이 다시 잠겼습니다."
+      puts "ok: Operator Role 변경이 다시 잠겼습니다."
       0
     end
 
     def structure_unlock_path
       project = Project.new(git_toplevel(@options[:target]) || @options[:target])
-      project.structure_unlock_path || raise(Error, "Owner 전용 파일 잠금 해제는 git 저장소에서만 쓸 수 있습니다. git이 아니면 Owner가 파일을 직접 고치세요.")
+      raise Error, "AI Ops 프로젝트가 아닙니다: #{project.root}" unless project.aiops_project?
+
+      project.structure_unlock_path
     end
 
     def write_core_digest

@@ -11,7 +11,8 @@
 - 세션 분리 또는 보조 위임이 있으면 `.ai/policies/session_orchestration_policy.md`를 읽는다.
 - 여러 worktree 또는 task branch가 있으면 `.ai/policies/shared_status_policy.md`를 읽는다.
 - `.ai/`는 AI Ops 헌법 폴더다. 어떤 Role도 `.ai/` 안의 파일을 만들거나 고치거나 지우지 않는다. core 변경이 필요하면 작업을 멈추고 Owner(사용자)에게 알린다.
-- `.ai_project/agent_registry.md`, `.ai_project/operating_model.md`는 Owner 전용 파일이다. Bootstrap에서 처음 만드는 것은 허용되지만, 이미 있는 파일은 Agent가 읽기만 한다. 바꿔야 하면 변경안을 Owner에게 보여 주고, Owner가 직접 고치거나 `aiops guard allow-structure-edit`로 잠시 허용해 준 동안에만 고친다.
+- Owner가 Agent·팀 추가나 변경을 요청하면 `.ai_project/agent_registry.md`, `.ai_project/operating_model.md`를 Agent가 직접 고친다. Agent Registry는 파일 수정 도구(Claude Code Edit/Write, Codex apply_patch)로만 고치고 `sed`, 리다이렉션 같은 셸 명령으로 고치지 않는다.
+- Operator Role을 가진 Agent의 추가·제거·비활성화·이름 변경은 Owner만 할 수 있다. 필요하면 변경안을 Owner에게 보여 주고, Owner가 `aiops guard allow-structure-edit`로 잠시 허용해 준 동안에만 고친다.
 - transition receipt(`.ai_project/reports/*-transition-receipt.json`), `.git/hooks/`, `.git/config`는 직접 쓰지 않는다. receipt는 `aiops task` 명령만 기록한다.
 - `git commit --no-verify`, `core.hooksPath` 변경처럼 보호 hook을 끄는 명령은 쓰지 않는다.
 - 프로젝트별 실행 Task와 협업 기록은 `.ai_project/`를 확인한다.

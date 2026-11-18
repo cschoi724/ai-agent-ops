@@ -58,32 +58,140 @@ expect 0 "aiops update check" "$(bash_payload 'aiops update --check')"
 expect 0 "normal command" "$(bash_payload 'npm test && git status')"
 expect 0 "no core" "{\"tool_name\":\"Write\",\"cwd\":\"$tmpdir\",\"tool_input\":{\"file_path\":\"$tmpdir/.ai/x\"}}"
 
-# --- Owner-only files, receipts, git hooks ---
+# --- Agent Registry (Operator Role holders), receipts, git hooks ---
 mkdir -p "$project/.ai_project/reports" "$project/scripts"
 git -C "$project" init -q
 expect 0 "bootstrap creates registry" "{\"tool_name\":\"Write\",\"cwd\":\"$project\",\"tool_input\":{\"file_path\":\".ai_project/agent_registry.md\"}}"
-printf '# Agent Registry\n' > "$project/.ai_project/agent_registry.md"
+cat > "$project/.ai_project/agent_registry.md" <<'MD'
+---
+agents:
+  - agent: Lead
+    status: enabled
+    team: core
+    roles: [Lead Role, Operator Role]
+  - agent: Builder
+    status: enabled
+    team: core
+    roles: [Execution Role]
+---
+
+# Agent Registry
+MD
 printf '# Operating Model\n' > "$project/.ai_project/operating_model.md"
-expect 2 "edit agent registry" "{\"tool_name\":\"Edit\",\"cwd\":\"$project\",\"tool_input\":{\"file_path\":\"$project/.ai_project/agent_registry.md\"}}"
-expect 2 "write operating model" "{\"tool_name\":\"Write\",\"cwd\":\"$project\",\"tool_input\":{\"file_path\":\".ai_project/operating_model.md\"}}"
-expect 2 "case variant registry" "{\"tool_name\":\"Write\",\"cwd\":\"$project\",\"tool_input\":{\"file_path\":\".ai_project/Agent_Registry.md\"}}"
-expect 2 "patch registry" "{\"tool_name\":\"apply_patch\",\"cwd\":\"$project\",\"tool_input\":{\"command\":\"*** Begin Patch\\n*** Update File: .ai_project/agent_registry.md\\n@@\\n-a\\n+b\\n*** End Patch\"}}"
+
+# Builds a hook payload with Ruby so file contents are JSON-escaped.
+tool_payload() {
+  ruby -rjson -e 'puts JSON.generate("tool_name" => ARGV[0], "cwd" => ARGV[1], "tool_input" => JSON.parse(ARGV[2]))' -- "$1" "$project" "$2"
+}
+edit_payload() {
+  ruby -rjson -e 'puts JSON.generate("tool_name" => "Edit", "cwd" => ARGV[0], "tool_input" => { "file_path" => ".ai_project/agent_registry.md", "old_string" => ARGV[1], "new_string" => ARGV[2] })' -- "$project" "$1" "$2"
+}
+patch_payload() {
+  ruby -rjson -e 'puts JSON.generate("tool_name" => "apply_patch", "cwd" => ARGV[0], "tool_input" => { "command" => ARGV[1] })' -- "$project" "$1"
+}
+registry_text="$(cat "$project/.ai_project/agent_registry.md")"
+new_agent='  - agent: Reviewer
+    status: enabled
+    team: qa
+    roles: [Verification Role]
+---'
+
+expect 0 "edit registry adds agent" "$(edit_payload '---
+
+# Agent Registry' "$new_agent
+
+# Agent Registry")"
+expect 0 "edit registry changes team" "$(edit_payload 'team: core
+    roles: [Execution Role]' 'team: mobile
+    roles: [Execution Role]')"
+expect 2 "edit registry removes Operator Role" "$(edit_payload 'roles: [Lead Role, Operator Role]' 'roles: [Lead Role]')"
+expect 2 "edit registry grants Operator Role" "$(edit_payload 'roles: [Execution Role]' 'roles: [Execution Role, Operator Role]')"
+expect 2 "edit registry disables operator" "$(edit_payload 'agent: Lead
+    status: enabled' 'agent: Lead
+    status: disabled')"
+expect 2 "edit registry renames operator" "$(edit_payload 'agent: Lead' 'agent: Boss')"
+expect 2 "edit registry breaks yaml" "$(edit_payload 'roles: [Execution Role]' 'roles: [Execution Role')"
+expect 2 "edit registry missing old string" "$(edit_payload 'no such text' 'x')"
+expect 0 "write registry keeps operator" "$(tool_payload Write "$(ruby -rjson -e 'puts JSON.generate("file_path" => ".ai_project/agent_registry.md", "content" => ARGV[0].sub("team: core\n    roles: [Execution Role]", "team: web\n    roles: [Execution Role]"))' -- "$registry_text
+")")"
+expect 2 "write registry drops operator" "$(tool_payload Write "$(ruby -rjson -e 'puts JSON.generate("file_path" => ".ai_project/agent_registry.md", "content" => "---\nagents: []\n---\n")')")"
+expect 2 "multiedit registry grants operator" "$(tool_payload MultiEdit '{"file_path":".ai_project/agent_registry.md","edits":[{"old_string":"team: core\n    roles: [Execution Role]","new_string":"team: x\n    roles: [Execution Role]"},{"old_string":"[Execution Role]","new_string":"[Execution Role, Operator Role]"}]}')"
+expect 2 "case variant registry drops operator" "$(tool_payload Write '{"file_path":".ai_project/Agent_Registry.md","content":"---\nagents: []\n---\n"}')"
+expect 2 "notebook edit registry" "$(tool_payload NotebookEdit '{"notebook_path":".ai_project/agent_registry.md"}')"
+expect 0 "patch registry adds agent" "$(patch_payload '*** Begin Patch
+*** Update File: .ai_project/agent_registry.md
+@@
+     roles: [Execution Role]
++  - agent: Reviewer
++    status: enabled
++    roles: [Verification Role]
+ ---
+*** End Patch')"
+expect 2 "patch registry removes Operator Role" "$(patch_payload '*** Begin Patch
+*** Update File: .ai_project/agent_registry.md
+@@
+-    roles: [Lead Role, Operator Role]
++    roles: [Lead Role]
+*** End Patch')"
+expect 2 "patch registry unmatched hunk" "$(patch_payload '*** Begin Patch
+*** Update File: .ai_project/agent_registry.md
+@@
+-a
++b
+*** End Patch')"
+expect 2 "patch deletes registry" "$(patch_payload '*** Begin Patch
+*** Delete File: .ai_project/agent_registry.md
+*** End Patch')"
+expect 2 "patch moves registry" "$(patch_payload '*** Begin Patch
+*** Update File: .ai_project/agent_registry.md
+*** Move to: .ai_project/old_registry.md
+*** End Patch')"
+expect 2 "patch moves file onto registry" "$(patch_payload '*** Begin Patch
+*** Update File: src/a.md
+*** Move to: .ai_project/agent_registry.md
+*** End Patch')"
+expect 0 "write operating model" "{\"tool_name\":\"Write\",\"cwd\":\"$project\",\"tool_input\":{\"file_path\":\".ai_project/operating_model.md\"}}"
+expect 0 "shell edits operating model" "$(bash_payload 'echo x >> .ai_project/operating_model.md')"
 expect 2 "sed registry" "$(bash_payload 'sed -i \"\" s/a/b/ .ai_project/agent_registry.md')"
+expect 2 "redirect registry" "$(bash_payload 'echo x >> .ai_project/agent_registry.md')"
 expect 2 "forge receipt" "$(bash_payload 'echo {} > .ai_project/reports/T-1_scoped_to_approved_1-transition-receipt.json')"
 expect 2 "write git hook" "{\"tool_name\":\"Write\",\"cwd\":\"$project\",\"tool_input\":{\"file_path\":\".git/hooks/pre-commit\"}}"
 expect 0 "write task file" "{\"tool_name\":\"Write\",\"cwd\":\"$project\",\"tool_input\":{\"file_path\":\".ai_project/tasks/active/T-2.md\"}}"
 expect 0 "write task report" "$(bash_payload 'echo ok > .ai_project/reports/T-1_task-report.md')"
 expect 0 "read registry" "$(bash_payload 'cat .ai_project/agent_registry.md')"
 expect 2 "write git aiops state" "$(bash_payload 'echo 9999999999 > .git/aiops/structure_edit_until')"
+expect 2 "write runtime unlock" "$(bash_payload 'echo 9999999999 > .ai_project/.runtime/structure_edit_until')"
 expect 2 "agent unlocks structure" "$(bash_payload 'aiops guard allow-structure-edit --minutes 60')"
 
-# The Owner can unlock the Owner-only files for a while, then lock them again.
+# The Owner can unlock Operator Role changes for a while, then lock them again.
 "$aiops" guard allow-structure-edit --target "$project" --minutes 5 >/dev/null || fail "Owner unlock failed"
-expect 0 "edit registry while unlocked" "{\"tool_name\":\"Edit\",\"cwd\":\"$project\",\"tool_input\":{\"file_path\":\".ai_project/agent_registry.md\"}}"
+expect 0 "remove Operator Role while unlocked" "$(edit_payload 'roles: [Lead Role, Operator Role]' 'roles: [Lead Role]')"
+expect 0 "sed registry while unlocked" "$(bash_payload 'sed -i \"\" s/a/b/ .ai_project/agent_registry.md')"
 "$aiops" guard lock-structure --target "$project" >/dev/null || fail "lock-structure failed"
-expect 2 "edit registry after lock" "{\"tool_name\":\"Edit\",\"cwd\":\"$project\",\"tool_input\":{\"file_path\":\".ai_project/agent_registry.md\"}}"
+expect 2 "remove Operator Role after lock" "$(edit_payload 'roles: [Lead Role, Operator Role]' 'roles: [Lead Role]')"
 printf '1\n' > "$project/.git/aiops/structure_edit_until"
-expect 2 "expired unlock" "{\"tool_name\":\"Edit\",\"cwd\":\"$project\",\"tool_input\":{\"file_path\":\".ai_project/agent_registry.md\"}}"
+expect 2 "expired unlock" "$(edit_payload 'roles: [Lead Role, Operator Role]' 'roles: [Lead Role]')"
+rm -f "$project/.git/aiops/structure_edit_until"
+
+# Outside git the unlock lives in .ai_project/.runtime/.
+plain="$tmpdir/plain"
+mkdir -p "$plain/.ai_project"
+ln -s "$repo_root" "$plain/.ai"
+cp "$project/.ai_project/agent_registry.md" "$plain/.ai_project/agent_registry.md"
+plain_payload="$(ruby -rjson -e 'puts JSON.generate("tool_name" => "Edit", "cwd" => ARGV[0], "tool_input" => { "file_path" => ".ai_project/agent_registry.md", "old_string" => "roles: [Lead Role, Operator Role]", "new_string" => "roles: [Lead Role]" })' -- "$plain")"
+plain_expect() {
+  set +e
+  printf '%s' "$plain_payload" | (cd "$plain" && "$aiops" guard pre-tool-use --target "$plain" >/dev/null 2>"$tmpdir/guard.err")
+  status=$?
+  set -e
+  [ "$status" -eq "$1" ] || { cat "$tmpdir/guard.err" >&2; fail "guard $2: expected exit $1, got $status"; }
+}
+plain_expect 2 "non-git operator change locked"
+"$aiops" guard allow-structure-edit --target "$plain" --minutes 5 >/dev/null || fail "non-git Owner unlock failed"
+[ -f "$plain/.ai_project/.runtime/structure_edit_until" ] || fail "non-git unlock file missing"
+plain_expect 0 "non-git operator change unlocked"
+"$aiops" guard lock-structure --target "$plain" >/dev/null || fail "non-git lock failed"
+plain_expect 2 "non-git operator change relocked"
 
 # --- Owner-only commands ---
 expect 2 "owner approval flag" "$(bash_payload '.ai/bin/aiops task advance T-1 --dispatched-by Lead --owner-approved')"

@@ -317,6 +317,18 @@ if "$repo_root/bin/aiops" task accept T-20260813-009 \
   exit 1
 fi
 grep -q 'changed paths outside Task allowed_paths: outside.txt' "$tmpdir/outside-path.out"
+git -C "$project" checkout -q -- outside.txt
+mkdir -p "$project/.codex" "$project/.claude"
+printf '{}\n' > "$project/.codex/hooks.json"
+printf '{}\n' > "$project/.claude/settings.json"
+printf '# Agents\n' > "$project/AGENTS.md"
+"$repo_root/bin/aiops" task accept T-20260813-009 \
+  --target "$project" --check >"$tmpdir/tool-setup-path.out" 2>&1 || {
+  cat "$tmpdir/tool-setup-path.out" >&2
+  printf '%s\n' "AI tool setup files should not count against Task allowed_paths" >&2
+  exit 1
+}
+rm -rf "$project/.codex" "$project/.claude" "$project/AGENTS.md"
 
 write_task T-20260813-010 approved "Dev Agent" "Execution Role" .ai_project/source_of_truth.md
 perl -0pi -e 's/base_sha:/base_sha: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef/' "$project/.ai_project/tasks/active/T-20260813-010.md"
