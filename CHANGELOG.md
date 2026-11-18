@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+## 0.17.0 - 2026-11-18
+
 ### Changed
 
 - Add the Owner Role (the user only; cannot be registered for an Agent) and the Operator Role (a permission added to an existing Agent that lets one session drive the workflow by dispatching Role Agents as subagents).

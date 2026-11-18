@@ -4,7 +4,7 @@
 AI Ops를 *적용받는* 프로젝트의 운영 규칙은 `README.md`, `QUICKSTART.md`, `core/constitution.md`를 따른다.
 
 > 새 Agent 세션은 이 문서를 먼저 읽고, 사용자 작업 지시를 받은 뒤 해당 영역의 코드/문서를 깊게 읽는다.
-> 기준 버전: v0.16.0 (2026-08-18), 분석일: 2026-11-17. 줄 번호는 drift되므로 함수명/키워드로 `grep` 한다.
+> 기준 버전: v0.17.0 (2026-11-18), 분석일: 2026-11-17. 줄 번호는 drift되므로 함수명/키워드로 `grep` 한다.
 
 ---
 
@@ -212,11 +212,11 @@ bin/aiops status --target "$d"
 - `~/Desktop/workspace/aiops/aiops` : 런처 스크립트 → `ai-agent-ops/bin/aiops` (`AIOPS_CORE_HOME` 설정)
 - `~/Desktop/workspace/aiops/ai-agent-ops/` : v0.16.0 tarball 사본 (git 아님). **개발은 `ai-agent-ops-repo/` 에서만** 한다.
 
-## 9. 현재 상태와 남은 과제 (2026-11-17 기준)
+## 9. 현재 상태와 남은 과제 (2026-11-18 기준)
 
-v0.16.0 이후 main에 1커밋(Formula sha)만 있고 Unreleased는 비어 있다. 열린 PR은 #61(Draft, 문서만).
+v0.17.0: PR A~D(#67~#70)와 보안 보강 E-1(#71) 반영. 열린 PR은 #61(Draft, 문서만).
 
-**진행 중 최우선 계획**: `design_notes/single_session_orchestration_plan.md` — Claude·Codex 동일 지원, Owner/Operator Role, 한 세션 워크플로 진행, `.ai/` 보호, 새 Task ID. PR A~D(v0.17.0), F(v0.18.0) 순서. 아래 표의 1·2번은 이 계획과 함께 재검토한다.
+**진행 중 최우선 계획**: `design_notes/single_session_orchestration_plan.md` — 다음은 PR F(v0.18.0, 새 Task ID·협업 lock·worktree). 보류: guard가 git 최상위 대신 상위 폴더로 `.ai`를 찾기(앱 저장소가 프로젝트 폴더 안쪽에 있는 구조), seed 재실행 시 bootstrap 안내 문구. 아래 표의 1·2번은 이 계획과 함께 재검토한다.
 
 | # | 과제 | 근거 | 비고 |
 |---|---|---|---|
