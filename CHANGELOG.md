@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+## 0.17.1 - 2026-11-18
+
 ### Changed
 
 - Let agents maintain the Agent Registry: file-edit tools (Claude Code `Edit` / `Write` / `MultiEdit`, Codex `apply_patch`) may change `.ai_project/agent_registry.md` as long as the set of enabled Operator Role holders (name, id, aliases) stays the same. The guard computes the edited content first and denies only Operator Role grants, removals, disables, and renames, plus results with invalid front matter or edits it cannot apply. Shell writes to the registry stay blocked because their result cannot be checked.
