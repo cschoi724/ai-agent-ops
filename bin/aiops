@@ -2592,7 +2592,8 @@ update_operating_model_core_version() {
   core_source="$3"
 
   tmp_file="${TMPDIR:-/tmp}/aiops-operating-model.$$"
-  if grep -q '|[[:space:]]*core_version[[:space:]]*|' "$operating_model"; then
+  # Update front matter keys and table rows in place; append a record only when neither exists.
+  if grep -q '|[[:space:]]*core_version[[:space:]]*|' "$operating_model" || grep -q '^core_version:' "$operating_model"; then
     awk -F'|' -v version="$current_version" -v core_source="$core_source" '
       BEGIN { OFS="|" }
       /^core_version:/ {
@@ -3584,8 +3585,13 @@ cmd_seed() {
 
   info ""
   info "AI Ops seed complete."
-  info "Next: open an agent session in $target and say:"
-  info "  AI Ops bootstrap 시작해줘."
+  if [ -f "$target/.ai_project/operating_model.md" ]; then
+    info "Next: .ai_project already exists, so bootstrap is not needed. Restart open agent sessions to load the new adapters and hooks."
+    info "  Codex also needs a one-time /hooks trust for the project hook."
+  else
+    info "Next: open an agent session in $target and say:"
+    info "  AI Ops bootstrap 시작해줘."
+  fi
 }
 
 cmd_doctor() {

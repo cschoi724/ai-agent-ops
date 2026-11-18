@@ -512,10 +512,19 @@ class TaskLifecycle
     changed = changes["paths"]
     allowed = Array(@task["allowed_paths"]).map { |path| path.to_s.sub(%r{/+\z}, "") }.reject(&:empty?)
     outside = changed.reject do |path|
-      path.start_with?(".ai_project/") || allowed.any? { |prefix| prefix == "." || path == prefix || path.start_with?("#{prefix}/") }
+      tool_setup_path?(path) || allowed.any? { |prefix| prefix == "." || path == prefix || path.start_with?("#{prefix}/") }
     end
     raise LifecycleError, "changed paths outside Task allowed_paths: #{outside.join(', ')}" unless outside.empty?
     check("allowed_paths", true, "#{changed.length} changed path(s) are within Task scope")
+  end
+
+  # AI Ops records and AI tool setup files (written by aiops seed / migrate)
+  # are never part of a Task's product scope.
+  TOOL_SETUP_DIRS = %w[.ai_project/ .claude/ .codex/ .agents/].freeze
+  TOOL_SETUP_FILES = %w[AGENTS.md CLAUDE.md].freeze
+
+  def tool_setup_path?(path)
+    TOOL_SETUP_FILES.include?(path) || TOOL_SETUP_DIRS.any? { |dir| path.start_with?(dir) }
   end
 
   def validate_lock

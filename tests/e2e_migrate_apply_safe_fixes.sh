@@ -22,6 +22,28 @@ grep -q "| core_version | $current_version |" "$tmpdir/.ai_project/operating_mod
   exit 1
 }
 
+# Front matter only (no version table): migrate must update the keys doctor reads.
+fm_project="$tmpdir/front-matter-only"
+mkdir -p "$fm_project"
+ln -s "$repo_root" "$fm_project/.ai"
+cp -R "$repo_root/templates/ai_project/fast_track" "$fm_project/.ai_project"
+awk '/\| core_(version|source) \|/ { next } { gsub(/\{\{CORE_VERSION\}\}/, "0.0.0"); gsub(/\{\{CORE_SOURCE\}\}/, "old"); print }' \
+  "$fm_project/.ai_project/operating_model.md" > "$fm_project/.ai_project/operating_model.tmp"
+mv "$fm_project/.ai_project/operating_model.tmp" "$fm_project/.ai_project/operating_model.md"
+"$repo_root/bin/aiops" migrate --target "$fm_project" --apply >/dev/null
+grep -q "^core_version: $current_version\$" "$fm_project/.ai_project/operating_model.md" || {
+  printf '%s\n' "migrate apply did not update front matter core_version" >&2
+  exit 1
+}
+if grep -q '^core_source: old$' "$fm_project/.ai_project/operating_model.md"; then
+  printf '%s\n' "migrate apply did not update front matter core_source" >&2
+  exit 1
+fi
+if grep -q 'Migration Version Record' "$fm_project/.ai_project/operating_model.md"; then
+  printf '%s\n' "migrate apply should not append a duplicate version record" >&2
+  exit 1
+fi
+
 for dir in active backlog archive; do
   [ -d "$tmpdir/.ai_project/tasks/$dir" ] || {
     printf 'migrate apply did not create tasks/%s\n' "$dir" >&2

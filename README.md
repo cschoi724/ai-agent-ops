@@ -87,7 +87,7 @@ YourProject/
 | `aiops release` | 사용자용 release readiness 요약 |
 | `aiops seed --adapter both` | 프로젝트에 AI Ops core, Agent adapter, Role subagent, skill, `.ai/` 보호 hook 연결 |
 | `aiops guard verify-core` | `.ai/` core 무결성 확인 |
-| `aiops guard allow-structure-edit` / `lock-structure` | Owner가 Agent에게 `agent_registry.md`·`operating_model.md` 수정을 잠시 허용하거나 다시 잠금 |
+| `aiops guard allow-structure-edit` / `lock-structure` | Owner가 Agent에게 Operator Role 변경을 잠시 허용하거나 다시 잠금 |
 | `aiops orchestrate plan TASK_ID --operator AGENT` | Operator Role 세션의 다음 단계, 담당 subagent, 실행 명령, Owner 승인 필요 여부 계산 (읽기 전용) |
 | `aiops doctor --strict` | 설치와 운영 구성을 엄격 점검 |
 | `aiops project snapshot --json` | Agent가 먼저 읽는 프로젝트 상태 계약과 통제 신호 출력 |
@@ -130,7 +130,9 @@ YourProject/
 ## Safety Rules
 
 - `.ai/`는 AI Ops 헌법 폴더다. Agent는 수정할 수 없고, Claude·Codex 실행 전 hook, git pre-commit, copy 방식 읽기 전용 권한, core 무결성 검사가 함께 막는다.
-- `.ai_project/agent_registry.md`, `.ai_project/operating_model.md`는 Owner 전용이다. Bootstrap에서 처음 만드는 것만 허용되고, 이후에는 Agent 도구가 이 두 파일과 transition receipt, `.git/hooks/`, `.git/config`, `.git/aiops/`를 쓸 수 없다. Agent에게 잠시 수정을 맡기려면 Owner가 `aiops guard allow-structure-edit --minutes 30`을 실행하고 끝나면 `aiops guard lock-structure`로 잠근다.
+- Agent·팀 추가와 변경은 Agent에게 맡길 수 있다. Agent는 `.ai_project/agent_registry.md`를 파일 수정 도구로 고치고, guard가 수정 결과를 미리 계산해 Operator Role을 가진 Agent가 바뀌는 경우(추가·제거·비활성화·이름 변경)만 막는다. 셸 명령으로 Agent Registry를 고치는 것은 결과를 검사할 수 없어 막는다. `.ai_project/operating_model.md`는 보호하지 않는다.
+- Operator Role 변경을 Agent에게 맡기려면 Owner가 `aiops guard allow-structure-edit --minutes 30`을 실행하고 끝나면 `aiops guard lock-structure`로 잠근다. git 저장소가 아니어도 동작한다.
+- Agent 도구는 transition receipt, `.git/hooks/`, `.git/config`, `.git/aiops/`, `.ai_project/.runtime/structure_edit_until`을 쓸 수 없다.
 - Owner 승인(`--owner-approved`), `git commit --no-verify`, `core.hooksPath` 변경, `aiops update`, `aiops seed --force`, `aiops guard write-core-digest`, `aiops guard allow-structure-edit`는 Owner가 직접 터미널에서 실행한다. Agent 도구 호출은 차단된다.
 - Owner 승인과 재작업 허용 횟수는 Task 파일이 아니라 transition receipt 기준으로 확인한다. Task의 `approved_by`, `rework_limit`을 손으로 고쳐도 승인이 되지 않는다.
 - Codex는 프로젝트 hook을 처음 한 번 `/hooks`에서 trust해야 실행한다.

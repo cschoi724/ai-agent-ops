@@ -10,6 +10,18 @@
 
 ## Unreleased
 
+### Changed
+
+- Let agents maintain the Agent Registry: file-edit tools (Claude Code `Edit` / `Write` / `MultiEdit`, Codex `apply_patch`) may change `.ai_project/agent_registry.md` as long as the set of enabled Operator Role holders (name, id, aliases) stays the same. The guard computes the edited content first and denies only Operator Role grants, removals, disables, and renames, plus results with invalid front matter or edits it cannot apply. Shell writes to the registry stay blocked because their result cannot be checked.
+- Stop protecting `.ai_project/operating_model.md`; it holds no approval or permission data.
+- `aiops guard allow-structure-edit` now unlocks Operator Role changes only, and works outside git by storing the unlock in `.ai_project/.runtime/structure_edit_until` (agents cannot write it).
+- Exclude AI tool setup files (`.claude/`, `.codex/`, `.agents/`, `AGENTS.md`, `CLAUDE.md`) from the Task `allowed_paths` check, like `.ai_project/`, so reseeding or migrating does not block in-progress Tasks.
+
+### Fixed
+
+- `aiops migrate --apply` updates the `core_version` / `core_source` front matter keys that `aiops doctor` reads, instead of appending a separate version record when the version table is missing.
+- `aiops seed` on a project that already has `.ai_project/` no longer tells the user to start bootstrap; it says to restart agent sessions (and trust the Codex hook once).
+
 ## 0.17.0 - 2026-11-18
 
 ### Changed
