@@ -134,6 +134,7 @@ YourProject/
 - Operator Role 변경을 Agent에게 맡기려면 Owner가 `aiops guard allow-structure-edit --minutes 30`을 실행하고 끝나면 `aiops guard lock-structure`로 잠근다. git 저장소가 아니어도 동작한다.
 - Agent 도구는 transition receipt, `.git/hooks/`, `.git/config`, `.git/aiops/`, `.ai_project/.runtime/structure_edit_until`을 쓸 수 없다.
 - Owner 승인(`--owner-approved`), `git commit --no-verify`, `core.hooksPath` 변경, `aiops update`, `aiops seed --force`, `aiops guard write-core-digest`, `aiops guard allow-structure-edit`는 Owner가 직접 터미널에서 실행한다. Agent 도구 호출은 차단된다.
+- Owner 승인은 Operator Role을 가진 Agent가 있는 팀의 Task에 필요하다. Operator가 없는 다른 팀은 기존 흐름대로 승인한다. Task에 `team`이 없거나 `team`이 없는 Operator가 있으면 모든 Task에 필요하다.
 - Owner 승인과 재작업 허용 횟수는 Task 파일이 아니라 transition receipt 기준으로 확인한다. Task의 `approved_by`, `rework_limit`을 손으로 고쳐도 승인이 되지 않는다.
 - Codex는 프로젝트 hook을 처음 한 번 `/hooks`에서 trust해야 실행한다.
 - 프로젝트별 운영 상태는 `.ai_project/`에 남긴다.

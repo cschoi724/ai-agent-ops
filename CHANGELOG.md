@@ -10,6 +10,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Scope the Operator Owner-approval gate to teams: entering `approved` needs `--owner-approved` when the Task's `team` has an enabled Operator, the acting Agent is an Operator or belongs to such a team, the Task has no `team`, or an Operator has no `team` (or under `--dispatched-by`). Teams without an Operator keep their normal approval flow. `aiops orchestrate plan` follows the same rule.
+
 ## 0.17.1 - 2026-11-18
 
 ### Changed
