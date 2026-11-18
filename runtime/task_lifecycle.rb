@@ -444,17 +444,38 @@ class TaskLifecycle
     ([DEFAULT_REWORK_LIMIT] + limits).max
   end
 
-  def operator_registered?
-    @agents.any? { |agent| agent["status"] == "enabled" && Array(agent["roles"]).include?("Operator Role") }
+  def operator_agents
+    @agents.select { |agent| agent["status"] == "enabled" && Array(agent["roles"]).include?("Operator Role") }
   end
 
-  # Once any enabled Agent holds Operator Role, every entry into approved needs
-  # the Owner, whether or not --dispatched-by is given. An earlier Owner
+  def operator_in_team?(team)
+    name = team.to_s.strip.downcase
+    !name.empty? && operator_agents.any? { |agent| agent["team"].to_s.strip.downcase == name }
+  end
+
+  # Owner approval applies to the teams that have an Operator: Operator-driven
+  # transitions, an Operator actor, Tasks of a team with an Operator, actors from
+  # such a team, and every Task when the Task has no team or an Operator has no
+  # team. Other teams keep their normal approval flow.
+  def owner_approval_scope?
+    return true if @dispatcher
+
+    operators = operator_agents
+    return false if operators.empty?
+    return true if @actor && Array(@actor["roles"]).include?("Operator Role")
+    return true if @task["team"].to_s.strip.empty?
+    return true if operators.any? { |agent| agent["team"].to_s.strip.empty? }
+
+    operator_in_team?(@task["team"]) || (@actor && operator_in_team?(@actor["team"]))
+  end
+
+  # Entering approved in an Operator team needs the Owner, whether or not
+  # --dispatched-by is given. An earlier Owner
   # approval carries over to re-approval after rework while the rework count
   # stays within the limit (default 1). Past the limit the Owner must approve
   # again, which also raises the recorded limit.
   def validate_owner_approval
-    if @to == "approved" && (@dispatcher || operator_registered?) && !@options[:owner_approved]
+    if @to == "approved" && owner_approval_scope? && !@options[:owner_approved]
       if owner_approval_receipts.empty?
         raise LifecycleError, "Owner approval required before #{@task_id} becomes approved; show the command to the Owner (user) and let the Owner run it with --owner-approved"
       end

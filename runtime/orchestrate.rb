@@ -150,8 +150,25 @@ class OrchestrationPlan
     ([DEFAULT_REWORK_LIMIT] + limits.select { |value| value.is_a?(Integer) && value >= 0 }).max
   end
 
-  def operator_registered?
-    @agents.any? { |agent| agent["status"] == "enabled" && Array(agent["roles"]).include?("Operator Role") }
+  def operator_agents
+    @agents.select { |agent| agent["status"] == "enabled" && Array(agent["roles"]).include?("Operator Role") }
+  end
+
+  def operator_in_team?(team)
+    name = team.to_s.strip.downcase
+    !name.empty? && operator_agents.any? { |agent| agent["team"].to_s.strip.downcase == name }
+  end
+
+  # Mirrors TaskLifecycle#owner_approval_scope? for the planner.
+  def owner_approval_scope?
+    return true if @operator_name
+
+    operators = operator_agents
+    return false if operators.empty?
+    return true if @task["team"].to_s.strip.empty?
+    return true if operators.any? { |agent| agent["team"].to_s.strip.empty? }
+
+    operator_in_team?(@task["team"])
   end
 
   def consent_recorded?
@@ -172,7 +189,7 @@ class OrchestrationPlan
   def owner_approval_needed?
     # Only the scoped -> approved transition enters approved on the automatic path.
     return false unless @status == "scoped"
-    return false unless @operator_name || operator_registered?
+    return false unless owner_approval_scope?
     return true unless owner_approved?
 
     rework_count > rework_limit

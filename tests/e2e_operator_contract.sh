@@ -224,4 +224,78 @@ cp "$tmpdir/registry.orig" "$strict/.ai_project/agent_registry.md"
 add_agent '{"agent": "Good Operator", "status": "enabled", "provider": "codex", "runtime": "session", "roles": ["Lead Role", "Operator Role"], "capabilities": ["planning"]}'
 "$aiops" validate --target "$strict" --strict >/dev/null || fail "valid Operator registry should pass strict validation"
 
+# --- Owner approval is scoped to teams with an Operator ---
+teams="$tmpdir/teams"
+mkdir -p "$teams/.ai_project/tasks/active" "$teams/.ai_project/reports" "$teams/.ai_project/qa" "$teams/.ai_project/handoffs"
+ln -s "$repo_root" "$teams/.ai"
+cp "$project/.ai_project/source_of_truth.md" "$teams/.ai_project/source_of_truth.md"
+write_team_registry() {
+  cat > "$teams/.ai_project/agent_registry.md" <<EOF
+---
+schema: aiops.agent_registry.v1
+project: TeamFixture
+agents:
+  - agent: Charlie Project Agent
+    status: enabled
+    team: $1
+    roles: [Direction Role, Lead Role, Completion Role, Operator Role]
+    capabilities: [planning]
+  - agent: Charlie Execution Agent
+    status: enabled
+    team: Silo Charlie
+    roles: [Execution Role]
+    capabilities: [implementation]
+  - agent: Bravo Lead Agent
+    status: enabled
+    team: Silo Bravo
+    roles: [Lead Role]
+    capabilities: [planning]
+  - agent: Bravo Execution Agent
+    status: enabled
+    team: Silo Bravo
+    roles: [Execution Role]
+    capabilities: [implementation]
+---
+
+# Agent Registry
+EOF
+}
+# team_task ID TARGET_AGENT TEAM (empty TEAM drops the team field)
+team_task() {
+  write_task "$1" scoped "$2" "Lead Role"
+  src="$project/.ai_project/tasks/active/$1.md"
+  if [ -n "$3" ]; then
+    sed "s/^team: Development Team\$/team: $3/" "$src" > "$teams/.ai_project/tasks/active/$1.md"
+  else
+    sed "/^team: Development Team\$/d" "$src" > "$teams/.ai_project/tasks/active/$1.md"
+  fi
+  rm -f "$src"
+}
+plan_owner_flag() {
+  "$aiops" orchestrate plan "$1" --target "$teams" --json > "$tmpdir/team-plan.json"
+  ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).dig("next", "requires_owner_approval") ? "yes" : "no"' "$tmpdir/team-plan.json"
+}
+
+write_team_registry "Silo Charlie"
+team_task T-20261118-101 "Bravo Lead Agent" "Silo Bravo"
+"$aiops" task advance T-20261118-101 --target "$teams" --next-agent "Bravo Execution Agent" --check >"$tmpdir/out.txt" 2>&1 || {
+  cat "$tmpdir/out.txt" >&2
+  fail "team without an Operator should not need Owner approval"
+}
+[ "$(plan_owner_flag T-20261118-101)" = "no" ] || fail "planner should not ask Owner approval for a team without an Operator"
+team_task T-20261118-102 "Charlie Project Agent" "Silo Charlie"
+expect_fail "Operator team approval" "Owner approval required" \
+  "$aiops" task advance T-20261118-102 --target "$teams" --next-agent "Charlie Execution Agent" --check
+[ "$(plan_owner_flag T-20261118-102)" = "yes" ] || fail "planner should ask Owner approval for the Operator team"
+team_task T-20261118-103 "Charlie Project Agent" "Silo Bravo"
+expect_fail "Operator acting on another team" "Owner approval required" \
+  "$aiops" task advance T-20261118-103 --target "$teams" --next-agent "Bravo Execution Agent" --check
+team_task T-20261118-104 "Bravo Lead Agent" ""
+expect_fail "Task without team" "Owner approval required" \
+  "$aiops" task advance T-20261118-104 --target "$teams" --next-agent "Bravo Execution Agent" --check
+write_team_registry ""
+expect_fail "Operator without team" "Owner approval required" \
+  "$aiops" task advance T-20261118-101 --target "$teams" --next-agent "Bravo Execution Agent" --check
+[ "$(plan_owner_flag T-20261118-101)" = "yes" ] || fail "planner should ask Owner approval when an Operator has no team"
+
 printf '%s\n' "ok: operator contract"

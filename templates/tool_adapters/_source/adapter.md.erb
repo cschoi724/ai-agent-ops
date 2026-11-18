@@ -163,7 +163,7 @@ Operator Role은 기존 Role을 가진 Agent에게 Owner가 추가로 부여하�
 
 - 상태 전이는 실제로 일한 Role Agent 이름으로 하고 `--dispatched-by <Operator Agent>`를 붙인다.
 - Operator Agent는 Execution과 Verification을 직접 하지 않는다.
-- Task가 `approved`가 되기 전에는 반드시 Owner(사용자)에게 작업 범위와 일감 승인을 받는다. `--owner-approved`가 붙은 명령은 Agent가 실행하지 않는다. 명령을 Owner에게 보여 주고 Owner가 자기 터미널에서 직접 실행하게 한 뒤 기다린다. Registry에 Operator Role이 있으면 `--dispatched-by` 없이 진행해도 이 승인은 필요하다.
+- Task가 `approved`가 되기 전에는 반드시 Owner(사용자)에게 작업 범위와 일감 승인을 받는다. `--owner-approved`가 붙은 명령은 Agent가 실행하지 않는다. 명령을 Owner에게 보여 주고 Owner가 자기 터미널에서 직접 실행하게 한 뒤 기다린다. Operator Role을 가진 Agent가 있는 팀의 Task, Operator가 직접 맡은 Task, 팀이 없는 Task는 `--dispatched-by` 없이 진행해도 이 승인이 필요하다. Task의 `team`을 바꿔 이 승인을 피하지 않는다.
 - Owner 승인은 기본적으로 해당 Task 브랜치 안의 commit까지 포함한다. push, PR, merge는 프로젝트 운영 방침을 따른다.
 - 커밋 메시지는 프로젝트 언어로 쓰고 Role, Agent 이름, Task ID 같은 AI Ops 내용은 넣지 않는다.
 
