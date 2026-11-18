@@ -62,14 +62,11 @@ def yaml_scalar(value)
   JSON.generate(value.to_s)
 end
 
+# claude_model (optional) sets the Claude Code subagent model; without it the
+# subagent uses the session model.
 def claude_agent(data, body)
-  <<~MD + body
-    ---
-    name: #{data.fetch('name')}
-    description: #{yaml_scalar(data.fetch('description'))}
-    ---
-
-  MD
+  model = data["claude_model"] ? "model: #{data['claude_model']}\n" : ""
+  "---\nname: #{data.fetch('name')}\ndescription: #{yaml_scalar(data.fetch('description'))}\n#{model}---\n\n" + body
 end
 
 def toml_string(value)

@@ -10,6 +10,20 @@
 
 ## Unreleased
 
+### Added
+
+- Parallel Tasks. The Owner sets per-team running-Task limits with `parallel_tasks: { TEAM: N }` in the operating model front matter (teams with an Operator default to 1, other teams stay unlimited). When a Task starts (approved -> in_progress) the lifecycle enforces the limit and, for limits above 1, requires the Task's own worktree and no `allowed_paths` overlap with running Tasks of the team. `done` is blocked while the Task worktree is still active.
+- `aiops worktree create TASK_ID` creates `.worktrees/<team>-<TASK_ID>` on branch `<team>/<TASK_ID>` from the team base branch and records `worktree_path`, `worktree_role: active`, `base_ref`, `base_sha`, and `branch` in the Task. `aiops worktree merge TASK_ID` rebases the Task branch onto the base, fast-forwards the base (no merge commits; stops on conflicts without changing the base), removes the worktree and branch, and records `worktree_role: merged` and `merged_sha`.
+- Changed-path checks for a Task with its own worktree run in that worktree (repository-relative; `.worktrees/<name>/` prefixes in `allowed_paths` are accepted), and after merging use the `base_sha..merged_sha` range.
+- `aiops orchestrate next --operator AGENT` lists the Operator team's open Tasks with their next steps, the running count, the limit, and `start_now`. `orchestrate plan` adds `next.prepare` (`aiops worktree create` before starting, `aiops worktree merge` before done).
+- `aiops approve --all` approves every Task waiting for the Owner.
+- The Claude Code `aiops-execution` and `aiops-verification` subagents run on `model: sonnet`; other Role subagents keep the session model.
+
+### Changed
+
+- The guard protects `parallel_tasks` in `.ai_project/operating_model.md` like Operator Role holders: file-edit tools may change the rest, shell writes are blocked, and the Owner unlocks with `aiops guard allow-structure-edit`. Changing an Operator's `team` now also needs the Owner.
+- Role subagents, the `aiops-run` skill, and the adapters describe splitting work within the limit, running Execution subagents in parallel in their worktrees, and merging at completion.
+
 ## 0.17.3 - 2026-11-18
 
 ### Fixed

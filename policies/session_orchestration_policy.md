@@ -127,6 +127,13 @@ Delegation Record:
 
 ## 7. Lock과 책임
 
+### 7.1 병렬 Task
+
+- 팀 동시 진행 한도는 `operating_model.md`의 `parallel_tasks`가 정한다(Owner 전용). 없으면 Operator 팀은 1, 다른 팀은 제한 없음.
+- 한도가 2 이상이면 Lead가 큰 작업을 `allowed_paths`가 겹치지 않는 Task로 나눈다. 시작(approved → in_progress) 때 lifecycle이 한도, 자기 worktree, 경로 겹침을 검사한다.
+- 실행과 검증은 Task worktree(`aiops worktree create`)에서 하고, `aiops` 명령은 프로젝트 루트 기준으로 실행한다. 변경 경로 검사는 Task worktree 기준이다.
+- Completion은 `done` 전에 `aiops worktree merge`로 팀 기준 브랜치에 로컬로 합친다(rebase + fast-forward, merge commit 없음). 충돌이면 합치지 않고 Lead에게 돌려준다. push, PR, merge는 운영 방침을 따른다.
+
 - Lock은 Role Session이 획득한다.
 - 보조 작업자는 별도 lock owner가 아니다.
 - 보조 작업자를 사용해도 Task의 `locked_by`는 현재 Role로 유지한다.

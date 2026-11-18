@@ -376,6 +376,7 @@ class TaskLifecycle
     validate_dispatch
     validate_owner_approval
     validate_dependencies
+    validate_parallel
     validate_sources
     validate_changed_paths
     validate_lock
@@ -532,6 +533,8 @@ class TaskLifecycle
 
     changed = changes["paths"]
     allowed = Array(@task["allowed_paths"]).map { |path| path.to_s.sub(%r{/+\z}, "") }.reject(&:empty?)
+    # In a Task worktree, paths are repository-relative; `.worktrees/<name>/...` entries address the same files.
+    allowed += allowed.map { |path| path.sub(TaskWorktree::TEAM_WORKTREE_PREFIX, "") } if changes["worktree"]
     outside = changed.reject do |path|
       tool_setup_path?(path) || allowed.any? { |prefix| prefix == "." || path == prefix || path.start_with?("#{prefix}/") }
     end
@@ -546,6 +549,20 @@ class TaskLifecycle
 
   def tool_setup_path?(path)
     TOOL_SETUP_FILES.include?(path) || TOOL_SETUP_DIRS.any? { |dir| path.start_with?(dir) }
+  end
+
+  # Parallel Tasks: the team's running-Task limit, own worktree, and no
+  # allowed_paths overlap when a Task starts; merge before done.
+  def validate_parallel
+    if @from == "approved" && @to == "in_progress"
+      problem = TaskWorktree.start_problem(@target, @task)
+      raise LifecycleError, problem if problem
+    end
+    if @to == "done" && TaskWorktree.own_worktree?(@task)
+      raise LifecycleError, "Task worktree is still active; run aiops worktree merge #{@task_id} before done"
+    end
+    limit = TaskWorktree.parallel_limit(@target, @task["team"])
+    check("parallel", true, limit ? "team running-Task limit #{limit}" : "no running-Task limit")
   end
 
   def validate_lock

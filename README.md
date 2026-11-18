@@ -88,7 +88,9 @@ YourProject/
 | `aiops seed --adapter both` | 프로젝트에 AI Ops core, Agent adapter, Role subagent, skill, `.ai/` 보호 hook 연결 |
 | `aiops guard verify-core` | `.ai/` core 무결성 확인 |
 | `aiops guard allow-structure-edit` / `lock-structure` | Owner가 Agent에게 Operator Role 변경을 잠시 허용하거나 다시 잠금 |
-| `aiops approve [TASK_ID\|끝자리]` | Owner 전용 승인 단축 명령. 승인 대기 Task가 하나면 ID 없이, 여러 개면 `aiops approve 007`처럼 끝자리로 승인. 프로젝트 폴더와 팀 Operator는 알아서 채움 (Claude Code에서는 `! aiops approve 007`) |
+| `aiops approve [TASK_ID\|끝자리] [--all]` | Owner 전용 승인 단축 명령. 승인 대기 Task가 하나면 ID 없이, 여러 개면 `aiops approve 007`처럼 끝자리로, `--all`이면 모두 승인. 프로젝트 폴더와 팀 Operator는 알아서 채움 (Claude Code에서는 `! aiops approve 007`) |
+| `aiops orchestrate next --operator AGENT` | Operator 팀의 열린 Task 전체와 다음 단계, 동시 진행 수·한도, 지금 시작할 Task 계산 (읽기 전용) |
+| `aiops worktree create TASK_ID` / `merge TASK_ID` | 병렬 Task용 worktree를 `.worktrees/<팀>-<Task>`에 만들고(브랜치 `<팀>/<Task>`), 완료 때 팀 기준 브랜치에 rebase + fast-forward로 합친 뒤 정리 |
 | `aiops orchestrate plan TASK_ID --operator AGENT` | Operator Role 세션의 다음 단계, 담당 subagent, 실행 명령, Owner 승인 필요 여부 계산 (읽기 전용) |
 | `aiops doctor --strict` | 설치와 운영 구성을 엄격 점검 |
 | `aiops project snapshot --json` | Agent가 먼저 읽는 프로젝트 상태 계약과 통제 신호 출력 |
@@ -133,6 +135,7 @@ YourProject/
 - `.ai/`는 AI Ops 헌법 폴더다. Agent는 수정할 수 없고, Claude·Codex 실행 전 hook, git pre-commit, copy 방식 읽기 전용 권한, core 무결성 검사가 함께 막는다.
 - Agent·팀 추가와 변경은 Agent에게 맡길 수 있다. Agent는 `.ai_project/agent_registry.md`를 파일 수정 도구로 고치고, guard가 수정 결과를 미리 계산해 Operator Role을 가진 Agent가 바뀌는 경우(추가·제거·비활성화·이름 변경)만 막는다. 셸 명령으로 Agent Registry를 고치는 것은 결과를 검사할 수 없어 막는다. `.ai_project/operating_model.md`는 보호하지 않는다.
 - Operator Role 변경을 Agent에게 맡기려면 Owner가 `aiops guard allow-structure-edit --minutes 30`을 실행하고 끝나면 `aiops guard lock-structure`로 잠근다. git 저장소가 아니어도 동작한다.
+- 팀별 동시 진행 Task 수는 Owner가 `operating_model.md` front matter의 `parallel_tasks`(예: `Silo Charlie: 2`)로 정한다. 값이 없으면 Operator가 있는 팀은 1, 다른 팀은 제한 없음이다. 2 이상이면 Task마다 자기 worktree가 있어야 시작할 수 있고, 진행 중인 같은 팀 Task와 `allowed_paths`가 겹치면 시작할 수 없다. 이 값은 guard가 지켜 Agent가 바꿀 수 없다.
 - Agent 도구는 transition receipt, `.git/hooks/`, `.git/config`, `.git/aiops/`, `.ai_project/.runtime/structure_edit_until`을 쓸 수 없다.
 - Owner 승인(`aiops approve`, `--owner-approved`), `git commit --no-verify`, `core.hooksPath` 변경, `aiops update`, `aiops seed --force`, `aiops guard write-core-digest`, `aiops guard allow-structure-edit`는 Owner가 직접 터미널에서 실행한다. Agent 도구 호출은 차단된다.
 - Owner 승인은 Operator Role을 가진 Agent가 있는 팀의 Task에 필요하다. Operator가 없는 다른 팀은 기존 흐름대로 승인한다. Task에 `team`이 없거나 `team`이 없는 Operator가 있으면 모든 Task에 필요하다.

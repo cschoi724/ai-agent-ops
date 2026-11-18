@@ -6,6 +6,7 @@ require "json"
 require "open3"
 require "optparse"
 require "yaml"
+require_relative "task_worktree"
 
 class RiskProfileError < StandardError; end
 
@@ -114,6 +115,16 @@ module TaskRiskProfiles
   end
 
   def git_change_set(task, target, cache: nil)
+    # A Task with its own worktree is checked in that worktree (or, once merged, by its merged range).
+    source = TaskWorktree.change_source(task)
+    if source
+      target = source["dir"]
+      if source["range"]
+        from, to = source["range"]
+        paths = cached_git_lines(cache, ["merged_diff", target, from, to], target, "diff", "--name-only", from, to, "--")
+        return { "repository" => true, "base" => from, "base_resolved" => true, "paths" => paths, "worktree" => target }
+      end
+    end
     base = task["base_sha"].to_s
     base = task["status_ref_sha"].to_s if base.empty?
     repository = cached(cache, ["repository", target]) do
@@ -147,7 +158,8 @@ module TaskRiskProfiles
       "repository" => true,
       "base" => base,
       "base_resolved" => resolved,
-      "paths" => (changed + untracked).uniq.sort
+      "paths" => (changed + untracked).uniq.sort,
+      "worktree" => source ? target : nil
     }
   end
 
