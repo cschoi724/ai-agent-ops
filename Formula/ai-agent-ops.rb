@@ -1,7 +1,7 @@
 class AiAgentOps < Formula
   desc "AI agent operating harness for role-based project workflows"
   homepage "https://github.com/cschoi724/ai-agent-ops"
-  url "https://github.com/cschoi724/ai-agent-ops/archive/refs/tags/v0.17.1.tar.gz"
+  url "https://github.com/cschoi724/ai-agent-ops/archive/refs/tags/v0.17.2.tar.gz"
   sha256 "3e08ae4937035f8ce43eb18a79e2c1a12f486d3357dc80687b5204e729bf70e0"
 
   def install

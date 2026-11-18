@@ -4,7 +4,7 @@
 AI Ops를 *적용받는* 프로젝트의 운영 규칙은 `README.md`, `QUICKSTART.md`, `core/constitution.md`를 따른다.
 
 > 새 Agent 세션은 이 문서를 먼저 읽고, 사용자 작업 지시를 받은 뒤 해당 영역의 코드/문서를 깊게 읽는다.
-> 기준 버전: v0.17.1 (2026-11-18), 분석일: 2026-11-17. 줄 번호는 drift되므로 함수명/키워드로 `grep` 한다.
+> 기준 버전: v0.17.2 (2026-11-18), 분석일: 2026-11-17. 줄 번호는 drift되므로 함수명/키워드로 `grep` 한다.
 
 ---
 
@@ -214,7 +214,7 @@ bin/aiops status --target "$d"
 
 ## 9. 현재 상태와 남은 과제 (2026-11-18 기준)
 
-v0.17.1: v0.17.0(PR A~D #67~#70, 보안 보강 E-1 #71)에 Agent Registry 보호 완화(#74) 반영. 열린 PR은 #61(Draft, 문서만).
+v0.17.1: v0.17.0(PR A~D #67~#70, 보안 보강 E-1 #71)에 Agent Registry 보호 완화(#74), 팀 단위 Owner 승인(#77) 반영. 열린 PR은 #61(Draft, 문서만).
 
 **진행 중 최우선 계획**: `design_notes/single_session_orchestration_plan.md` — 다음은 PR F(v0.18.0, 새 Task ID·협업 lock·worktree). 보류: guard가 git 최상위 대신 상위 폴더로 `.ai`를 찾기(앱 저장소가 프로젝트 폴더 안쪽에 있는 구조), seed 재실행 시 bootstrap 안내 문구. 아래 표의 1·2번은 이 계획과 함께 재검토한다.
 
