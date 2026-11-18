@@ -4,7 +4,8 @@
 # Read-only planner for Operator-driven single-session workflow runs.
 #
 #   orchestrate.rb plan TASK_ID [--target DIR] [--operator AGENT] [--json]
-#   orchestrate.rb approve [TASK_ID|SUFFIX] [--target DIR]   (Owner only; `aiops approve`)
+#   orchestrate.rb next --operator AGENT [--target DIR] [--json]
+#   orchestrate.rb approve [TASK_ID|SUFFIX] [--all] [--target DIR]   (Owner only; `aiops approve`)
 #
 # The plan tells the Operator session which Role Agent (subagent) acts next,
 # which aiops command records the transition, and when to stop for the Owner.
@@ -16,6 +17,7 @@ require "json"
 require "open3"
 require "optparse"
 require "yaml"
+require_relative "task_worktree"
 
 class OrchestrationError < StandardError; end
 
@@ -62,6 +64,7 @@ class OrchestrationPlan
 
   def run
     return OwnerApproval.new(@argv).run if @action == "approve"
+    return TeamPlan.new(@argv).run if @action == "next"
     raise OrchestrationError, "usage: aiops orchestrate plan TASK_ID [--target DIR] [--operator AGENT] [--json]" unless @action == "plan"
 
     parse!
@@ -270,6 +273,11 @@ class OrchestrationPlan
                          end
       end
     end
+    if @status == "approved" && (TaskWorktree.parallel_limit(@target, @task["team"]) || 1) > 1 && !TaskWorktree.own_worktree?(@task)
+      next_step["prepare"] = ["aiops", "worktree", "create", @task_id]
+    elsif @status == "completion_review" && TaskWorktree.own_worktree?(@task)
+      next_step["prepare"] = ["aiops", "worktree", "merge", @task_id]
+    end
     if @status == "verification_in_progress"
       next_step["on_pass"] = argv + ["--evidence", @task["qa_to"].to_s].reject(&:empty?)
       next_step["on_fail"] = ["aiops", "task", "transition", @task_id, "--to", "rework_requested", "--role", "Verification Role"]
@@ -277,6 +285,10 @@ class OrchestrationPlan
       next_step["on_fail"] += ["--reason", "<검증 실패 이유>"]
     elsif @status == "in_progress"
       next_step["argv"] = argv + ["--evidence", @task["report_to"].to_s].reject(&:empty?)
+    end
+    if next_step["prepare"] && plan["state"].nil?
+      plan["state"] = "ready"
+      plan["reason"] = "run next.prepare first, then next.argv"
     end
     if kind == "gate" && plan["state"].nil?
       next_step["check"] = precheck(next_step["argv"])
@@ -302,6 +314,7 @@ class OrchestrationPlan
 
     puts "다음 담당: #{step['agent']} / #{step['role']} (subagent: #{step['subagent'] || '없음'})"
     puts "할 일: #{step['work']}"
+    puts "준비: #{shell_line(step['prepare'])}" if step["prepare"]
     puts "명령: #{shell_line(step['argv'])}"
     puts "통과 시: #{shell_line(step['on_pass'])}" if step["on_pass"]
     puts "실패 시: #{shell_line(step['on_fail'])}" if step["on_fail"]
@@ -320,6 +333,79 @@ class OrchestrationPlan
 
   def task_ids
     Dir.glob(File.join(@target, ".ai_project", "tasks", "**", "T-*.md")).map { |path| File.basename(path, ".md")[/\AT-\d{8}-\d{3,}/] }.compact.uniq
+  end
+end
+
+# `aiops orchestrate next`: every open Task of the Operator's team with its
+# next step, plus the team's running-Task limit, so one session can run
+# several Tasks in parallel (each in its own worktree) without exceeding it.
+class TeamPlan
+  SCHEMA = "aiops.orchestration_batch.v1"
+
+  def initialize(argv)
+    @argv = argv.dup
+    @options = { target: Dir.pwd, operator: nil, json: false }
+  end
+
+  def run
+    OptionParser.new do |opts|
+      opts.on("--target DIR") { |value| @options[:target] = value }
+      opts.on("--operator AGENT") { |value| @options[:operator] = value }
+      opts.on("--json") { @options[:json] = true }
+    end.parse!(@argv)
+    raise OrchestrationError, "orchestrate next requires --operator AGENT" if @options[:operator].to_s.empty?
+
+    batch = build
+    @options[:json] ? puts(JSON.pretty_generate(batch)) : render(batch)
+    0
+  rescue OrchestrationError, OptionParser::ParseError, TaskWorktree::Error => e
+    warn "aiops orchestrate: #{e.message}"
+    1
+  end
+
+  private
+
+  def build
+    target = File.expand_path(@options[:target])
+    operator = TaskWorktree.agents(target).find do |agent|
+      [agent["agent"], agent["id"], *Array(agent["aliases"])].map(&:to_s).include?(@options[:operator])
+    end
+    raise OrchestrationError, "operator is not registered: #{@options[:operator]}" unless operator
+
+    team = operator["team"].to_s
+    tasks = TaskWorktree.task_files(target).map { |path| TaskWorktree.read_front_matter(path) }.select do |task|
+      TaskWorktree.team_key(task["team"]) == TaskWorktree.team_key(team) && !%w[done cancelled].include?(task["status"].to_s) &&
+        task["id"].to_s.match?(/\AT-\d{8}-\d{3,}\z/)
+    end
+    limit = TaskWorktree.parallel_limit(target, team)
+    running = tasks.count { |task| TaskWorktree::ACTIVE_STATUSES.include?(task["status"].to_s) }
+    slots = limit ? [limit - running, 0].max : nil
+    plans = tasks.map do |task|
+      OrchestrationPlan.new(["plan", task["id"], "--target", target, "--operator", operator["agent"].to_s]).plan_data
+    end
+    start_now = plans.select { |plan| plan["status"] == "approved" }.map { |plan| plan["task_id"] }
+    start_now = start_now.first(slots) if slots
+    {
+      "schema" => SCHEMA,
+      "operator" => operator["agent"].to_s,
+      "team" => team,
+      "parallel_limit" => limit,
+      "running" => running,
+      "start_now" => start_now,
+      "tasks" => plans
+    }
+  end
+
+  def render(batch)
+    puts "AI Ops orchestrate next"
+    puts "Operator: #{batch['operator']} / 팀: #{batch['team']}"
+    puts "동시 진행: #{batch['running']} / 한도 #{batch['parallel_limit'] || '없음'}"
+    puts "지금 시작할 Task: #{batch['start_now'].empty? ? '없음' : batch['start_now'].join(', ')}"
+    batch["tasks"].each do |plan|
+      step = plan["next"] || {}
+      puts "- #{plan['task_id']} [#{plan['status']}] #{plan['state']}: #{plan['reason']}"
+      puts "    다음: #{step['agent']} / #{step['role']} (subagent: #{step['subagent'] || '없음'})" unless step.empty?
+    end
   end
 end
 
@@ -346,6 +432,8 @@ class OwnerApproval
     tasks = load_tasks
     raise OrchestrationError, "Task가 없습니다: #{relative_tasks_dir}" if tasks.empty?
 
+    return approve_all(tasks) if @all
+
     chosen = @query ? find(tasks) : only_pending(tasks)
     return 0 unless chosen
 
@@ -359,10 +447,12 @@ class OwnerApproval
 
   def parse!
     remaining = OptionParser.new do |opts|
-      opts.banner = "usage: aiops approve [TASK_ID|SUFFIX] [--target DIR]"
+      opts.banner = "usage: aiops approve [TASK_ID|SUFFIX] [--all] [--target DIR]"
       opts.on("--target DIR") { |value| @target = File.expand_path(value) }
+      opts.on("--all") { @all = true }
     end.parse(@argv)
     raise OrchestrationError, "Task는 하나만 지정하세요" if remaining.length > 1
+    raise OrchestrationError, "--all 과 Task ID는 함께 쓸 수 없습니다" if @all && !remaining.empty?
 
     @query = remaining.first
     @target ||= find_root(Dir.pwd)
@@ -440,6 +530,7 @@ class OwnerApproval
     waiting.each do |task, _plan|
       puts "  aiops approve #{self.class.short_id(task['id'], ids)}   # #{task['team']} / #{task['title']}"
     end
+    puts "  aiops approve --all   # 모두 승인"
     raise OrchestrationError, "승인할 Task를 지정하세요"
   end
 
@@ -456,6 +547,22 @@ class OwnerApproval
     end
 
     [task, plan_for(task)]
+  end
+
+  # Approves every Task waiting for the Owner, one by one; stops at the first failure.
+  def approve_all(tasks)
+    waiting = pending(tasks)
+    if waiting.empty?
+      puts "Owner 승인을 기다리는 Task가 없습니다."
+      return 0
+    end
+    puts "Owner 승인 #{waiting.length}건을 차례로 진행합니다."
+    waiting.each_with_index do |pair, index|
+      puts "" if index.positive?
+      status = approve(pair)
+      return status unless status.zero?
+    end
+    0
   end
 
   def approve(chosen)

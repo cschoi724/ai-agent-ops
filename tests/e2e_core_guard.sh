@@ -150,8 +150,32 @@ expect 2 "patch moves file onto registry" "$(patch_payload '*** Begin Patch
 *** Update File: src/a.md
 *** Move to: .ai_project/agent_registry.md
 *** End Patch')"
-expect 0 "write operating model" "{\"tool_name\":\"Write\",\"cwd\":\"$project\",\"tool_input\":{\"file_path\":\".ai_project/operating_model.md\"}}"
-expect 0 "shell edits operating model" "$(bash_payload 'echo x >> .ai_project/operating_model.md')"
+cat > "$project/.ai_project/operating_model.md" <<'MD'
+---
+schema: aiops.operating_model.v1
+parallel_tasks:
+  Silo Charlie: 2
+---
+
+# Operating Model
+MD
+model_edit() {
+  ruby -rjson -e 'puts JSON.generate("tool_name" => "Edit", "cwd" => ARGV[0], "tool_input" => { "file_path" => ".ai_project/operating_model.md", "old_string" => ARGV[1], "new_string" => ARGV[2] })' -- "$project" "$1" "$2"
+}
+expect 0 "edit operating model body" "$(model_edit '# Operating Model' '# Operating Model
+
+Notes')"
+expect 2 "raise parallel_tasks" "$(model_edit 'Silo Charlie: 2' 'Silo Charlie: 3')"
+expect 2 "add parallel_tasks team" "$(model_edit 'Silo Charlie: 2' 'Silo Charlie: 2
+  Silo Bravo: 3')"
+expect 2 "drop parallel_tasks" "$(model_edit 'parallel_tasks:
+  Silo Charlie: 2
+' '')"
+expect 0 "write operating model keeps parallel_tasks" "$(tool_payload Write "$(ruby -rjson -e 'puts JSON.generate("file_path" => ".ai_project/operating_model.md", "content" => File.read(ARGV[0]) + "\nmore\n")' -- "$project/.ai_project/operating_model.md")")"
+expect 2 "shell edits operating model" "$(bash_payload 'echo x >> .ai_project/operating_model.md')"
+expect 2 "edit registry moves operator team" "$(edit_payload 'team: core
+    roles: [Lead Role, Operator Role]' 'team: other
+    roles: [Lead Role, Operator Role]')"
 expect 2 "sed registry" "$(bash_payload 'sed -i \"\" s/a/b/ .ai_project/agent_registry.md')"
 expect 2 "redirect registry" "$(bash_payload 'echo x >> .ai_project/agent_registry.md')"
 expect 2 "forge receipt" "$(bash_payload 'echo {} > .ai_project/reports/T-1_scoped_to_approved_1-transition-receipt.json')"

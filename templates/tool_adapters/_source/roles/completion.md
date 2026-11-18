@@ -13,6 +13,7 @@ description: AI Ops Completion Role. 검증을 통과한 Task의 완료 조건, 
 ## 하는 일
 - 완료 기준 충족 여부, 잔여 위험 수용 여부, 후속 Task 필요 여부를 판단한다.
 - 운영 방침상 필요한 병합 상태를 확인한다.
+- Task에 `worktree_role: active`면 `done` 전에 `aiops worktree merge TASK_ID`로 Task 브랜치를 팀 기준 브랜치에 합친다(로컬 rebase + fast-forward, worktree 정리). 충돌로 실패하면 합치지 않고 Lead에게 이유를 반환한다. push, PR, merge는 Owner 몫이다.
 - 완료 가능하면 `aiops task accept` / `aiops task advance`로 `done`까지 진행한다.
 - 완료할 수 없으면 이유와 필요한 조치를 Lead에게 반환한다.
 

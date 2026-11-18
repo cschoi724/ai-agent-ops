@@ -52,7 +52,8 @@ module AiopsGuard
   # Agents may edit the Agent Registry with file-edit tools as long as the
   # enabled Operator Role holders stay the same; shell writes cannot be checked.
   REGISTRY_FILE = ".ai_project/agent_registry.md"
-  STRUCTURE_FILES = [REGISTRY_FILE].freeze
+  OPERATING_MODEL_FILE = ".ai_project/operating_model.md"
+  STRUCTURE_FILES = [REGISTRY_FILE, OPERATING_MODEL_FILE].freeze
   STRUCTURE_UNLOCK_FILE = "structure_edit_until"
   RUNTIME_UNLOCK_PATH = ".ai_project/.runtime/#{STRUCTURE_UNLOCK_FILE}"
   OPERATOR_ROLE = "Operator Role"
@@ -61,7 +62,7 @@ module AiopsGuard
 
   LABELS = {
     core: "AI Ops 헌법 폴더(.ai/)",
-    structure: "Agent Registry(셸 수정 불가)",
+    structure: "Agent Registry·운영 모델(셸 수정 불가)",
     unlock: "Owner 잠금 해제 기록",
     receipt: "aiops가 기록하는 transition receipt",
     git: "git hook·설정"
@@ -295,25 +296,35 @@ module AiopsGuard
 
     # Allows a file-edit tool change to the Agent Registry unless it changes
     # the enabled Operator Role holders (the Owner approval gate depends on them).
+    # Edit-tool changes to the Owner-only files are allowed unless they change
+    # the Owner-only parts: Operator Role holders (Agent Registry) or
+    # parallel_tasks (operating model).
     def registry_edit_reason(path)
+      model = File.basename(path).casecmp?("operating_model.md")
+      name = model ? "운영 모델" : "Agent Registry"
+      signature = model ? RegistryCheck.method(:parallel_signature) : RegistryCheck.method(:operator_signature)
       current = File.read(File.expand_path(path, @cwd))
-      before = RegistryCheck.operator_signature(current)
+      before = signature.call(current)
       updated = yield(current)
-      return "Agent Registry 수정 결과를 계산할 수 없어 차단합니다. 파일을 다시 읽고 정확한 내용으로 고치세요." if updated.nil?
+      return "#{name} 수정 결과를 계산할 수 없어 차단합니다. 파일을 다시 읽고 정확한 내용으로 고치세요." if updated.nil?
 
       after = begin
-        RegistryCheck.operator_signature(updated)
+        signature.call(updated)
       rescue RegistryCheck::Invalid => e
-        return "수정 후 Agent Registry front matter가 올바르지 않습니다(#{e.message}). YAML을 바르게 고쳐 다시 시도하세요."
+        return "수정 후 #{name} front matter가 올바르지 않습니다(#{e.message}). YAML을 바르게 고쳐 다시 시도하세요."
       end
       return nil if before == after
 
-      "Operator Role을 가진 Agent(추가·제거·비활성화·이름 변경)는 Owner(사용자)만 바꿀 수 있습니다. " \
+      if model
+        return "parallel_tasks(팀별 동시 진행 Task 수)는 Owner(사용자)만 바꿀 수 있습니다. " \
+               "필요하면 Owner에게 aiops guard allow-structure-edit 를 직접 실행해 달라고 요청하세요. 운영 모델의 다른 내용은 그대로 고칠 수 있습니다."
+      end
+      "Operator Role을 가진 Agent(추가·제거·비활성화·이름·팀 변경)는 Owner(사용자)만 바꿀 수 있습니다. " \
         "필요하면 Owner에게 aiops guard allow-structure-edit 를 직접 실행해 달라고 요청하세요. 다른 Agent·팀 수정은 그대로 할 수 있습니다."
     rescue RegistryCheck::Invalid => e
-      "현재 Agent Registry front matter가 올바르지 않아(#{e.message}) 안전하게 검사할 수 없습니다. Owner(사용자)에게 알리세요."
+      "현재 #{name} front matter가 올바르지 않아(#{e.message}) 안전하게 검사할 수 없습니다. Owner(사용자)에게 알리세요."
     rescue SystemCallError => e
-      "Agent Registry를 읽을 수 없어 차단합니다: #{e.message}"
+      "#{name}를 읽을 수 없어 차단합니다: #{e.message}"
     end
 
     def shell_reason(command)
@@ -641,9 +652,20 @@ module AiopsGuard
 
     module_function
 
-    # Sorted identities of enabled Agents holding Operator Role, matching
-    # the lifecycle's operator lookup (agent, id, aliases).
-    def operator_signature(text)
+    # Owner-only settings of the operating model: the per-team running-Task limits.
+    def parallel_signature(text)
+      return nil unless text.to_s.gsub("\r\n", "\n").start_with?("---\n")
+
+      data = front_matter(text)
+      config = data["parallel_tasks"]
+      return nil if config.nil?
+
+      raise Invalid, "parallel_tasks는 팀 이름: 숫자 형태여야 합니다" unless config.is_a?(Hash)
+
+      config.map { |team, value| [team.to_s.strip.downcase, value] }.sort_by { |team, _value| team }
+    end
+
+    def front_matter(text)
       text = text.to_s.gsub("\r\n", "\n")
       raise Invalid, "YAML front matter가 없습니다" unless text.start_with?("---\n")
 
@@ -654,14 +676,22 @@ module AiopsGuard
       data = YAML.safe_load(lines[1..closing].join, permitted_classes: [Date, Time, Symbol], aliases: true) || {}
       raise Invalid, "front matter가 객체가 아닙니다" unless data.is_a?(Hash)
 
+      data
+    rescue Psych::Exception => e
+      raise Invalid, e.message.lines.first.to_s.strip
+    end
+
+    # Sorted identities of enabled Agents holding Operator Role, matching
+    # the lifecycle's operator lookup (agent, id, aliases).
+    def operator_signature(text)
+      data = front_matter(text)
       Array(data["agents"]).select { |agent| agent.is_a?(Hash) }.map do |agent|
         roles = Array(agent["roles"]).map(&:to_s)
         next nil unless roles.include?(OPERATOR_ROLE) || roles.any? { |role| role.strip.casecmp?(OPERATOR_ROLE) }
 
-        [agent["status"].to_s, agent["agent"].to_s, agent["id"].to_s, Array(agent["aliases"]).map(&:to_s).sort, roles.include?(OPERATOR_ROLE)]
+        [agent["status"].to_s, agent["agent"].to_s, agent["id"].to_s, Array(agent["aliases"]).map(&:to_s).sort, roles.include?(OPERATOR_ROLE),
+         agent["team"].to_s.strip.downcase]
       end.compact.select { |status, *_rest| status.strip.casecmp?("enabled") }.sort
-    rescue Psych::Exception => e
-      raise Invalid, e.message.lines.first.to_s.strip
     end
 
     # Claude Code Edit / Write / MultiEdit results; nil when they cannot apply.
