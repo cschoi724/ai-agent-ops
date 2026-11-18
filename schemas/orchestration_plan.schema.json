@@ -50,6 +50,7 @@
         "work": { "type": "string", "minLength": 1 },
         "argv": { "$ref": "#/$defs/argv" },
         "requires_owner_approval": { "type": "boolean" },
+        "owner_command": { "type": "array", "minItems": 3, "items": { "type": "string", "minLength": 1 } },
         "on_pass": { "$ref": "#/$defs/argv" },
         "on_fail": { "$ref": "#/$defs/argv" },
         "check": {

@@ -23,7 +23,7 @@ description: Operator Role을 가진 Agent가 한 세션에서 사용자 요청�
 ## 2. 일감 등록 (승인 ②)
 1. Lead subagent(`aiops-lead`)에게 승인된 범위를 Task로 나누고 등록하게 한다 (`aiops task create`, `allowed_paths`, `source_of_truth`, 담당 Agent).
 2. 등록된 일감 목록(ID 짧은 호칭, 제목, 범위, 담당, 순서)을 Owner에게 보여주고 **일감 승인**을 받는다.
-3. 승인되면 Task마다 `aiops orchestrate plan TASK_ID --operator <내 Agent 이름>`이 알려 주는 `next.argv`(`--owner-approved` 포함)를 Owner에게 보여 주고, **Owner가 자기 터미널에서 직접 실행**하게 한다. 이 명령은 Agent가 실행하지 않는다 (guard가 차단한다).
+3. 승인할 Task가 정해지면 `aiops orchestrate plan TASK_ID --operator <내 Agent 이름>`이 알려 주는 짧은 Owner 명령(`next.owner_command`, 예: `aiops approve 007`)을 Owner에게 안내한다. Claude Code에서는 "`! aiops approve 007` 을 입력해 주세요", 그 밖에는 "터미널에서 `aiops approve 007` 을 실행해 주세요"라고 말하고 기다린다. 긴 `--owner-approved` 명령을 보여 주지 않는다. 이 명령은 Agent가 실행하지 않는다 (guard가 차단한다).
 4. Owner가 실행했다고 알려 주면 plan을 다시 확인해 approved가 됐는지 보고 진행 루프로 간다.
 
 ## 3. 진행 루프 (Task마다, 의존 순서대로)
