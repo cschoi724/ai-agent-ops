@@ -1774,21 +1774,15 @@ task_find_file() {
 
   [ -d "$task_dir" ] || return 1
 
-  if [ -f "$task_dir/active/$task_id.md" ]; then
-    printf '%s\n' "$task_dir/active/$task_id.md"
-    return 0
-  fi
-  if [ -f "$task_dir/backlog/$task_id.md" ]; then
-    printf '%s\n' "$task_dir/backlog/$task_id.md"
-    return 0
-  fi
-  if [ -f "$task_dir/archive/$task_id.md" ]; then
-    printf '%s\n' "$task_dir/archive/$task_id.md"
-    return 0
-  fi
-
-  found="$(find "$task_dir" -type f -name "$task_id*.md" | sort | head -n 1 || true)"
+  found="$(find "$task_dir" -type f -name "$task_id.md" | sort)"
+  [ -n "$found" ] || found="$(find "$task_dir" -type f -name "$task_id*.md" | sort)"
   [ -n "$found" ] || return 1
+  if [ "$(printf '%s\n' "$found" | wc -l | tr -d ' ')" -gt 1 ]; then
+    printf 'error: multiple Task files found for %s:\n' "$task_id" >&2
+    printf '%s\n' "$found" | sed "s#^$target/#  - #" >&2
+    printf 'error: keep one file per Task ID (aiops doctor lists duplicates)\n' >&2
+    return 1
+  fi
   printf '%s\n' "$found"
 }
 
@@ -1807,6 +1801,41 @@ task_next_id() {
     end
     puts format("T-%s-%03d", date, max + 1)
   ' "$target" "$date_compact"
+}
+
+# Serialize Task ID allocation and file creation across concurrent sessions.
+# A lock older than one minute is treated as left behind by a killed process.
+task_create_lock() {
+  task_create_lock_dir="$1/.ai_project/.runtime/locks/task-create.lock"
+  mkdir -p "$1/.ai_project/.runtime/locks" || die "cannot create .ai_project/.runtime/locks"
+  lock_tries=0
+  while ! mkdir "$task_create_lock_dir" 2>/dev/null; do
+    if [ -n "$(find "$task_create_lock_dir" -prune -mmin +1 2>/dev/null)" ]; then
+      rmdir "$task_create_lock_dir" 2>/dev/null || true
+      continue
+    fi
+    lock_tries=$((lock_tries + 1))
+    [ "$lock_tries" -le 150 ] || die "task create is busy in another session; retry: ${task_create_lock_dir#$1/}"
+    sleep 0.2 2>/dev/null || sleep 1
+  done
+  trap 'rmdir "$task_create_lock_dir" 2>/dev/null' EXIT
+  trap 'rmdir "$task_create_lock_dir" 2>/dev/null; exit 130' INT TERM
+}
+
+task_create_unlock() {
+  rmdir "$task_create_lock_dir" 2>/dev/null || true
+  trap - EXIT INT TERM
+}
+
+task_duplicate_ids() {
+  ruby -e '
+    groups = Hash.new { |hash, key| hash[key] = [] }
+    Dir.glob(File.join(ARGV[0], ".ai_project/tasks/**/T-*.md")).sort.each do |path|
+      id = File.basename(path, ".md")[/\AT-\d{8}-\d{3,}\z/]
+      groups[id] << path.sub("#{ARGV[0]}/", "") if id
+    end
+    groups.each { |id, paths| puts "#{id}: #{paths.join(", ")}" if paths.length > 1 }
+  ' "$1"
 }
 
 task_yaml_field() {
@@ -3821,6 +3850,17 @@ cmd_doctor() {
     if runtime_status_ref_tracked "$target"; then
       info "warn: .ai_project/.runtime/status_ref is tracked; remove it from Git and keep .ai_project/.runtime/ ignored"
       warnings=$((warnings + 1))
+    fi
+    if [ -d "$target/.ai_project/tasks" ]; then
+      duplicate_task_ids="$(task_duplicate_ids "$target")"
+      if [ -n "$duplicate_task_ids" ]; then
+        while IFS= read -r duplicate_line; do
+          info "warn: duplicate Task ID $duplicate_line"
+          warnings=$((warnings + 1))
+        done <<EOF
+$duplicate_task_ids
+EOF
+      fi
     fi
   else
     info "note: .ai_project missing; run bootstrap when ready"
@@ -10067,9 +10107,13 @@ cmd_task() {
 
       date_compact="$(date +%Y%m%d)"
       date_value="$(date +%Y-%m-%d)"
+      task_create_lock "$target"
       [ -n "$task_id" ] || task_id="$(task_next_id "$target" "$date_compact")"
       task_file="$target/.ai_project/tasks/$queue/$task_id.md"
       [ ! -e "$task_file" ] || die "task already exists: ${task_file#$target/}"
+      for existing_queue in active backlog archive; do
+        [ ! -e "$target/.ai_project/tasks/$existing_queue/$task_id.md" ] || die "task already exists: .ai_project/tasks/$existing_queue/$task_id.md"
+      done
 
       cat > "$task_file" <<EOF
 ---
@@ -10147,6 +10191,7 @@ EOF
         rm -f "$task_file"
         die "created task failed schema validation"
       }
+      task_create_unlock
 
       info "AI Ops task create"
       info "created: ${task_file#$target/}"
