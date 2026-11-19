@@ -152,6 +152,20 @@ expect 2 "patch moves file onto registry" "$(patch_payload '*** Begin Patch
 *** End Patch')"
 expect 0 "write operating model" "{\"tool_name\":\"Write\",\"cwd\":\"$project\",\"tool_input\":{\"file_path\":\".ai_project/operating_model.md\"}}"
 expect 0 "shell edits operating model" "$(bash_payload 'echo x >> .ai_project/operating_model.md')"
+# --- a session opened in an app repository inside the project stays guarded ---
+mkdir -p "$project/app/src"
+git -C "$project/app" init -q
+nested() {
+  set +e
+  printf '%s' "$2" | (cd "$project/app" && env -u CLAUDE_PROJECT_DIR "$aiops" guard pre-tool-use >/dev/null 2>"$tmpdir/guard.err")
+  status=$?
+  set -e
+  [ "$status" -eq "$1" ] || { cat "$tmpdir/guard.err" >&2; fail "guard nested $3: expected exit $1, got $status"; }
+}
+nested 2 "{\"tool_name\":\"Write\",\"cwd\":\"$project/app\",\"tool_input\":{\"file_path\":\"$project/.ai/README.md\"}}" "write core from app repo"
+nested 2 "{\"tool_name\":\"Bash\",\"cwd\":\"$project/app\",\"tool_input\":{\"command\":\"echo x > ../.ai/README.md\"}}" "shell write core from app repo"
+nested 2 "{\"tool_name\":\"Bash\",\"cwd\":\"$project/app\",\"tool_input\":{\"command\":\"git add -A\"}}" "git add -A in app repo"
+nested 0 "{\"tool_name\":\"Write\",\"cwd\":\"$project/app\",\"tool_input\":{\"file_path\":\"$project/app/src/a.txt\"}}" "write app file"
 # --- several Tasks share one team folder: stage, commit, discard only own paths ---
 expect 2 "git add ." "$(bash_payload 'git add .')"
 expect 2 "git add -A" "$(bash_payload 'git add -A')"

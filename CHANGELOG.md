@@ -10,6 +10,14 @@
 
 ## Unreleased
 
+### Added
+
+- `aiops doctor` warns about running Tasks whose `updated_at` is older than `stale_task_days` (operating model, default 3). A forgotten running Task keeps its `allowed_paths` and blocks other Tasks on those paths.
+
+### Fixed
+
+- The guard finds the project by walking up from the session folder and the tool call folder to the nearest folder with `.ai` or `.ai_project`. A session opened in an app repository or team worktree inside the project (where the git top level has no `.ai`) is now guarded.
+
 ## 0.19.0 - 2026-11-19
 
 ### Changed
