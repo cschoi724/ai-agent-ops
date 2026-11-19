@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+## 0.19.1 - 2026-11-19
+
 ### Added
 
 - `aiops doctor` warns about running Tasks whose `updated_at` is older than `stale_task_days` (operating model, default 3). A forgotten running Task keeps its `allowed_paths` and blocks other Tasks on those paths.
