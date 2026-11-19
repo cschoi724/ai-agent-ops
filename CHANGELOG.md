@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+## 0.18.2 - 2026-11-19
+
 ### Added
 
 - `merge_check` in the operating model front matter: a build/test command (one string, or `{ default: CMD, TEAM: CMD }`; an empty team value turns it off for that team) plus `merge_check_timeout_minutes` (default 60). `aiops worktree merge` runs it in the rebased Task worktree, which holds exactly what the base branch becomes, and only fast-forwards the base when it passes. On failure the base stays unchanged, the worktree stays active, and the Task records `merge_check: failed`, `merge_check_sha`, and `merge_check_log` (`.ai_project/reports/<TASK_ID>_merge-check.log`). `merge --check` shows the configured command.
