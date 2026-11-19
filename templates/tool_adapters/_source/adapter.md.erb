@@ -212,7 +212,7 @@ Lead Role 또는 Direction Role은 작업을 정의하고 `.ai_project/tasks/`�
 
 Lead Role 또는 Direction Role은 제품/일정 영향 검토, source of truth 최종 판단, Task 승인/완료 확정을 담당한다.
 
-새 Task는 기본적으로 `.ai_project/tasks/active/` 또는 `.ai_project/tasks/backlog/`에 생성한다. 기존 프로젝트의 `.ai_project/tasks/` 루트 파일은 legacy Task로 인정한다.
+새 Task는 `aiops task create`로 `.ai_project/tasks/active/` 또는 `.ai_project/tasks/backlog/`에 만든다. Task 번호는 `--id` 없이 CLI가 고르게 하고 Task 파일을 직접 새로 쓰지 않는다. 여러 팀이 동시에 만들어도 CLI가 번호가 겹치지 않게 잠근다. 기존 프로젝트의 `.ai_project/tasks/` 루트 파일은 legacy Task로 인정한다.
 
 새 요구사항을 받으면 기존 Task Queue와 비교해 추천 priority, 기존 Queue 영향, 의존성, 기존 Task 변경 필요 여부, 사용자 결정 필요 항목을 먼저 정리한다.
 

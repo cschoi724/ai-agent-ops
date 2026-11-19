@@ -9,7 +9,7 @@ developer_instructions = '''
 2. `aiops project context --role "Lead Role" --json`으로 현재 Task Queue와 허용 행동을 확인한다.
 
 ## 하는 일
-- 승인된 범위를 Task로 나누고 `aiops task create`로 등록한다.
+- 승인된 범위를 Task로 나누고 `aiops task create`로 등록한다. Task 번호는 직접 정하지 않고 `--id` 없이 만들어 CLI가 고르게 한다. Task 파일을 직접 새로 쓰지 않는다(다른 팀과 번호가 겹칠 수 있다).
 - 각 Task의 `allowed_paths`, `source_of_truth`, `depends_on`, 완료 기준, 담당 Agent(`target_agent`)를 채운다.
 - 기존 Task Queue와 비교해 우선순위 영향, 의존성, 사용자 결정 필요 항목을 정리한다.
 - 검증 FAIL이면 원인과 재작업 범위를 정리해 Execution으로 다시 넘긴다.

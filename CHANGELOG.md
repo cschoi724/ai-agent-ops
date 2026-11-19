@@ -10,6 +10,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- `aiops task create` no longer hands the same Task ID to sessions that create Tasks at the same time. ID allocation and file creation now run under a lock in `.ai_project/.runtime/locks/` (a lock older than one minute is treated as stale), and an ID already used in any queue (active, backlog, archive) is refused.
+- Task lookups in `bin/aiops` stop with the list of files when one Task ID matches several Task files instead of silently picking the first. `aiops doctor` warns about each duplicated Task ID (`--strict` fails).
+- Adapters tell Lead and Direction sessions to create Tasks only through `aiops task create` without choosing the ID themselves.
+
 ## 0.18.0 - 2026-11-18
 
 ### Added

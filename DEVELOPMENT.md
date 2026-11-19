@@ -217,7 +217,7 @@ bin/aiops status --target "$d"
 
 v0.18.0: v0.17.x(PR A~D #67~#70, 보안 보강 #71, Registry 보호 완화 #74, 팀 단위 Owner 승인 #77, `aiops approve` #80)에 병렬 Task(#83) 반영. 열린 PR은 #61(Draft, 문서만).
 
-**진행 중 최우선 계획**: `design_notes/single_session_orchestration_plan.md` — v0.18.0에서 병렬 Task(worktree·한도·경로 겹침·merge)를 반영했다. 남은 PR F 항목은 새 Task ID 형식·생성 잠금, 여러 사람·기계용 공유 잠금 저장소, worktree doctor의 Task 표시. 보류: guard가 git 최상위 대신 상위 폴더로 `.ai`를 찾기(앱 저장소가 프로젝트 폴더 안쪽에 있는 구조). 아래 표의 1·2번은 이 계획과 함께 재검토한다.
+**진행 중 최우선 계획**: `design_notes/single_session_orchestration_plan.md` — v0.18.0에서 병렬 Task(worktree·한도·경로 겹침·merge)를 반영했다. Unreleased에서 Task 생성 잠금, 같은 번호의 Task 파일 차단, doctor의 중복 번호 경고를 넣었다(번호 형식 `T-YYYYMMDD-NNN`은 유지). 남은 PR F 항목은 여러 사람·기계용 공유 잠금 저장소(새 Task ID 형식 포함), worktree doctor의 Task 표시. 보류: guard가 git 최상위 대신 상위 폴더로 `.ai`를 찾기(앱 저장소가 프로젝트 폴더 안쪽에 있는 구조). 아래 표의 1·2번은 이 계획과 함께 재검토한다.
 
 | # | 과제 | 근거 | 비고 |
 |---|---|---|---|
