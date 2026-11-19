@@ -52,7 +52,7 @@ description: Operator Role을 가진 Agent가 한 세션에서 사용자 요청�
 
 ## 5. 커밋
 - Owner가 일감을 승인했으면 해당 Task 브랜치 안의 commit은 허용된 것으로 본다 (0단계에서 다르게 정했으면 그 결정을 따른다).
-- Task worktree를 쓰면 완료 단계에서 `aiops worktree merge TASK_ID`로 팀 기준 브랜치에 로컬로 합치는 것까지 허용된 것으로 본다. push, PR, merge는 운영 방침을 따른다.
+- Task worktree를 쓰면 완료 단계에서 `aiops worktree merge TASK_ID`로 팀 기준 브랜치에 로컬로 합치는 것까지 허용된 것으로 본다. 합친 결과 검사(`merge_check`)가 실패하면 팀 기준 브랜치는 바뀌지 않는다. 로그를 Execution에게 넘겨 rework로 고치고 다시 검증한 뒤 merge를 다시 실행한다. push, PR, merge는 운영 방침을 따른다.
 - 커밋 메시지는 프로젝트 언어로 쓰고 프로젝트, 작업 내용, 범위, 상태만 쓴다. Role, Agent 이름, Task ID, receipt, handoff, `.ai_project` 경로 같은 AI Ops 내용은 넣지 않는다.
 
 ## 6. 끝났을 때 보고

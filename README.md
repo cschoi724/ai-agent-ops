@@ -135,6 +135,8 @@ YourProject/
 - `.ai/`는 AI Ops 헌법 폴더다. Agent는 수정할 수 없고, Claude·Codex 실행 전 hook, git pre-commit, copy 방식 읽기 전용 권한, core 무결성 검사가 함께 막는다.
 - Agent·팀 추가와 변경은 Agent에게 맡길 수 있다. Agent는 `.ai_project/agent_registry.md`를 파일 수정 도구로 고치고, guard가 수정 결과를 미리 계산해 Operator Role을 가진 Agent가 바뀌는 경우(추가·제거·비활성화·이름 변경)만 막는다. 셸 명령으로 Agent Registry를 고치는 것은 결과를 검사할 수 없어 막는다. `.ai_project/operating_model.md`는 보호하지 않는다.
 - Operator Role 변경을 Agent에게 맡기려면 Owner가 `aiops guard allow-structure-edit --minutes 30`을 실행하고 끝나면 `aiops guard lock-structure`로 잠근다. git 저장소가 아니어도 동작한다.
+- 병렬 Task를 합치기 전에 빌드·테스트를 돌리려면 Owner가 `operating_model.md` front matter에 `merge_check: "<빌드·테스트 명령>"`(팀별은 `merge_check: { default: CMD, Silo Delta: CMD }`)를 넣는다. `aiops worktree merge`가 합친 결과로 이 명령을 돌리고, 실패하면 팀 기준 브랜치를 바꾸지 않는다.
+- Owner만 쓰는 점검(테스트)은 제품 저장소 대신 `.ai_project/checks/`에 두고 `run.sh`로 돌린다. `aiops worktree checks TASK_ID`가 Task 작업 폴더를 `AIOPS_WORKTREE`로 넘겨 실행하며, `merge_check: sh "$AIOPS_CHECKS_DIR/run.sh"`로 합치기 전 확인에도 쓴다.
 - 팀별 동시 진행 Task 수는 Owner가 `operating_model.md` front matter의 `parallel_tasks`(예: `Silo Charlie: 2`)로 정한다. 값이 없으면 Operator가 있는 팀은 1, 다른 팀은 제한 없음이다. 2 이상이면 Task마다 자기 worktree가 있어야 시작할 수 있고, 진행 중인 같은 팀 Task와 `allowed_paths`가 겹치면 시작할 수 없다. 이 값은 guard가 지켜 Agent가 바꿀 수 없다.
 - Agent 도구는 transition receipt, `.git/hooks/`, `.git/config`, `.git/aiops/`, `.ai_project/.runtime/structure_edit_until`을 쓸 수 없다.
 - Owner 승인(`aiops approve`, `--owner-approved`), `git commit --no-verify`, `core.hooksPath` 변경, `aiops update`, `aiops seed --force`, `aiops guard write-core-digest`, `aiops guard allow-structure-edit`는 Owner가 직접 터미널에서 실행한다. Agent 도구 호출은 차단된다.

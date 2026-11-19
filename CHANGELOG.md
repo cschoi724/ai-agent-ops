@@ -10,6 +10,13 @@
 
 ## Unreleased
 
+### Added
+
+- `merge_check` in the operating model front matter: a build/test command (one string, or `{ default: CMD, TEAM: CMD }`; an empty team value turns it off for that team) plus `merge_check_timeout_minutes` (default 60). `aiops worktree merge` runs it in the rebased Task worktree, which holds exactly what the base branch becomes, and only fast-forwards the base when it passes. On failure the base stays unchanged, the worktree stays active, and the Task records `merge_check: failed`, `merge_check_sha`, and `merge_check_log` (`.ai_project/reports/<TASK_ID>_merge-check.log`). `merge --check` shows the configured command.
+- The guard treats `merge_check` and `merge_check_timeout_minutes` as Owner-only, like `parallel_tasks`.
+- Project checks: the Owner's own tests live in `.ai_project/checks/` (entry point `run.sh`) instead of the product repository, so every worktree shares one copy and other developers' suites stay untouched. `aiops worktree checks [TASK_ID] [--dir DIR]` runs them against a working folder and passes `AIOPS_WORKTREE`, `AIOPS_PROJECT_ROOT`, `AIOPS_CHECKS_DIR`, and `AIOPS_TASK_ID` (the merge check gets the same variables). `.ai_project/checks/` paths in `allowed_paths` now count for the running-Task overlap check.
+- Adapters, Execution, and Verification roles create new AI-made checks in `.ai_project/checks/` unless a Task asks for product-repository tests, and run `aiops worktree checks` when it exists.
+
 ## 0.18.1 - 2026-11-19
 
 ### Fixed

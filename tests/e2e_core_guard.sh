@@ -172,6 +172,26 @@ expect 2 "drop parallel_tasks" "$(model_edit 'parallel_tasks:
   Silo Charlie: 2
 ' '')"
 expect 0 "write operating model keeps parallel_tasks" "$(tool_payload Write "$(ruby -rjson -e 'puts JSON.generate("file_path" => ".ai_project/operating_model.md", "content" => File.read(ARGV[0]) + "\nmore\n")' -- "$project/.ai_project/operating_model.md")")"
+expect 2 "add merge_check" "$(model_edit 'parallel_tasks:' 'merge_check: make test
+parallel_tasks:')"
+cat > "$project/.ai_project/operating_model.md" <<'MD'
+---
+schema: aiops.operating_model.v1
+merge_check:
+  default: make test
+---
+
+# Operating Model
+MD
+expect 2 "weaken merge_check" "$(model_edit 'default: make test' 'default: \"true\"')"
+expect 2 "drop merge_check" "$(model_edit 'merge_check:
+  default: make test
+' '')"
+expect 2 "add merge_check timeout" "$(model_edit 'merge_check:' 'merge_check_timeout_minutes: 1
+merge_check:')"
+expect 0 "edit operating model body keeps merge_check" "$(model_edit '# Operating Model' '# Operating Model
+
+Notes')"
 expect 2 "shell edits operating model" "$(bash_payload 'echo x >> .ai_project/operating_model.md')"
 expect 2 "edit registry moves operator team" "$(edit_payload 'team: core
     roles: [Lead Role, Operator Role]' 'team: other

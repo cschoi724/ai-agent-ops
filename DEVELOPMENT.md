@@ -110,9 +110,9 @@ aiops (sh)
 | `model_advisor.rb` (778) | `model recommend` (codex / claude-code / custom, `model_catalog.json`) | `class ModelAdvisor` |
 | `dashboard_server.rb` (432) | `project dashboard --serve` localhost 서버 | `class DashboardServer` |
 | `dashboard_presets.rb` (430) | dashboard preset list/show/add/run | `class DashboardPresets` |
-| `guard.rb` | `aiops guard`: 보호 hook 판정(Claude/Codex 공통 payload, fail-closed). 보호 대상은 `.ai/`, Agent Registry의 Operator Role 보유자와 운영 모델 `parallel_tasks`(파일 수정 도구 결과를 `RegistryCheck`로 계산해 비교, 셸 수정은 차단, Bootstrap 생성은 허용, `allow-structure-edit`로 기한부 해제), transition receipt, `.git/hooks`·`config`·`aiops`. Owner 전용 명령(`--owner-approved`, `--no-verify`, `core.hooksPath`, `write-core-digest`, registry `--apply`) 차단, pre-commit, core 무결성(digest / git clean) | `module AiopsGuard` |
+| `guard.rb` | `aiops guard`: 보호 hook 판정(Claude/Codex 공통 payload, fail-closed). 보호 대상은 `.ai/`, Agent Registry의 Operator Role 보유자와 운영 모델 `parallel_tasks`·`merge_check`(파일 수정 도구 결과를 `RegistryCheck`로 계산해 비교, 셸 수정은 차단, Bootstrap 생성은 허용, `allow-structure-edit`로 기한부 해제), transition receipt, `.git/hooks`·`config`·`aiops`. Owner 전용 명령(`--owner-approved`, `--no-verify`, `core.hooksPath`, `write-core-digest`, registry `--apply`) 차단, pre-commit, core 무결성(digest / git clean) | `module AiopsGuard` |
 | `orchestrate.rb` | `aiops orchestrate plan`: Operator 세션의 다음 단계·담당 subagent·명령·Owner 정지 지점 계산(읽기 전용, gate 단계는 lifecycle `--check`로 사전 확인), `orchestrate next`(팀 전체·동시 진행 한도), `aiops approve [--all]`(Owner 승인 단축) | `class OrchestrationPlan`, `TeamPlan`, `OwnerApproval` |
-| `task_worktree.rb` | 병렬 Task: 팀별 한도(`parallel_tasks`, Operator 팀 기본 1), 시작 검사(한도·자기 worktree·경로 겹침), `aiops worktree create/merge`(rebase + fast-forward), Task worktree 기준 변경 경로 범위 | `module TaskWorktree` |
+| `task_worktree.rb` | 병렬 Task: 팀별 한도(`parallel_tasks`, Operator 팀 기본 1), 시작 검사(한도·자기 worktree·경로 겹침), `aiops worktree create/merge/checks`(rebase + 합친 결과 검사 `merge_check` + fast-forward, `.ai_project/checks` 프로젝트 점검), Task worktree 기준 변경 경로 범위 | `module TaskWorktree` |
 | `tool_extras.rb` | seed·doctor용 Role subagent, skill, hook 설정 설치와 상태 점검(settings 병합) | `class ToolExtras` |
 | `github_release_status.rb` (336) | `--github` 시 `gh`로 PR/check/release 조회 (timeout 포함) | `class GitHubReleaseStatus` |
 
