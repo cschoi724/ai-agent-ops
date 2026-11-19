@@ -92,7 +92,7 @@
 
 ### PR F — 팀 협업 충돌 방지 (0.18.0)
 
-> 0.18.0 반영: 팀별 동시 진행 한도(`parallel_tasks`), 진행 중 Task 사이 `allowed_paths` 겹침 검사(같은 팀), `aiops worktree create/merge`, `orchestrate next`, `aiops approve --all`. 0.18.1 반영: 같은 프로젝트 폴더 안 Task 생성 잠금, `task_find_file` 후보 여럿 차단, doctor 중복 번호 경고. 남은 항목: 여러 기계용 공유 잠금 저장소와 새 Task ID 형식, worktree doctor Task 표시.
+> 0.18.0 반영: 팀별 동시 진행 한도(`parallel_tasks`), 진행 중 Task 사이 `allowed_paths` 겹침 검사(같은 팀), `aiops worktree create/merge`, `orchestrate next`, `aiops approve --all`. 0.18.1 반영: 같은 프로젝트 폴더 안 Task 생성 잠금, `task_find_file` 후보 여럿 차단, doctor 중복 번호 경고. 남은 항목: 여러 기계용 공유 잠금 저장소와 새 Task ID 형식. 다음 버전: Task별 worktree·한도·`worktree create/merge`·`merge_check`를 없애고, 수 제한 없이 팀 작업 폴더 하나를 같이 쓰는 방식으로 바꿨다(시작 시 경로 겹침 검사, 자기 경로만 commit하도록 guard가 폴더 전체 git 명령 차단, 변경 경로 검사에서 이웃 Task 경로 제외).
 
 - 새 Task ID 형식과 생성 잠금, 중복 검사
 - 공유 잠금 저장소 (git 공용 디렉터리, Task·Agent·이유·시작·만료 기록)

@@ -273,11 +273,6 @@ class OrchestrationPlan
                          end
       end
     end
-    if @status == "approved" && (TaskWorktree.parallel_limit(@target, @task["team"]) || 1) > 1 && !TaskWorktree.own_worktree?(@task)
-      next_step["prepare"] = ["aiops", "worktree", "create", @task_id]
-    elsif @status == "completion_review" && TaskWorktree.own_worktree?(@task)
-      next_step["prepare"] = ["aiops", "worktree", "merge", @task_id]
-    end
     if @status == "verification_in_progress"
       next_step["on_pass"] = argv + ["--evidence", @task["qa_to"].to_s].reject(&:empty?)
       next_step["on_fail"] = ["aiops", "task", "transition", @task_id, "--to", "rework_requested", "--role", "Verification Role"]
@@ -285,10 +280,6 @@ class OrchestrationPlan
       next_step["on_fail"] += ["--reason", "<검증 실패 이유>"]
     elsif @status == "in_progress"
       next_step["argv"] = argv + ["--evidence", @task["report_to"].to_s].reject(&:empty?)
-    end
-    if next_step["prepare"] && plan["state"].nil?
-      plan["state"] = "ready"
-      plan["reason"] = "run next.prepare first, then next.argv"
     end
     if kind == "gate" && plan["state"].nil?
       next_step["check"] = precheck(next_step["argv"])
@@ -314,7 +305,6 @@ class OrchestrationPlan
 
     puts "다음 담당: #{step['agent']} / #{step['role']} (subagent: #{step['subagent'] || '없음'})"
     puts "할 일: #{step['work']}"
-    puts "준비: #{shell_line(step['prepare'])}" if step["prepare"]
     puts "명령: #{shell_line(step['argv'])}"
     puts "통과 시: #{shell_line(step['on_pass'])}" if step["on_pass"]
     puts "실패 시: #{shell_line(step['on_fail'])}" if step["on_fail"]
@@ -337,8 +327,8 @@ class OrchestrationPlan
 end
 
 # `aiops orchestrate next`: every open Task of the Operator's team with its
-# next step, plus the team's running-Task limit, so one session can run
-# several Tasks in parallel (each in its own worktree) without exceeding it.
+# next step, and the approved Tasks that can start together now (their
+# allowed_paths overlap neither running Tasks nor each other).
 class TeamPlan
   SCHEMA = "aiops.orchestration_batch.v1"
 
@@ -377,30 +367,47 @@ class TeamPlan
       TaskWorktree.team_key(task["team"]) == TaskWorktree.team_key(team) && !%w[done cancelled].include?(task["status"].to_s) &&
         task["id"].to_s.match?(/\AT-\d{8}-\d{3,}\z/)
     end
-    limit = TaskWorktree.parallel_limit(target, team)
     running = tasks.count { |task| TaskWorktree::ACTIVE_STATUSES.include?(task["status"].to_s) }
-    slots = limit ? [limit - running, 0].max : nil
     plans = tasks.map do |task|
       OrchestrationPlan.new(["plan", task["id"], "--target", target, "--operator", operator["agent"].to_s]).plan_data
     end
-    start_now = plans.select { |plan| plan["status"] == "approved" }.map { |plan| plan["task_id"] }
-    start_now = start_now.first(slots) if slots
+    start_now, waiting = startable(target, tasks.select { |task| task["status"].to_s == "approved" })
     {
       "schema" => SCHEMA,
       "operator" => operator["agent"].to_s,
       "team" => team,
-      "parallel_limit" => limit,
       "running" => running,
       "start_now" => start_now,
+      "waiting" => waiting,
       "tasks" => plans
     }
+  end
+
+  # Approved Tasks that can start now, in Task order, skipping any whose
+  # allowed_paths overlap a running Task or one already picked.
+  def startable(target, approved)
+    picked = []
+    waiting = {}
+    approved.sort_by { |task| task["id"].to_s }.each do |task|
+      problem = TaskWorktree.start_problem(target, task)
+      clash = picked.find { |other| TaskWorktree.overlap(TaskWorktree.product_paths(task), TaskWorktree.product_paths(other)) }
+      if problem
+        waiting[task["id"].to_s] = problem
+      elsif clash
+        waiting[task["id"].to_s] = "allowed_paths overlap with #{clash['id']} (starting now); start after it"
+      else
+        picked << task
+      end
+    end
+    [picked.map { |task| task["id"].to_s }, waiting]
   end
 
   def render(batch)
     puts "AI Ops orchestrate next"
     puts "Operator: #{batch['operator']} / 팀: #{batch['team']}"
-    puts "동시 진행: #{batch['running']} / 한도 #{batch['parallel_limit'] || '없음'}"
-    puts "지금 시작할 Task: #{batch['start_now'].empty? ? '없음' : batch['start_now'].join(', ')}"
+    puts "진행 중: #{batch['running']}"
+    puts "지금 같이 시작할 Task: #{batch['start_now'].empty? ? '없음' : batch['start_now'].join(', ')}"
+    batch["waiting"].each { |id, why| puts "  대기 #{id}: #{why}" }
     batch["tasks"].each do |plan|
       step = plan["next"] || {}
       puts "- #{plan['task_id']} [#{plan['status']}] #{plan['state']}: #{plan['reason']}"

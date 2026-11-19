@@ -150,49 +150,31 @@ expect 2 "patch moves file onto registry" "$(patch_payload '*** Begin Patch
 *** Update File: src/a.md
 *** Move to: .ai_project/agent_registry.md
 *** End Patch')"
-cat > "$project/.ai_project/operating_model.md" <<'MD'
----
-schema: aiops.operating_model.v1
-parallel_tasks:
-  Silo Charlie: 2
----
-
-# Operating Model
-MD
-model_edit() {
-  ruby -rjson -e 'puts JSON.generate("tool_name" => "Edit", "cwd" => ARGV[0], "tool_input" => { "file_path" => ".ai_project/operating_model.md", "old_string" => ARGV[1], "new_string" => ARGV[2] })' -- "$project" "$1" "$2"
-}
-expect 0 "edit operating model body" "$(model_edit '# Operating Model' '# Operating Model
-
-Notes')"
-expect 2 "raise parallel_tasks" "$(model_edit 'Silo Charlie: 2' 'Silo Charlie: 3')"
-expect 2 "add parallel_tasks team" "$(model_edit 'Silo Charlie: 2' 'Silo Charlie: 2
-  Silo Bravo: 3')"
-expect 2 "drop parallel_tasks" "$(model_edit 'parallel_tasks:
-  Silo Charlie: 2
-' '')"
-expect 0 "write operating model keeps parallel_tasks" "$(tool_payload Write "$(ruby -rjson -e 'puts JSON.generate("file_path" => ".ai_project/operating_model.md", "content" => File.read(ARGV[0]) + "\nmore\n")' -- "$project/.ai_project/operating_model.md")")"
-expect 2 "add merge_check" "$(model_edit 'parallel_tasks:' 'merge_check: make test
-parallel_tasks:')"
-cat > "$project/.ai_project/operating_model.md" <<'MD'
----
-schema: aiops.operating_model.v1
-merge_check:
-  default: make test
----
-
-# Operating Model
-MD
-expect 2 "weaken merge_check" "$(model_edit 'default: make test' 'default: \"true\"')"
-expect 2 "drop merge_check" "$(model_edit 'merge_check:
-  default: make test
-' '')"
-expect 2 "add merge_check timeout" "$(model_edit 'merge_check:' 'merge_check_timeout_minutes: 1
-merge_check:')"
-expect 0 "edit operating model body keeps merge_check" "$(model_edit '# Operating Model' '# Operating Model
-
-Notes')"
-expect 2 "shell edits operating model" "$(bash_payload 'echo x >> .ai_project/operating_model.md')"
+expect 0 "write operating model" "{\"tool_name\":\"Write\",\"cwd\":\"$project\",\"tool_input\":{\"file_path\":\".ai_project/operating_model.md\"}}"
+expect 0 "shell edits operating model" "$(bash_payload 'echo x >> .ai_project/operating_model.md')"
+# --- several Tasks share one team folder: stage, commit, discard only own paths ---
+expect 2 "git add ." "$(bash_payload 'git add .')"
+expect 2 "git add -A" "$(bash_payload 'git add -A')"
+expect 2 "git add --all" "$(bash_payload 'git add --all')"
+expect 2 "git add -u" "$(bash_payload 'git add -u')"
+expect 0 "git add own paths" "$(bash_payload 'git add -- src/a.md src/b')"
+expect 2 "git commit -a" "$(bash_payload 'git commit -a -m x')"
+expect 2 "git commit -am" "$(bash_payload 'git commit -am x')"
+expect 2 "git commit --all" "$(bash_payload 'git commit --all -m x')"
+expect 0 "git commit -m with a" "$(bash_payload 'git commit -m area')"
+expect 0 "git commit own paths" "$(bash_payload 'git commit -m x -- src/a.md')"
+expect 2 "git checkout ." "$(bash_payload 'git checkout -- .')"
+expect 2 "git restore ." "$(bash_payload 'git restore .')"
+expect 0 "git restore own path" "$(bash_payload 'git restore -- src/a.md')"
+expect 2 "git reset --hard" "$(bash_payload 'git reset --hard')"
+expect 0 "git reset own path" "$(bash_payload 'git reset -- src/a.md')"
+expect 2 "git clean" "$(bash_payload 'git clean -fd')"
+expect 0 "git clean dry run" "$(bash_payload 'git clean -n')"
+expect 2 "git stash" "$(bash_payload 'git stash')"
+expect 2 "git stash push" "$(bash_payload 'git stash push -m x')"
+expect 0 "git stash own path" "$(bash_payload 'git stash push -- src/a.md')"
+expect 0 "git stash pop" "$(bash_payload 'git stash pop')"
+expect 0 "git status" "$(bash_payload 'git status --short')"
 expect 2 "edit registry moves operator team" "$(edit_payload 'team: core
     roles: [Lead Role, Operator Role]' 'team: other
     roles: [Lead Role, Operator Role]')"

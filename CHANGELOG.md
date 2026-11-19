@@ -10,6 +10,17 @@
 
 ## Unreleased
 
+### Changed
+
+- Parallel Tasks now share one team folder and have no count limit. The Lead splits work into Tasks whose `allowed_paths` do not overlap; a Task cannot start while a running Task of the same team or folder uses an overlapping path. `aiops orchestrate next` reports `start_now` (approved Tasks that can start together) and `waiting` (with the reason) instead of a limit.
+- Changed-path checks treat changes inside paths of other running Tasks in the same folder as theirs, so Tasks working side by side do not fail each other's scope check.
+- The guard blocks folder-wide git commands in agent sessions because other Tasks share the folder: `git add .`/`-A`/`--all`/`-u`, `git commit -a`/`--all`, `git checkout .`, `git restore .`, `git reset --hard`, `git clean` (except dry run), and `git stash` without a pathspec. Agents stage and commit their own paths (`git commit -m ... -- <paths>`).
+- Adapters, the Lead, Execution, and Verification roles, and the aiops-run skill describe the shared-folder workflow.
+
+### Removed
+
+- The per-team running-Task limit `parallel_tasks` (and its Operator-team default of 1), per-Task worktrees, `aiops worktree create` and `aiops worktree merge`, the done gate for active Task worktrees, worktree-based change ranges, `merge_check`, and `next.prepare` in orchestration plans. The guard no longer protects the operating model. `aiops worktree checks` and `.ai_project/checks/` stay.
+
 ## 0.18.2 - 2026-11-19
 
 ### Added

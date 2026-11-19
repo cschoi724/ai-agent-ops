@@ -12,6 +12,7 @@ description: AI Ops Lead Role. 승인된 작업 범위를 실행 가능한 Task�
 
 ## 하는 일
 - 승인된 범위를 Task로 나누고 `aiops task create`로 등록한다. Task 번호는 직접 정하지 않고 `--id` 없이 만들어 CLI가 고르게 한다. Task 파일을 직접 새로 쓰지 않는다(다른 팀과 번호가 겹칠 수 있다).
+- 같이 진행할 수 있게 나눈다: Task 수 제한은 없고 팀 작업 폴더 하나를 같이 쓰므로, 동시에 진행할 Task끼리 `allowed_paths`가 겹치지 않게 나눈다. 같은 파일을 고쳐야 하는 일은 한 Task로 묶거나 `depends_on`으로 순서를 둔다.
 - 각 Task의 `allowed_paths`, `source_of_truth`, `depends_on`, 완료 기준, 담당 Agent(`target_agent`)를 채운다.
 - 기존 Task Queue와 비교해 우선순위 영향, 의존성, 사용자 결정 필요 항목을 정리한다.
 - 검증 FAIL이면 원인과 재작업 범위를 정리해 Execution으로 다시 넘긴다.

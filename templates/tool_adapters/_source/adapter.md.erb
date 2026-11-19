@@ -12,7 +12,7 @@
 - 여러 worktree 또는 task branch가 있으면 `.ai/policies/shared_status_policy.md`를 읽는다.
 - `.ai/`는 AI Ops 헌법 폴더다. 어떤 Role도 `.ai/` 안의 파일을 만들거나 고치거나 지우지 않는다. core 변경이 필요하면 작업을 멈추고 Owner(사용자)에게 알린다.
 - Owner가 Agent·팀 추가나 변경을 요청하면 `.ai_project/agent_registry.md`, `.ai_project/operating_model.md`를 Agent가 직접 고친다. 두 파일은 파일 수정 도구(Claude Code Edit/Write, Codex apply_patch)로만 고치고 `sed`, 리다이렉션 같은 셸 명령으로 고치지 않는다.
-- Operator Role을 가진 Agent의 추가·제거·비활성화·이름·팀 변경과 운영 모델의 `parallel_tasks`(팀별 동시 진행 Task 수)와 `merge_check`(Task를 합치기 전 빌드·테스트 명령)는 Owner만 바꿀 수 있다. 한도를 넘겨 Task를 동시에 진행하지 않는다. 필요하면 변경안을 Owner에게 보여 주고, Owner가 `aiops guard allow-structure-edit`로 잠시 허용해 준 동안에만 고친다.
+- Operator Role을 가진 Agent의 추가·제거·비활성화·이름·팀 변경은 Owner만 바꿀 수 있다. 필요하면 변경안을 Owner에게 보여 주고, Owner가 `aiops guard allow-structure-edit`로 잠시 허용해 준 동안에만 고친다.
 - transition receipt(`.ai_project/reports/*-transition-receipt.json`), `.git/hooks/`, `.git/config`는 직접 쓰지 않는다. receipt는 `aiops task` 명령만 기록한다.
 - `git commit --no-verify`, `core.hooksPath` 변경처럼 보호 hook을 끄는 명령은 쓰지 않는다.
 - 프로젝트별 실행 Task와 협업 기록은 `.ai_project/`를 확인한다.
@@ -166,6 +166,7 @@ Operator Role은 기존 Role을 가진 Agent에게 Owner가 추가로 부여하�
 - Task가 `approved`가 되기 전에는 반드시 Owner(사용자)에게 작업 범위와 일감 승인을 받는다. 승인은 Owner가 짧은 명령 `aiops approve <Task 번호 끝자리>`로 직접 한다. Owner에게 "`! aiops approve 007` 을 입력해 주세요"처럼 `aiops orchestrate plan`이 알려 주는 짧은 명령만 안내하고 기다린다. `aiops approve`와 `--owner-approved`가 붙은 명령은 Agent가 실행하지 않는다. Operator Role을 가진 Agent가 있는 팀의 Task, Operator가 직접 맡은 Task, 팀이 없는 Task는 `--dispatched-by` 없이 진행해도 이 승인이 필요하다. Task의 `team`을 바꿔 이 승인을 피하지 않는다.
 - Owner 승인은 기본적으로 해당 Task 브랜치 안의 commit까지 포함한다. push, PR, merge는 프로젝트 운영 방침을 따른다.
 - 커밋 메시지는 프로젝트 언어로 쓰고 Role, Agent 이름, Task ID 같은 AI Ops 내용은 넣지 않는다.
+- 병렬 진행: Task 수 제한은 없다. 여러 Task가 팀 작업 폴더 하나를 같이 쓰고, 진행 중인 Task끼리 `allowed_paths`가 겹치지 않아야 시작할 수 있다(lifecycle이 막는다). 같은 폴더에서 자기 Task 경로만 stage·commit·되돌리기 한다: `git add -- <경로>`, `git commit -m "..." -- <경로>`. `git add .`·`git add -A`·`git commit -a`·`git checkout .`·`git reset --hard`·`git clean`·경로 없는 `git stash`는 다른 Task의 변경을 섞거나 지우므로 쓰지 않는다(guard가 막는다). 다른 Task가 작업 중이라 빌드가 잠깐 깨지면 원인이 자기 범위 밖인지 확인하고 기다렸다 다시 확인한다. `index.lock` 오류는 잠시 뒤 다시 실행한다.
 - 프로젝트 점검(테스트) 파일은 Owner 전용 점검이다. Task가 제품 저장소 테스트를 명시적으로 요구하지 않으면 새 점검 파일은 제품 저장소가 아니라 `.ai_project/checks/`에 만들고, 진입점 `.ai_project/checks/run.sh`가 전체 점검을 돌리게 한다. 점검 코드는 점검할 폴더를 `AIOPS_WORKTREE` 환경변수(프로젝트 루트는 `AIOPS_PROJECT_ROOT`)로 받는다. 실행은 `aiops worktree checks TASK_ID --target <프로젝트 루트>`(또는 `--dir <폴더>`)로 한다. 점검 파일을 고치는 Task는 그 파일을 `allowed_paths`에 넣는다.
 
 실제 파일 수정, 빌드, 테스트 범위는 Task의 `allowed_paths`가 결정하고, 기준 문서는 `source_of_truth`가 결정한다. 현재 작업 디렉토리와 `allowed_paths`가 다르면 작업 전에 기준 경로를 명확히 보고하고 `allowed_paths` 안에서만 작업한다.
