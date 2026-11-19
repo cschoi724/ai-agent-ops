@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+## 0.19.0 - 2026-11-19
+
 ### Changed
 
 - Parallel Tasks now share one team folder and have no count limit. The Lead splits work into Tasks whose `allowed_paths` do not overlap; a Task cannot start while a running Task of the same team or folder uses an overlapping path. `aiops orchestrate next` reports `start_now` (approved Tasks that can start together) and `waiting` (with the reason) instead of a limit.
