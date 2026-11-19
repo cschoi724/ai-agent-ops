@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+## 0.18.1 - 2026-11-19
+
 ### Fixed
 
 - `aiops task create` no longer hands the same Task ID to sessions that create Tasks at the same time. ID allocation and file creation now run under a lock in `.ai_project/.runtime/locks/` (a lock older than one minute is treated as stale), and an ID already used in any queue (active, backlog, archive) is refused.
