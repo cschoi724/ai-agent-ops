@@ -231,6 +231,8 @@ if "$repo_root/bin/aiops" task advance T-20260813-002 --target "$project" --next
   exit 1
 fi
 grep -q 'source_of_truth path missing' "$tmpdir/missing-source.out"
+# A running Task on src/ would block later fixtures that start on src/ (no overlap).
+rm -f "$project/.ai_project/tasks/active/T-20260813-002.md"
 
 write_task T-20260813-012 approved "Dev Agent" "Execution Role" MISSING.md
 if "$repo_root/bin/aiops" task accept T-20260813-012 --target "$project" --check >"$tmpdir/missing-root-source.out" 2>&1; then
@@ -261,6 +263,7 @@ if "$repo_root/bin/aiops" task accept T-20260813-004 --target "$project" --check
   exit 1
 fi
 grep -q 'dependency T-20260813-005 is not complete' "$tmpdir/dependency.out"
+rm -f "$project/.ai_project/tasks/active/T-20260813-003.md" "$project/.ai_project/tasks/active/T-20260813-005.md"
 
 write_task T-20260813-006 approved "Dev Agent" "Execution Role" .ai_project/source_of_truth.md
 rollback_task="$project/.ai_project/tasks/active/T-20260813-006.md"

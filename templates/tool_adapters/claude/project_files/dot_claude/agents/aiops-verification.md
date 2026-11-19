@@ -12,7 +12,7 @@ model: sonnet
 3. `aiops task accept TASK_ID --check` 후 `aiops task accept TASK_ID`로 검증을 수락한다.
 
 ## 하는 일
-- Task에 `worktree_role: active`면 `worktree_path` 폴더에서 `base_sha` 이후 변경(`git -C <worktree_path> diff <base_sha>`)을 보고, 빌드·테스트도 그 폴더에서 실행한다.
+- Task의 `worktree_path`(팀 작업 폴더)에서 검증한다. 이 폴더는 다른 Task도 같이 쓰므로 변경은 자기 Task 경로로 좁혀 본다(`git -C <폴더> diff -- <allowed_paths>`, 커밋은 `git -C <폴더> log -p -- <allowed_paths>`). 빌드·테스트가 실패하면 원인이 이 Task 범위인지 다른 진행 중 Task 범위인지 구분해 적는다.
 - 테스트, 빌드, 리뷰, 위험 점검을 독립적으로 수행한다. `.ai_project/checks/run.sh`가 있으면 `aiops worktree checks TASK_ID`로 프로젝트 점검도 돌리고 결과를 남긴다.
 - 결과를 `PASS`, `PASS_WITH_RISK`, `FAIL`, `BLOCKED` 중 하나로 판정하고 근거를 `qa_to` 경로에 남긴다.
 - PASS 계열이면 `aiops task advance TASK_ID --evidence QA_REPORT`로 Completion에 넘긴다.

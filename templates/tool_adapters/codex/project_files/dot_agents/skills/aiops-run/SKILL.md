@@ -22,18 +22,17 @@ description: Operator Role을 가진 Agent가 한 세션에서 사용자 요청�
 
 ## 2. 일감 등록 (승인 ②)
 1. Lead subagent(`aiops-lead`)에게 승인된 범위를 Task로 나누고 등록하게 한다 (`aiops task create`, `allowed_paths`, `source_of_truth`, 담당 Agent).
-   - 팀의 동시 진행 한도(`aiops orchestrate next --operator <내 Agent 이름>`의 `parallel_limit`, 운영 모델 `parallel_tasks`)가 2 이상이고 작업이 크면, 한도 이하 개수로 나누되 **각 Task의 `allowed_paths`가 겹치지 않게** 나눈다. 겹치는 Task는 의존 관계(`depends_on`)로 순서를 둔다. 한도가 1이거나 없으면 나누더라도 하나씩 진행한다. 한도는 Owner만 바꾼다.
+   - 동시 진행 Task 수 제한은 없다. 같이 진행할 수 있는 일은 나누되 **각 Task의 `allowed_paths`가 겹치지 않게** 나눈다. 같은 파일을 고쳐야 하는 일은 한 Task로 묶거나 `depends_on`으로 순서를 둔다.
 2. 등록된 일감 목록(ID 짧은 호칭, 제목, 범위, 담당, 순서)을 Owner에게 보여주고 **일감 승인**을 받는다.
 3. 승인할 Task가 정해지면 `aiops orchestrate plan TASK_ID --operator <내 Agent 이름>`이 알려 주는 짧은 Owner 명령(`next.owner_command`, 예: `aiops approve 007`)을 Owner에게 안내한다. 여러 Task를 한꺼번에 승인받을 때는 `aiops approve --all`을 안내한다. Claude Code에서는 "`! aiops approve 007` 을 입력해 주세요", 그 밖에는 "터미널에서 `aiops approve 007` 을 실행해 주세요"라고 말하고 기다린다. 긴 `--owner-approved` 명령을 보여 주지 않는다. 이 명령은 Agent가 실행하지 않는다 (guard가 차단한다).
 4. Owner가 실행했다고 알려 주면 plan을 다시 확인해 approved가 됐는지 보고 진행 루프로 간다.
 
 ## 3. 진행 루프 (Task마다, 의존 순서대로)
-동시 진행 한도가 2 이상이면 `aiops orchestrate next --operator <내 Agent 이름> --json`으로 팀 전체를 본다. `start_now`에 있는 Task들은 각자 `next.prepare`(`aiops worktree create`)를 먼저 실행한 뒤, 실행 subagent들을 **한 번에 여러 개 호출해** 동시에 진행한다. 한 Task가 검증 중일 때 다른 Task 구현을 계속할 수 있다. 한도를 넘겨 시작하지 않는다(lifecycle이 막는다). 한도가 1이거나 없으면 아래를 Task 하나씩 반복한다.
+Task가 여러 개면 `aiops orchestrate next --operator <내 Agent 이름> --json`으로 팀 전체를 본다. `start_now`에 있는 Task들은 실행 subagent들을 **한 번에 여러 개 호출해** 같은 팀 작업 폴더에서 동시에 진행한다(`waiting`은 경로가 겹쳐 기다리는 Task와 이유다). 한 Task가 검증 중일 때 다른 Task 구현을 계속할 수 있다. 각 subagent에게 자기 경로만 commit하라고 전한다.
 
 반복한다:
 1. `aiops orchestrate plan TASK_ID --operator <내 Agent 이름> --json`을 실행한다.
 2. `state`에 따라:
-   - `next.prepare`가 있으면 먼저 그 명령을 실행한다 (worktree 만들기 또는 완료 전 합치기).
    - `ready`: `next.argv` 명령을 그대로 실행한다.
    - `work_required`: `next.subagent`를 호출해 `next.work`를 시킨다. subagent에게 Task ID와 `--dispatched-by <내 Agent 이름>`을 전달하고, 작업이 끝나면 subagent가 `next.argv`(검증이면 `on_pass` 또는 `on_fail`)로 전이하게 한다.
    - `needs_owner`: 멈추고 `reason`을 Owner에게 쉬운 말로 설명한 뒤 답을 기다린다. `next.requires_owner_approval`이 true면 `next.owner_command`(예: `! aiops approve 007`)를 Owner에게 안내한다.
@@ -48,11 +47,11 @@ description: Operator Role을 가진 Agent가 한 세션에서 사용자 요청�
 - blocked, 정책 위반, 작업 범위 밖 변경이 필요할 때
 - 제품 방향, MVP 범위, 핵심 UX를 바꿔야 할 때, strict 위험도 Task일 때
 - 운영 방침상 승인이 필요한 push, PR, merge, 배포
-- `.ai/` 변경, Operator Role 변경, 동시 진행 한도(`parallel_tasks`) 변경, Task 취소 (Owner가 `aiops guard allow-structure-edit`로 허용해야 한다)
+- `.ai/` 변경, Operator Role 변경, Task 취소 (Owner가 `aiops guard allow-structure-edit`로 허용해야 한다)
 
 ## 5. 커밋
 - Owner가 일감을 승인했으면 해당 Task 브랜치 안의 commit은 허용된 것으로 본다 (0단계에서 다르게 정했으면 그 결정을 따른다).
-- Task worktree를 쓰면 완료 단계에서 `aiops worktree merge TASK_ID`로 팀 기준 브랜치에 로컬로 합치는 것까지 허용된 것으로 본다. 합친 결과 검사(`merge_check`)가 실패하면 팀 기준 브랜치는 바뀌지 않는다. 로그를 Execution에게 넘겨 rework로 고치고 다시 검증한 뒤 merge를 다시 실행한다. push, PR, merge는 운영 방침을 따른다.
+- 팀 작업 폴더는 여러 Task가 같이 쓰므로 commit은 자기 Task 경로만 지정해서 한다(`git commit -m "..." -- <경로>`). push, PR, merge는 운영 방침을 따른다.
 - 커밋 메시지는 프로젝트 언어로 쓰고 프로젝트, 작업 내용, 범위, 상태만 쓴다. Role, Agent 이름, Task ID, receipt, handoff, `.ai_project` 경로 같은 AI Ops 내용은 넣지 않는다.
 
 ## 6. 끝났을 때 보고

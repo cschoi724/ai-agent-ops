@@ -52,8 +52,7 @@ module AiopsGuard
   # Agents may edit the Agent Registry with file-edit tools as long as the
   # enabled Operator Role holders stay the same; shell writes cannot be checked.
   REGISTRY_FILE = ".ai_project/agent_registry.md"
-  OPERATING_MODEL_FILE = ".ai_project/operating_model.md"
-  STRUCTURE_FILES = [REGISTRY_FILE, OPERATING_MODEL_FILE].freeze
+  STRUCTURE_FILES = [REGISTRY_FILE].freeze
   STRUCTURE_UNLOCK_FILE = "structure_edit_until"
   RUNTIME_UNLOCK_PATH = ".ai_project/.runtime/#{STRUCTURE_UNLOCK_FILE}"
   OPERATOR_ROLE = "Operator Role"
@@ -62,7 +61,7 @@ module AiopsGuard
 
   LABELS = {
     core: "AI Ops 헌법 폴더(.ai/)",
-    structure: "Agent Registry·운영 모델(셸 수정 불가)",
+    structure: "Agent Registry(셸 수정 불가)",
     unlock: "Owner 잠금 해제 기록",
     receipt: "aiops가 기록하는 transition receipt",
     git: "git hook·설정"
@@ -296,35 +295,25 @@ module AiopsGuard
 
     # Allows a file-edit tool change to the Agent Registry unless it changes
     # the enabled Operator Role holders (the Owner approval gate depends on them).
-    # Edit-tool changes to the Owner-only files are allowed unless they change
-    # the Owner-only parts: Operator Role holders (Agent Registry) or
-    # parallel_tasks / merge_check (operating model).
     def registry_edit_reason(path)
-      model = File.basename(path).casecmp?("operating_model.md")
-      name = model ? "운영 모델" : "Agent Registry"
-      signature = model ? RegistryCheck.method(:parallel_signature) : RegistryCheck.method(:operator_signature)
       current = File.read(File.expand_path(path, @cwd))
-      before = signature.call(current)
+      before = RegistryCheck.operator_signature(current)
       updated = yield(current)
-      return "#{name} 수정 결과를 계산할 수 없어 차단합니다. 파일을 다시 읽고 정확한 내용으로 고치세요." if updated.nil?
+      return "Agent Registry 수정 결과를 계산할 수 없어 차단합니다. 파일을 다시 읽고 정확한 내용으로 고치세요." if updated.nil?
 
       after = begin
-        signature.call(updated)
+        RegistryCheck.operator_signature(updated)
       rescue RegistryCheck::Invalid => e
-        return "수정 후 #{name} front matter가 올바르지 않습니다(#{e.message}). YAML을 바르게 고쳐 다시 시도하세요."
+        return "수정 후 Agent Registry front matter가 올바르지 않습니다(#{e.message}). YAML을 바르게 고쳐 다시 시도하세요."
       end
       return nil if before == after
 
-      if model
-        return "parallel_tasks(팀별 동시 진행 Task 수)와 merge_check(합치기 전 빌드·테스트 명령)는 Owner(사용자)만 바꿀 수 있습니다. " \
-               "필요하면 Owner에게 aiops guard allow-structure-edit 를 직접 실행해 달라고 요청하세요. 운영 모델의 다른 내용은 그대로 고칠 수 있습니다."
-      end
       "Operator Role을 가진 Agent(추가·제거·비활성화·이름·팀 변경)는 Owner(사용자)만 바꿀 수 있습니다. " \
         "필요하면 Owner에게 aiops guard allow-structure-edit 를 직접 실행해 달라고 요청하세요. 다른 Agent·팀 수정은 그대로 할 수 있습니다."
     rescue RegistryCheck::Invalid => e
-      "현재 #{name} front matter가 올바르지 않아(#{e.message}) 안전하게 검사할 수 없습니다. Owner(사용자)에게 알리세요."
+      "현재 Agent Registry front matter가 올바르지 않아(#{e.message}) 안전하게 검사할 수 없습니다. Owner(사용자)에게 알리세요."
     rescue SystemCallError => e
-      "#{name}를 읽을 수 없어 차단합니다: #{e.message}"
+      "Agent Registry를 읽을 수 없어 차단합니다: #{e.message}"
     end
 
     def shell_reason(command)
@@ -609,6 +598,8 @@ module AiopsGuard
       end
       sub = args[index]
       rest = args[(index + 1)..-1].to_a
+      shared = shared_folder_reason(sub, rest)
+      return shared if shared
       if GIT_HOOKED_SUBCOMMANDS.include?(sub) && skips_hooks?(sub, rest)
         return "git #{sub} 의 hook 건너뛰기(--no-verify)는 .ai/ 보호를 끄므로 Owner(사용자)만 할 수 있습니다."
       end
@@ -617,6 +608,49 @@ module AiopsGuard
 
       hit = rest.reject { |arg| arg.start_with?("-") }.find { |arg| protection(arg) }
       hit ? "git #{sub} 가 #{label(hit)}의 #{hit} 를 변경합니다." : nil
+    end
+
+    WHOLE_TREE_PATHS = [".", "./", ":/", ":/.", "*", "-A", "--all", "-u", "--update", "--no-ignore-removal"].freeze
+    SHARED_FOLDER_HINT = "팀 폴더는 다른 Task와 같이 씁니다. 자기 Task allowed_paths 경로만 지정하세요 " \
+                         "(예: git add -- <경로>, git commit -m \"...\" -- <경로>).".freeze
+
+    # Several Tasks share one team folder, so agents stage, commit, and
+    # discard only their own paths, never the whole tree.
+    def shared_folder_reason(sub, args)
+      words = args.reject { |arg| arg == "--" }
+      case sub
+      when "add"
+        hit = words.find { |arg| WHOLE_TREE_PATHS.include?(arg) }
+        "git add #{hit} 는 다른 Task의 변경까지 담습니다. #{SHARED_FOLDER_HINT}" if hit
+      when "commit"
+        "git commit -a 는 다른 Task의 변경까지 커밋합니다. #{SHARED_FOLDER_HINT}" if commit_all?(args)
+      when "checkout", "restore"
+        hit = words.find { |arg| [".", "./", ":/", ":/.", "*"].include?(arg) }
+        "git #{sub} #{hit} 는 다른 Task의 작업 중인 변경을 지웁니다. #{SHARED_FOLDER_HINT}" if hit
+      when "reset"
+        "git reset --hard 는 다른 Task의 작업 중인 변경을 지웁니다. #{SHARED_FOLDER_HINT}" if args.include?("--hard")
+      when "clean"
+        "git clean 은 다른 Task가 만든 새 파일을 지웁니다. 지울 파일을 직접 지정하세요." unless args.include?("-n") || args.include?("--dry-run")
+      when "stash"
+        action = args.first.to_s
+        if (action.empty? || action.start_with?("-") || %w[push save].include?(action)) && !args.include?("--")
+          "git stash 는 다른 Task의 작업 중인 변경까지 치웁니다. 자기 경로만 지정하세요(git stash push -- <경로>)."
+        end
+      end
+    end
+
+    def commit_all?(args)
+      args.each do |arg|
+        break if arg == "--"
+        return true if %w[--all].include?(arg)
+        next unless arg.match?(/\A-[a-zA-Z]+\z/)
+
+        arg[1..-1].each_char do |char|
+          return true if char == "a"
+          break if "mFcCt".include?(char)
+        end
+      end
+      false
     end
 
     def skips_hooks?(sub, args)
@@ -651,25 +685,6 @@ module AiopsGuard
     class Invalid < StandardError; end
 
     module_function
-
-    # Owner-only settings of the operating model: the per-team running-Task
-    # limits and the build/test command run before a Task branch is merged.
-    def parallel_signature(text)
-      return nil unless text.to_s.gsub("\r\n", "\n").start_with?("---\n")
-
-      data = front_matter(text)
-      config = data["parallel_tasks"]
-      check = data["merge_check"]
-      timeout = data["merge_check_timeout_minutes"]
-      return nil if config.nil? && check.nil? && timeout.nil?
-
-      raise Invalid, "parallel_tasks는 팀 이름: 숫자 형태여야 합니다" unless config.nil? || config.is_a?(Hash)
-      raise Invalid, "merge_check는 명령 문자열 또는 팀 이름: 명령 형태여야 합니다" unless check.nil? || check.is_a?(String) || check.is_a?(Hash)
-
-      limits = config && config.map { |team, value| [team.to_s.strip.downcase, value] }.sort_by { |team, _value| team }
-      checks = check.is_a?(Hash) ? check.map { |team, value| [team.to_s.strip.downcase, value.to_s.strip] }.sort_by { |team, _value| team } : check.to_s.strip
-      [limits, checks, timeout]
-    end
 
     def front_matter(text)
       text = text.to_s.gsub("\r\n", "\n")
