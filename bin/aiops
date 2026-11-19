@@ -1837,6 +1837,33 @@ task_duplicate_ids() {
   ' "$1"
 }
 
+# Running Tasks whose updated_at is older than stale_task_days (operating
+# model, default 3). A forgotten running Task keeps its allowed_paths and
+# blocks other Tasks on the same paths from starting.
+task_stale_running() {
+  ruby -I"$(default_core_dir)/runtime" -rtask_worktree -rdate -e '
+    root = ARGV[0]
+    days = TaskWorktree.read_front_matter(File.join(root, ".ai_project/operating_model.md"))["stale_task_days"]
+    days = 3 unless days.is_a?(Integer) && days >= 1
+    today = Date.today
+    TaskWorktree.task_files(root).each do |path|
+      task = TaskWorktree.read_front_matter(path)
+      next unless TaskWorktree::ACTIVE_STATUSES.include?(task["status"].to_s)
+
+      updated = begin
+        Date.parse(task["updated_at"].to_s)
+      rescue ArgumentError
+        nil
+      end
+      next if updated && (today - updated).to_i < days
+
+      paths = TaskWorktree.product_paths(task)
+      age = updated ? "#{(today - updated).to_i} days since #{updated}" : "no updated_at"
+      puts "#{task["id"]} (#{task["status"]}, #{task["team"].to_s.empty? ? "no team" : task["team"]}, #{age}) holds #{paths.empty? ? "no product paths" : paths.first(3).join(", ")}"
+    end
+  ' "$1"
+}
+
 task_yaml_field() {
   file="$1"
   field="$2"
@@ -3858,6 +3885,15 @@ cmd_doctor() {
           warnings=$((warnings + 1))
         done <<EOF
 $duplicate_task_ids
+EOF
+      fi
+      stale_tasks="$(task_stale_running "$target")"
+      if [ -n "$stale_tasks" ]; then
+        while IFS= read -r stale_line; do
+          info "warn: stale running Task $stale_line; finish, block, or cancel it so other Tasks can use these paths"
+          warnings=$((warnings + 1))
+        done <<EOF
+$stale_tasks
 EOF
       fi
     fi

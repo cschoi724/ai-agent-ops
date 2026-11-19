@@ -136,6 +136,8 @@ YourProject/
 - Agent·팀 추가와 변경은 Agent에게 맡길 수 있다. Agent는 `.ai_project/agent_registry.md`를 파일 수정 도구로 고치고, guard가 수정 결과를 미리 계산해 Operator Role을 가진 Agent가 바뀌는 경우(추가·제거·비활성화·이름 변경)만 막는다. 셸 명령으로 Agent Registry를 고치는 것은 결과를 검사할 수 없어 막는다. `.ai_project/operating_model.md`는 보호하지 않는다.
 - Operator Role 변경을 Agent에게 맡기려면 Owner가 `aiops guard allow-structure-edit --minutes 30`을 실행하고 끝나면 `aiops guard lock-structure`로 잠근다. git 저장소가 아니어도 동작한다.
 - Owner만 쓰는 점검(테스트)은 제품 저장소 대신 `.ai_project/checks/`에 두고 `run.sh`로 돌린다. `aiops worktree checks TASK_ID`가 Task 작업 폴더를 `AIOPS_WORKTREE`로 넘겨 실행한다.
+- 오래(`stale_task_days`, 기본 3일) 손대지 않은 진행 중 Task는 `aiops doctor`가 경고한다. 경로를 잡고 있어 다른 Task 시작을 막기 때문이다.
+- guard는 세션 폴더에서 위로 올라가며 `.ai`나 `.ai_project`가 있는 폴더를 프로젝트로 본다. 프로젝트 안의 앱 저장소나 팀 작업 폴더에서 세션을 열어도 보호된다.
 - 동시 진행 Task 수 제한은 없다. 팀 Task들은 팀 작업 폴더 하나를 같이 쓰고, 진행 중인 Task끼리 `allowed_paths`가 겹치면 나중 Task는 시작할 수 없다. Agent는 자기 경로만 stage·commit한다(`git add .`, `git commit -a`, `git reset --hard` 같은 폴더 전체 명령은 guard가 막는다).
 - Agent 도구는 transition receipt, `.git/hooks/`, `.git/config`, `.git/aiops/`, `.ai_project/.runtime/structure_edit_until`을 쓸 수 없다.
 - Owner 승인(`aiops approve`, `--owner-approved`), `git commit --no-verify`, `core.hooksPath` 변경, `aiops update`, `aiops seed --force`, `aiops guard write-core-digest`, `aiops guard allow-structure-edit`는 Owner가 직접 터미널에서 실행한다. Agent 도구 호출은 차단된다.

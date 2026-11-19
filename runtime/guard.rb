@@ -932,11 +932,34 @@ module AiopsGuard
       code
     end
 
+    # The project is the nearest folder at or above the session folder (or
+    # the tool call folder) that holds .ai or .ai_project, so a session opened
+    # in an app repository or team worktree inside the project stays guarded.
     def project_for(payload_cwd = nil)
+      starts = [ENV["CLAUDE_PROJECT_DIR"].to_s, payload_cwd.to_s].reject(&:empty?)
+      starts.each do |dir|
+        found = aiops_ancestor(dir)
+        return Project.new(found) if found
+      end
       root = ENV["CLAUDE_PROJECT_DIR"].to_s
       root = git_toplevel(payload_cwd) if root.empty? && payload_cwd
       root = @options[:target] if root.to_s.empty?
       Project.new(root)
+    end
+
+    def aiops_ancestor(dir)
+      current = File.expand_path(dir)
+      return nil unless File.directory?(current)
+
+      loop do
+        return current if File.exist?(File.join(current, ".ai")) || File.symlink?(File.join(current, ".ai")) ||
+                          File.directory?(File.join(current, ".ai_project"))
+
+        parent = File.dirname(current)
+        return nil if parent == current
+
+        current = parent
+      end
     end
 
     def git_toplevel(dir)

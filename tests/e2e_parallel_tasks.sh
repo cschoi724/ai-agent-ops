@@ -168,6 +168,16 @@ ruby -I"$repo_root/runtime" -rtask_worktree -e '
   abort "overlap on a shared check" unless TaskWorktree.overlap(a, [".ai_project/checks"])
 ' "$project" "$a"
 
+# --- doctor warns about running Tasks nobody has touched for a while ---
+"$aiops" doctor --target "$project" > "$tmpdir/doctor.out" 2>&1 || true
+if grep -q "stale running Task" "$tmpdir/doctor.out"; then cat "$tmpdir/doctor.out" >&2; fail "fresh running Tasks are not stale"; fi
+sed -i.bak 's/^updated_at: .*/updated_at: 2026-01-02/' "$project/.ai_project/tasks/active/$d.md" && rm -f "$project/.ai_project/tasks/active/$d.md.bak"
+"$aiops" doctor --target "$project" > "$tmpdir/doctor.out" 2>&1 || true
+grep -q "warn: stale running Task $d (in_progress, Silo Charlie, .* days since 2026-01-02) holds src/d" "$tmpdir/doctor.out" || { cat "$tmpdir/doctor.out" >&2; fail "doctor should warn about the stale running Task"; }
+printf -- '---\nschema: aiops.operating_model.v1\nstale_task_days: 100000\n---\n' > "$project/.ai_project/operating_model.md"
+"$aiops" doctor --target "$project" > "$tmpdir/doctor.out" 2>&1 || true
+if grep -q "stale running Task" "$tmpdir/doctor.out"; then fail "stale_task_days should raise the threshold"; fi
+
 # --- project checks live in .ai_project/checks and run against any folder ---
 expect_fail "checks without run.sh" "project checks are not set up" "$aiops" worktree checks --target "$project" --dir "$project"
 mkdir -p "$project/.ai_project/checks" "$tmpdir/other/src"

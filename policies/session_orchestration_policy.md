@@ -132,6 +132,7 @@ Delegation Record:
 - 동시 진행 Task 수 제한은 없다. Lead가 큰 작업을 `allowed_paths`가 겹치지 않는 Task로 나누고, 같은 파일을 고쳐야 하는 일은 한 Task로 묶거나 `depends_on`으로 순서를 둔다.
 - 같은 팀의 Task는 팀 작업 폴더(Task의 `worktree_path`, 없으면 프로젝트 루트) 하나를 같이 쓴다. 시작(approved → in_progress) 때 lifecycle이 같은 팀 또는 같은 폴더에서 진행 중인 Task와 경로 겹침을 검사한다. `aiops orchestrate next`의 `start_now`는 지금 같이 시작할 수 있는 Task, `waiting`은 경로가 겹쳐 기다리는 Task다.
 - 같은 폴더를 쓰므로 Agent는 자기 경로만 stage·commit·되돌리기 한다(`git add -- <경로>`, `git commit -m "..." -- <경로>`). `git add .`/`-A`/`-u`, `git commit -a`, `git checkout .`, `git restore .`, `git reset --hard`, `git clean`, 경로 없는 `git stash`는 guard가 막는다.
+- 진행 중 Task가 `stale_task_days`(운영 모델, 기본 3일) 넘게 `updated_at`이 바뀌지 않으면 `aiops doctor`가 경고한다. 잊힌 진행 중 Task는 경로를 계속 잡고 있어 다른 Task 시작을 막으므로 끝내거나 blocked·cancelled로 정리한다.
 - 변경 경로 검사(`allowed_paths`)는 같은 폴더에서 진행 중인 다른 Task의 경로에 있는 변경을 그 Task 몫으로 보고 제외한다. 어느 진행 중 Task에도 속하지 않는 변경만 범위 밖으로 본다.
 - 프로젝트 점검: Owner만 쓰는 점검(테스트)은 제품 저장소가 아니라 `.ai_project/checks/`에 두고 `run.sh`를 진입점으로 한다. 모든 폴더가 한 벌을 같이 쓰고 다른 개발자의 테스트와 섞이지 않는다. `aiops worktree checks [TASK_ID] [--dir DIR]`가 점검할 폴더를 `AIOPS_WORKTREE`(그리고 `AIOPS_PROJECT_ROOT`, `AIOPS_CHECKS_DIR`, `AIOPS_TASK_ID`)로 넘겨 실행한다. 점검 파일을 고치는 Task는 그 경로를 `allowed_paths`에 넣는다(경로 겹침 검사 대상).
 
