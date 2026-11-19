@@ -82,6 +82,7 @@ Usage:
   aiops worktree doctor [--target DIR]
   aiops worktree create TASK_ID [--target DIR] [--repo DIR] [--base BRANCH] [--check]
   aiops worktree merge TASK_ID [--target DIR] [--check]
+  aiops worktree checks [TASK_ID] [--target DIR] [--dir DIR]
   aiops knowledge init [--target DIR] [--mode minimal|full] [--force]
   aiops knowledge pack TOPIC [--target DIR] [--create] [--task TASK_ID] [--source PATH] [--purpose TEXT]
   aiops knowledge lint [--target DIR]
@@ -2462,11 +2463,11 @@ cmd_sync_status() {
 
 cmd_worktree() {
   action="${1:-}"
-  [ "$#" -gt 0 ] || die "worktree requires an action: doctor, create, merge"
+  [ "$#" -gt 0 ] || die "worktree requires an action: doctor, create, merge, checks"
   shift
 
   case "$action" in
-    create|merge)
+    create|merge|checks)
       command -v ruby >/dev/null 2>&1 || die "ruby is required for aiops worktree $action"
       worktree_runtime="$(default_core_dir)/runtime/task_worktree.rb"
       [ -f "$worktree_runtime" ] || die "worktree runtime missing: $worktree_runtime"

@@ -14,7 +14,8 @@ model: sonnet
 ## 하는 일
 - Task의 `allowed_paths` 안에서만 수정한다. 범위 밖 변경이 필요하면 멈추고 이유를 반환한다.
 - Task에 `worktree_role: active`와 `worktree_path`가 있으면 그 폴더에서만 코드를 고치고 빌드·테스트하고 commit한다. 다른 Task의 worktree는 건드리지 않는다. `aiops` 명령은 항상 프로젝트 루트(`--target`)를 기준으로 실행한다.
-- 변경 후 프로젝트의 테스트나 빌드로 자체 확인한다.
+- 변경 후 프로젝트의 테스트나 빌드로 자체 확인한다. `.ai_project/checks/run.sh`가 있으면 `aiops worktree checks TASK_ID`도 돌린다.
+- 새 점검(테스트)을 만들 때는 Task가 제품 저장소 테스트를 요구하지 않으면 `.ai_project/checks/`에 만든다(점검할 폴더는 `AIOPS_WORKTREE`로 받는다). 제품 저장소에 AI용 테스트 파일을 늘리지 않는다.
 - `report_to` 경로에 작업 보고서(변경 파일, 구현 내용, 자체 확인 결과, 남은 위험)를 쓴다.
 - `aiops task advance TASK_ID --check` 후 `aiops task advance TASK_ID --evidence REPORT`로 검증 단계로 넘긴다.
 

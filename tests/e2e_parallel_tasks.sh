@@ -219,6 +219,101 @@ before="$(git -C "$project" rev-parse main)"
 expect_fail "conflicting merge" "hit conflicts" "$aiops" worktree merge "$d" --target "$project"
 [ "$(git -C "$project" rev-parse main)" = "$before" ] || fail "failed merge changed main"
 
+# --- merge_check builds the combined result before the base moves ---
+# Each Task passes alone; only the combination of both flags fails, like a
+# renamed function in one Task and a new caller of the old name in another.
+cat > "$project/.ai_project/operating_model.md" <<'MD'
+---
+schema: aiops.operating_model.v1
+parallel_tasks:
+  Silo Charlie: 3
+merge_check: 'echo "check $AIOPS_TASK_ID"; ! { [ -f src/x/flag ] && [ -f src/y/flag ] && [ ! -f src/y/fixed ]; }'
+---
+
+# Operating Model
+MD
+g=T-20261118-107
+h=T-20261118-108
+write_task "$g" approved src/x
+write_task "$h" approved src/y
+ok "worktree create g" "$aiops" worktree create "$g" --target "$project"
+ok "worktree create h" "$aiops" worktree create "$h" --target "$project"
+wt_g="$(field "$g" worktree_path)"
+wt_h="$(field "$h" worktree_path)"
+mkdir -p "$wt_g/src/x" "$wt_h/src/y"
+printf 'g\n' > "$wt_g/src/x/flag"
+git -C "$wt_g" add src/x && git -C "$wt_g" commit -qm "g 변경"
+printf 'h\n' > "$wt_h/src/y/flag"
+git -C "$wt_h" add src/y && git -C "$wt_h" commit -qm "h 변경"
+"$aiops" worktree merge "$h" --target "$project" --check > "$tmpdir/out.txt" 2>&1 || fail "merge --check failed"
+grep -q "merge check: echo" "$tmpdir/out.txt" || { cat "$tmpdir/out.txt" >&2; fail "merge --check should show the merge check"; }
+ok "merge g with passing check" "$aiops" worktree merge "$g" --target "$project"
+[ "$(field "$g" merge_check)" = "passed" ] || fail "merge_check passed not recorded"
+grep -q "check $g" "$project/.ai_project/reports/${g}_merge-check.log" || fail "merge check log should hold the command output"
+before="$(git -C "$project" rev-parse main)"
+expect_fail "combined result fails the check" "merge check failed" "$aiops" worktree merge "$h" --target "$project"
+grep -q "main was not changed" "$tmpdir/out.txt" || { cat "$tmpdir/out.txt" >&2; fail "failure should say the base did not change"; }
+[ "$(git -C "$project" rev-parse main)" = "$before" ] || fail "failed merge check moved main"
+[ -d "$wt_h" ] && [ "$(field "$h" worktree_role)" = "active" ] || fail "failed merge check should keep the Task worktree"
+[ "$(field "$h" merge_check)" = "failed" ] || fail "merge_check failed not recorded"
+[ -f "$wt_h/src/x/flag" ] || fail "Task worktree should be rebased onto main after a failed check"
+printf 'fixed\n' > "$wt_h/src/y/fixed"
+git -C "$wt_h" add src/y && git -C "$wt_h" commit -qm "h 수정"
+ok "merge h after fixing the combined result" "$aiops" worktree merge "$h" --target "$project"
+[ "$(field "$h" merge_check)" = "passed" ] || fail "merge_check should pass after the fix"
+[ "$(git -C "$project" show main:src/y/fixed)" = "fixed" ] || fail "main is missing the fix"
+ruby -I"$repo_root/runtime" -rtask_worktree -e '
+  dir = ARGV[0]
+  File.write(File.join(dir, ".ai_project/operating_model.md"), "---\nmerge_check:\n  default: make test\n  Silo Charlie: \"\"\n  Silo Bravo: npm test\n---\n")
+  abort "team entry should turn the default off" unless TaskWorktree.merge_check_command(dir, "Silo Charlie").nil?
+  abort "team command" unless TaskWorktree.merge_check_command(dir, "silo bravo") == "npm test"
+  abort "default command" unless TaskWorktree.merge_check_command(dir, "Silo Delta") == "make test"
+  abort "default timeout" unless TaskWorktree.merge_check_timeout_minutes(dir) == 60
+' "$project"
+write_model 2
+
+# --- project checks live in .ai_project/checks and run against any worktree ---
+expect_fail "checks without run.sh" "project checks are not set up" "$aiops" worktree checks --target "$project" --dir "$project"
+mkdir -p "$project/.ai_project/checks"
+cat > "$project/.ai_project/checks/run.sh" <<'SH'
+echo "root=$AIOPS_PROJECT_ROOT checks=$AIOPS_CHECKS_DIR wt=$AIOPS_WORKTREE task=${AIOPS_TASK_ID:-}"
+[ "$(pwd -P)" = "$(cd "$AIOPS_WORKTREE" && pwd -P)" ] || exit 3
+[ ! -f "$AIOPS_WORKTREE/src/z/broken" ]
+SH
+ok "checks on the project folder" "$aiops" worktree checks --target "$project" --dir "$project"
+grep -q "checks passed" "$tmpdir/out.txt" || fail "checks should pass"
+k=T-20261118-109
+write_task "$k" approved src/z
+ok "worktree create k" "$aiops" worktree create "$k" --target "$project"
+wt_k="$(field "$k" worktree_path)"
+mkdir -p "$wt_k/src/z"
+printf 'x\n' > "$wt_k/src/z/broken"
+expect_fail "checks use the Task worktree" "checks failed" "$aiops" worktree checks "$k" --target "$project"
+grep -q "task=$k" "$tmpdir/out.txt" || fail "checks should receive AIOPS_TASK_ID"
+grep -q "wt=$wt_k" "$tmpdir/out.txt" || fail "checks should run against the Task worktree"
+git -C "$wt_k" add src/z && git -C "$wt_k" commit -qm "k 변경"
+cat > "$project/.ai_project/operating_model.md" <<'MD'
+---
+schema: aiops.operating_model.v1
+parallel_tasks:
+  Silo Charlie: 3
+merge_check: sh "$AIOPS_CHECKS_DIR/run.sh"
+---
+
+# Operating Model
+MD
+before="$(git -C "$project" rev-parse main)"
+expect_fail "merge_check runs the project checks" "merge check failed" "$aiops" worktree merge "$k" --target "$project"
+[ "$(git -C "$project" rev-parse main)" = "$before" ] || fail "failed project checks moved main"
+git -C "$wt_k" rm -q src/z/broken && mkdir -p "$wt_k/src/z" && printf 'ok\n' > "$wt_k/src/z/ok" && git -C "$wt_k" add src/z && git -C "$wt_k" commit -qm "k 수정"
+ok "merge k after project checks pass" "$aiops" worktree merge "$k" --target "$project"
+ruby -I"$repo_root/runtime" -rtask_worktree -e '
+  a = TaskWorktree.product_paths("allowed_paths" => [".ai_project/checks/test_a.py", ".ai_project/reports/x.md", "src/a"])
+  abort "checks paths should count for overlap: #{a}" unless a == [".ai_project/checks/test_a.py", "src/a"]
+  abort "overlap on a shared check" unless TaskWorktree.overlap(a, [".ai_project/checks"])
+'
+write_model 2
+
 # --- teams without an Operator or a setting are not limited ---
 plain="$tmpdir/plain"
 mkdir -p "$plain/.ai_project/tasks/active"

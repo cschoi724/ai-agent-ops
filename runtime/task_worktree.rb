@@ -6,10 +6,20 @@
 #
 #   task_worktree.rb create TASK_ID [--target DIR] [--repo DIR] [--base BRANCH] [--check]
 #   task_worktree.rb merge TASK_ID [--target DIR] [--check]
+#   task_worktree.rb checks [TASK_ID] [--target DIR] [--dir DIR]
+#
+# Project checks are the Owner's own tests kept outside the product
+# repository in .ai_project/checks/ (entry point run.sh), so every worktree
+# shares one copy and other developers' test suites are not touched.
 #
 # The Owner sets `parallel_tasks: { TEAM: N }` in .ai_project/operating_model.md
 # (the guard keeps agents from changing it). Teams with an Operator default to
 # one running Task; other teams are not limited unless configured.
+#
+# The Owner can also set `merge_check` (a shell command, or `{ default: CMD,
+# TEAM: CMD }`) and `merge_check_timeout_minutes`. `merge` runs it in the
+# rebased Task worktree, which holds exactly what the base branch becomes,
+# and leaves the base branch untouched when it fails.
 
 require "date"
 require "fileutils"
@@ -73,6 +83,71 @@ module TaskWorktree
     operator_team?(target, team) ? 1 : nil
   end
 
+  DEFAULT_MERGE_CHECK_TIMEOUT_MINUTES = 60
+
+  def operating_model(target)
+    read_front_matter(File.join(target, ".ai_project", "operating_model.md"))
+  end
+
+  # Build/test command for the team after its Tasks are combined, or nil.
+  # A team entry with an empty value turns the default off for that team.
+  def merge_check_command(target, team)
+    config = operating_model(target)["merge_check"]
+    command =
+      case config
+      when String then config
+      when Hash
+        hit = config.find { |name, _value| name.to_s != "default" && team_key(name) == team_key(team) }
+        hit ? hit[1] : config["default"]
+      end
+    command = command.to_s.strip
+    command.empty? ? nil : command
+  end
+
+  def merge_check_timeout_minutes(target)
+    value = operating_model(target)["merge_check_timeout_minutes"]
+    value.is_a?(Integer) && value >= 1 ? value : DEFAULT_MERGE_CHECK_TIMEOUT_MINUTES
+  end
+
+  # Runs COMMAND with sh in DIR, writing output to LOG_PATH.
+  # Returns [passed, detail].
+  def run_merge_check(dir, command, timeout_minutes, log_path, env = {})
+    FileUtils.mkdir_p(File.dirname(log_path))
+    File.open(log_path, "w") do |log|
+      log.puts "$ #{command}"
+      log.puts "# dir: #{dir}"
+      log.flush
+      pid = Process.spawn(env, "sh", "-c", command, chdir: dir, in: File::NULL, out: log, err: log, pgroup: true)
+      deadline = Time.now + (timeout_minutes * 60)
+      loop do
+        _pid, status = Process.wait2(pid, Process::WNOHANG)
+        if status
+          log.puts "# exit: #{status.exitstatus.inspect}"
+          return [status.success?, status.success? ? "passed" : "exit #{status.exitstatus || status.termsig}"]
+        end
+        if Time.now >= deadline
+          stop_group(pid)
+          log.puts "# timeout after #{timeout_minutes} minute(s)"
+          return [false, "timed out after #{timeout_minutes} minute(s)"]
+        end
+        sleep 0.5
+      end
+    end
+  end
+
+  def stop_group(pid)
+    Process.kill("TERM", -pid)
+    20.times do
+      return if Process.wait(pid, Process::WNOHANG)
+
+      sleep 0.25
+    end
+    Process.kill("KILL", -pid)
+    Process.wait(pid)
+  rescue Errno::ESRCH, Errno::ECHILD
+    nil
+  end
+
   def task_files(target)
     Dir.glob(File.join(target, ".ai_project", "tasks", "**", "T-*.md")).reject { |path| path.include?("/archive/") }.sort
   end
@@ -96,12 +171,21 @@ module TaskWorktree
     task["worktree_role"].to_s == "active" && !task["worktree_path"].to_s.empty? && File.directory?(task["worktree_path"].to_s)
   end
 
-  # Product paths of a Task relative to its repository: drops AI Ops records
-  # and the `.worktrees/<name>/` prefix used to address a team worktree.
+  CHECKS_DIR = ".ai_project/checks"
+
+  # Paths two running Tasks must not share: product paths relative to the
+  # repository (the `.worktrees/<name>/` prefix is dropped) and the shared
+  # project checks. Other AI Ops records are left out.
   def product_paths(task)
     Array(task["allowed_paths"]).map { |path| path.to_s.strip.sub(%r{\A\./}, "").sub(%r{/+\z}, "") }.reject(&:empty?).reject do |path|
-      path.start_with?(".ai_project/", ".ai_knowledge/")
+      (path.start_with?(".ai_project/", ".ai_knowledge/") || path == ".ai_project") && !(path == CHECKS_DIR || path.start_with?("#{CHECKS_DIR}/"))
     end.map { |path| path.sub(TEAM_WORKTREE_PREFIX, "") }.uniq
+  end
+
+  def checks_env(target, dir, task_id)
+    env = { "AIOPS_PROJECT_ROOT" => target, "AIOPS_CHECKS_DIR" => File.join(target, CHECKS_DIR), "AIOPS_WORKTREE" => dir }
+    env["AIOPS_TASK_ID"] = task_id if task_id
+    env
   end
 
   def overlap(left, right)
@@ -220,8 +304,9 @@ module TaskWorktree
       case @action
       when "create" then create
       when "merge" then merge
+      when "checks" then checks
       else
-        warn "usage: aiops worktree create|merge TASK_ID [--target DIR]"
+        warn "usage: aiops worktree create|merge TASK_ID [--target DIR] | aiops worktree checks [TASK_ID] [--dir DIR]"
         1
       end
     rescue Error, OptionParser::ParseError => e
@@ -244,6 +329,35 @@ module TaskWorktree
       @task_id = remaining.first
       @task_path = TaskWorktree.find_task(@target, @task_id)
       @task = TaskWorktree.read_front_matter(@task_path)
+    end
+
+    # Runs the project checks (.ai_project/checks/run.sh) against a working
+    # folder: --dir, else the Task's active worktree, else the current folder.
+    def checks
+      dir = nil
+      remaining = OptionParser.new do |opts|
+        opts.on("--target DIR") { |value| @options[:target] = value }
+        opts.on("--dir DIR") { |value| dir = value }
+      end.parse(@argv)
+      raise Error, "at most one TASK_ID is allowed" if remaining.length > 1
+
+      @target = File.expand_path(@options[:target])
+      task_id = remaining.first
+      if task_id
+        task = TaskWorktree.read_front_matter(TaskWorktree.find_task(@target, task_id))
+        dir ||= task["worktree_path"].to_s if TaskWorktree.own_worktree?(task)
+      end
+      dir = File.expand_path(dir || Dir.pwd)
+      raise Error, "#{dir} is not a directory" unless File.directory?(dir)
+
+      script = File.join(@target, TaskWorktree::CHECKS_DIR, "run.sh")
+      raise Error, "#{TaskWorktree::CHECKS_DIR}/run.sh not found; project checks are not set up" unless File.file?(script)
+
+      env = TaskWorktree.checks_env(@target, dir, task_id)
+      puts "checks: #{TaskWorktree::CHECKS_DIR}/run.sh in #{dir}"
+      ok = system(env, "sh", script, chdir: dir)
+      puts(ok ? "checks passed" : "checks failed")
+      ok ? 0 : 1
     end
 
     def branch_info
@@ -298,8 +412,10 @@ module TaskWorktree
       raise Error, "#{path} has uncommitted changes; commit the Task work first" unless dirty.empty?
 
       ahead = TaskWorktree.git!(path, "rev-list", "--count", "#{base}..HEAD").to_i
+      merge_check = TaskWorktree.merge_check_command(@target, @task["team"].to_s)
       if @options[:check]
         puts "ready: merge #{ahead} commit(s) of #{branch} into #{base}"
+        puts(merge_check ? "merge check: #{merge_check}" : "merge check: not configured (operating_model merge_check)")
         return 0
       end
 
@@ -310,6 +426,7 @@ module TaskWorktree
       end
       new_base_sha = TaskWorktree.git!(path, "rev-parse", "#{base}^{commit}")
       merged_sha = TaskWorktree.git!(path, "rev-parse", "HEAD")
+      run_merge_check(merge_check, path, base, merged_sha) if merge_check
       base_worktree = TaskWorktree.worktree_for_branch(path, base)
       if base_worktree
         TaskWorktree.git!(base_worktree, "merge", "--ff-only", branch)
@@ -324,6 +441,22 @@ module TaskWorktree
                               { "worktree_path" => record_dir, "worktree_role" => "merged", "base_sha" => new_base_sha, "merged_sha" => merged_sha })
       puts "merged: #{ahead} commit(s) of #{branch} into #{base} (#{merged_sha[0, 9]}); removed #{path}"
       0
+    end
+
+    # Builds and tests the rebased Task branch (base + this Task) before the
+    # base moves. Failure leaves the base branch as it was.
+    def run_merge_check(command, path, base, merged_sha)
+      timeout = TaskWorktree.merge_check_timeout_minutes(@target)
+      log_rel = File.join(".ai_project", "reports", "#{@task_id}_merge-check.log")
+      puts "merge check: #{command} (in #{path}, timeout #{timeout}m)"
+      env = TaskWorktree.checks_env(@target, path, @task_id).merge("AIOPS_BASE_BRANCH" => base)
+      passed, detail = TaskWorktree.run_merge_check(path, command, timeout, File.join(@target, log_rel), env)
+      TaskWorktree.set_fields(@task_path, { "merge_check" => passed ? "passed" : "failed", "merge_check_sha" => merged_sha,
+                                            "merge_check_log" => log_rel })
+      return puts("merge check passed: log #{log_rel}") if passed
+
+      raise Error, "merge check failed (#{detail}); #{base} was not changed. #{path} is now rebased onto #{base}: " \
+                   "fix the combined result there, commit, and run aiops worktree merge #{@task_id} again. Log: #{log_rel}"
     end
   end
 end

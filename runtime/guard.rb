@@ -298,7 +298,7 @@ module AiopsGuard
     # the enabled Operator Role holders (the Owner approval gate depends on them).
     # Edit-tool changes to the Owner-only files are allowed unless they change
     # the Owner-only parts: Operator Role holders (Agent Registry) or
-    # parallel_tasks (operating model).
+    # parallel_tasks / merge_check (operating model).
     def registry_edit_reason(path)
       model = File.basename(path).casecmp?("operating_model.md")
       name = model ? "운영 모델" : "Agent Registry"
@@ -316,7 +316,7 @@ module AiopsGuard
       return nil if before == after
 
       if model
-        return "parallel_tasks(팀별 동시 진행 Task 수)는 Owner(사용자)만 바꿀 수 있습니다. " \
+        return "parallel_tasks(팀별 동시 진행 Task 수)와 merge_check(합치기 전 빌드·테스트 명령)는 Owner(사용자)만 바꿀 수 있습니다. " \
                "필요하면 Owner에게 aiops guard allow-structure-edit 를 직접 실행해 달라고 요청하세요. 운영 모델의 다른 내용은 그대로 고칠 수 있습니다."
       end
       "Operator Role을 가진 Agent(추가·제거·비활성화·이름·팀 변경)는 Owner(사용자)만 바꿀 수 있습니다. " \
@@ -652,17 +652,23 @@ module AiopsGuard
 
     module_function
 
-    # Owner-only settings of the operating model: the per-team running-Task limits.
+    # Owner-only settings of the operating model: the per-team running-Task
+    # limits and the build/test command run before a Task branch is merged.
     def parallel_signature(text)
       return nil unless text.to_s.gsub("\r\n", "\n").start_with?("---\n")
 
       data = front_matter(text)
       config = data["parallel_tasks"]
-      return nil if config.nil?
+      check = data["merge_check"]
+      timeout = data["merge_check_timeout_minutes"]
+      return nil if config.nil? && check.nil? && timeout.nil?
 
-      raise Invalid, "parallel_tasks는 팀 이름: 숫자 형태여야 합니다" unless config.is_a?(Hash)
+      raise Invalid, "parallel_tasks는 팀 이름: 숫자 형태여야 합니다" unless config.nil? || config.is_a?(Hash)
+      raise Invalid, "merge_check는 명령 문자열 또는 팀 이름: 명령 형태여야 합니다" unless check.nil? || check.is_a?(String) || check.is_a?(Hash)
 
-      config.map { |team, value| [team.to_s.strip.downcase, value] }.sort_by { |team, _value| team }
+      limits = config && config.map { |team, value| [team.to_s.strip.downcase, value] }.sort_by { |team, _value| team }
+      checks = check.is_a?(Hash) ? check.map { |team, value| [team.to_s.strip.downcase, value.to_s.strip] }.sort_by { |team, _value| team } : check.to_s.strip
+      [limits, checks, timeout]
     end
 
     def front_matter(text)
