@@ -11,6 +11,7 @@
 | `commit_policy.md` | commit 권한과 제한 |
 | `document_governance.md` | 운영 문서 보호 기준 |
 | `knowledge_policy.md` | `.ai_knowledge/` 갱신과 source of truth 규칙 |
+| `history_policy.md` | `.ai_project/history/` 기록보관소: 지우기 전 배경·Owner 발언·판단·실험 결과 기록 |
 | `migration_policy.md` | 기존 프로젝트의 운영모델 마이그레이션 기준 |
 | `project_workspace.md` | `.ai_project/` 구조와 수정 권한 |
 | `shared_status_policy.md` | 다중 Agent/worktree의 공용 상태 기준 ref |

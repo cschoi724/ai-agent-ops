@@ -110,9 +110,10 @@ aiops (sh)
 | `model_advisor.rb` (778) | `model recommend` (codex / claude-code / custom, `model_catalog.json`) | `class ModelAdvisor` |
 | `dashboard_server.rb` (432) | `project dashboard --serve` localhost 서버 | `class DashboardServer` |
 | `dashboard_presets.rb` (430) | dashboard preset list/show/add/run | `class DashboardPresets` |
-| `guard.rb` | `aiops guard`: 보호 hook 판정(Claude/Codex 공통 payload, fail-closed). 보호 대상은 `.ai/`, Agent Registry의 Operator Role 보유자, 공유 팀 폴더의 폴더 전체 git 명령(`git add .`, `commit -a`, `reset --hard` 등)(파일 수정 도구 결과를 `RegistryCheck`로 계산해 비교, 셸 수정은 차단, Bootstrap 생성은 허용, `allow-structure-edit`로 기한부 해제), transition receipt, `.git/hooks`·`config`·`aiops`. Owner 전용 명령(`--owner-approved`, `--no-verify`, `core.hooksPath`, `write-core-digest`, registry `--apply`) 차단, pre-commit, core 무결성(digest / git clean) | `module AiopsGuard` |
+| `guard.rb` | `aiops guard`: 보호 hook 판정(Claude/Codex 공통 payload, fail-closed). 보호 대상은 `.ai/`, Agent Registry의 Operator Role 보유자, 공유 팀 폴더의 폴더 전체 git 명령(`git add .`, `commit -a`, `reset --hard` 등), 지난 history 기록(덧붙이기만, `append_only?`·`covers_history?`)(파일 수정 도구 결과를 `RegistryCheck`로 계산해 비교, 셸 수정은 차단, Bootstrap 생성은 허용, `allow-structure-edit`로 기한부 해제), transition receipt, `.git/hooks`·`config`·`aiops`. Owner 전용 명령(`--owner-approved`, `--no-verify`, `core.hooksPath`, `write-core-digest`, registry `--apply`) 차단, pre-commit, core 무결성(digest / git clean) | `module AiopsGuard` |
 | `orchestrate.rb` | `aiops orchestrate plan`: Operator 세션의 다음 단계·담당 subagent·명령·Owner 정지 지점 계산(읽기 전용, gate 단계는 lifecycle `--check`로 사전 확인), `orchestrate next`(팀 전체·동시 진행 한도), `aiops approve [--all]`(Owner 승인 단축) | `class OrchestrationPlan`, `TeamPlan`, `OwnerApproval` |
 | `task_worktree.rb` | 병렬 Task(공유 팀 폴더): 수 제한 없음, 시작 시 같은 팀·폴더 진행 중 Task와 `allowed_paths` 겹침 검사(`start_problem`), 변경 경로 검사에서 이웃 Task 경로 제외(`neighbor_paths`), `aiops worktree checks`(`.ai_project/checks` 프로젝트 점검) | `module TaskWorktree` |
+| `history.rb` | `aiops history new/index/lint`: `.ai_project/history/` 기록보관소(INDEX.md 한 줄 목록, `aiops.history.v1` 기록 템플릿 `templates/history/record.md`, 크기·형식 검사, 예전 기록은 note만). doctor의 history 경고와 "보고서 없이 보관된 Task" 경고가 `mentioned_task_ids`를 쓴다 | `module History` |
 | `tool_extras.rb` | seed·doctor용 Role subagent, skill, hook 설정 설치와 상태 점검(settings 병합) | `class ToolExtras` |
 | `github_release_status.rb` (336) | `--github` 시 `gh`로 PR/check/release 조회 (timeout 포함) | `class GitHubReleaseStatus` |
 
@@ -215,7 +216,7 @@ bin/aiops status --target "$d"
 
 ## 9. 현재 상태와 남은 과제 (2026-11-18 기준)
 
-v0.19.1: v0.17.x(PR A~D #67~#70, 보안 보강 #71, Registry 보호 완화 #74, 팀 단위 Owner 승인 #77, `aiops approve` #80)에 병렬 Task(#83), Task 번호 충돌 방지(#86), 프로젝트 점검(#89), 공유 팀 폴더 병렬 방식(#92), 오래된 진행 중 Task 경고·상위 폴더 guard(#95) 반영. 열린 PR은 #61(Draft, 문서만).
+v0.19.1: v0.17.x(PR A~D #67~#70, 보안 보강 #71, Registry 보호 완화 #74, 팀 단위 Owner 승인 #77, `aiops approve` #80)에 병렬 Task(#83), Task 번호 충돌 방지(#86), 프로젝트 점검(#89), 공유 팀 폴더 병렬 방식(#92), 오래된 진행 중 Task 경고·상위 폴더 guard(#95) 반영. v0.20.0: 기록보관소 `.ai_project/history/`(`aiops history`). 열린 PR은 #61(Draft, 문서만).
 
 **진행 중 최우선 계획**: `design_notes/single_session_orchestration_plan.md` — v0.18.0에서 Task별 worktree·한도 방식의 병렬 Task를 넣었다가, v0.19.0에서 수 제한 없는 공유 팀 폴더 방식(경로 겹침 검사, 자기 경로만 commit, 이웃 Task 경로 제외)으로 바꿨다. v0.18.1에서 Task 생성 잠금, 같은 번호의 Task 파일 차단, doctor의 중복 번호 경고를 넣었다(번호 형식 `T-YYYYMMDD-NNN`은 유지). 남은 PR F 항목은 여러 사람·기계용 공유 잠금 저장소(새 Task ID 형식 포함). guard는 상위 폴더로 `.ai`/`.ai_project`를 찾는다(앱 저장소가 프로젝트 폴더 안쪽에 있는 구조). doctor는 오래된 진행 중 Task를 경고한다. 아래 표의 1·2번은 이 계획과 함께 재검토한다.
 

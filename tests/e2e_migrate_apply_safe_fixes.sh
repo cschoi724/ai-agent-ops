@@ -15,6 +15,8 @@ awk '{ gsub(/\{\{CORE_VERSION\}\}/, "0.0.0"); print }' \
   "$tmpdir/.ai_project/operating_model.md" > "$tmpdir/.ai_project/operating_model.tmp"
 mv "$tmpdir/.ai_project/operating_model.tmp" "$tmpdir/.ai_project/operating_model.md"
 
+mkdir -p "$tmpdir/.ai_project/history/2026-01-02-old-cleanup"
+printf '# 예전 정리\n\n보고서 정리 이유.\n' > "$tmpdir/.ai_project/history/2026-01-02-old-cleanup/README.md"
 "$repo_root/bin/aiops" migrate --target "$tmpdir" --apply >/tmp/aiops-e2e-migrate-apply.out
 
 grep -q "| core_version | $current_version |" "$tmpdir/.ai_project/operating_model.md" || {
@@ -50,6 +52,11 @@ for dir in active backlog archive; do
     exit 1
   }
 done
+
+grep -q "2026-01-02-old-cleanup/README.md" "$tmpdir/.ai_project/history/INDEX.md" || {
+  printf '%s\n' "migrate apply did not list existing history records" >&2
+  exit 1
+}
 
 [ -d "$tmpdir/.ai_project/handoffs" ] || {
   printf '%s\n' "migrate apply did not create handoffs directory" >&2

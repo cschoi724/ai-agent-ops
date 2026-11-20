@@ -85,6 +85,9 @@ Usage:
   aiops knowledge pack TOPIC [--target DIR] [--create] [--task TASK_ID] [--source PATH] [--purpose TEXT]
   aiops knowledge lint [--target DIR]
   aiops knowledge status [--target DIR]
+  aiops history new TOPIC [--category C] [--task TASK_ID]... [--title TEXT] [--summary TEXT] [--target DIR]
+  aiops history index [--target DIR]
+  aiops history lint [--target DIR]
   aiops ci init [--target DIR] [--provider github] [--force]
   aiops export runtime [--target DIR] [--output FILE]
   aiops version [--core DIR]
@@ -165,6 +168,7 @@ Examples:
   aiops knowledge init --mode minimal
   aiops knowledge pack ios_login --create --task T-YYYYMMDD-001
   aiops knowledge lint
+  aiops history new disk-cleanup --category cleanup --task T-YYYYMMDD-001 --title "디스크 정리" --summary "오래된 worktree와 빌드 폴더 정리"
   aiops ci init
   aiops export runtime
   aiops bootstrap-guide
@@ -2730,6 +2734,10 @@ print_migration_lists() {
     info "  - .ai_project/handoffs"
     safe_count=$((safe_count + 1))
   fi
+  if [ ! -f "$target/.ai_project/history/INDEX.md" ]; then
+    info "  - .ai_project/history/INDEX.md (lists existing records)"
+    safe_count=$((safe_count + 1))
+  fi
   for file in "$target/.ai_project/ops_migration_plan.md" "$target/.ai_project/ops_decisions.md" "$target/.ai_project/ops_issues.md"; do
     if [ ! -f "$file" ]; then
       info "  - ${file#$target/}"
@@ -2991,6 +2999,7 @@ cmd_migrate() {
       [ -f "$file" ] || status="migration_needed"
     done
     [ -d "$target/.ai_project/handoffs" ] || status="migration_needed"
+    [ -f "$target/.ai_project/history/INDEX.md" ] || status="migration_needed"
     [ -d "$target/.ai_knowledge" ] || status="migration_needed"
     if [ -d "$target/.ai_knowledge" ]; then
       [ -d "$target/.ai_knowledge/context_packs" ] || status="migration_needed"
@@ -3077,6 +3086,7 @@ cmd_migrate() {
   info "ensured: .ai_project/tasks/active backlog archive"
   mkdir -p "$target/.ai_project/handoffs"
   info "ensured: .ai_project/handoffs"
+  ruby "$(default_core_dir)/runtime/history.rb" index --target "$target" | sed 's/^/history: /'
 
   if [ ! -f "$target/.ai_project/ops_migration_plan.md" ]; then
     {
@@ -3090,7 +3100,7 @@ cmd_migrate() {
       printf '| core_version | %s |\n' "$current_version"
       printf '| core_source | %s |\n' "$core_source"
       printf '| apply_scope | safe_auto_fix |\n'
-      printf '| safe_fixes | core_version, tasks directories, handoffs directory, ops records, knowledge context packs, runtime cache ignore |\n'
+      printf '| safe_fixes | core_version, tasks directories, handoffs directory, history index, ops records, knowledge context packs, runtime cache ignore |\n'
       printf '| review_scope | schema front matter, adapter drift, source_of_truth, Task metadata |\n'
     } > "$target/.ai_project/ops_migration_plan.md"
     info "created: .ai_project/ops_migration_plan.md"
@@ -3102,7 +3112,7 @@ cmd_migrate() {
       printf '| core_version | %s |\n' "$current_version"
       printf '| core_source | %s |\n' "$core_source"
       printf '| apply_scope | safe_auto_fix |\n'
-      printf '| safe_fixes | core_version, tasks directories, handoffs directory, ops records, knowledge context packs, runtime cache ignore |\n'
+      printf '| safe_fixes | core_version, tasks directories, handoffs directory, history index, ops records, knowledge context packs, runtime cache ignore |\n'
       printf '| review_scope | schema front matter, adapter drift, source_of_truth, Task metadata |\n'
     } >> "$target/.ai_project/ops_migration_plan.md"
     info "updated: .ai_project/ops_migration_plan.md"
@@ -3877,6 +3887,19 @@ cmd_doctor() {
       info "warn: .ai_project/.runtime/status_ref is tracked; remove it from Git and keep .ai_project/.runtime/ ignored"
       warnings=$((warnings + 1))
     fi
+    if [ -d "$target/.ai_project/history" ]; then
+      history_errors="$(ruby "$(default_core_dir)/runtime/history.rb" lint --target "$target" 2>&1 | sed -n 's/^error: //p')"
+      if [ -n "$history_errors" ]; then
+        while IFS= read -r history_line; do
+          info "warn: history $history_line"
+          warnings=$((warnings + 1))
+        done <<EOF
+$history_errors
+EOF
+      else
+        info "ok: .ai_project/history"
+      fi
+    fi
     if [ -d "$target/.ai_project/tasks" ]; then
       duplicate_task_ids="$(task_duplicate_ids "$target")"
       if [ -n "$duplicate_task_ids" ]; then
@@ -3894,6 +3917,15 @@ EOF
           warnings=$((warnings + 1))
         done <<EOF
 $stale_tasks
+EOF
+      fi
+      missing_history="$(task_evidence_without_history "$target")"
+      if [ -n "$missing_history" ]; then
+        while IFS= read -r history_line; do
+          info "warn: Task evidence removed without a history record: $history_line; write one with aiops history new"
+          warnings=$((warnings + 1))
+        done <<EOF
+$missing_history
 EOF
       fi
     fi
@@ -12124,6 +12156,37 @@ cmd_role() {
   esac
 }
 
+cmd_history() {
+  command -v ruby >/dev/null 2>&1 || die "ruby is required for aiops history"
+  history_runtime="$(default_core_dir)/runtime/history.rb"
+  [ -f "$history_runtime" ] || die "history runtime missing: $history_runtime"
+  [ "$#" -gt 0 ] || die "history requires an action: new, index, lint"
+  exec ruby "$history_runtime" "$@"
+}
+
+# Archived or done Tasks whose report is gone and that no history record
+# mentions: their evidence was removed without keeping the reasoning.
+task_evidence_without_history() {
+  ruby -I"$(default_core_dir)/runtime" -rtask_worktree -rhistory -e '
+    root = ARGV[0]
+    mentioned = History.mentioned_task_ids(root)
+    Dir.glob(File.join(root, ".ai_project/tasks/**/T-*.md")).sort.each do |path|
+      task = TaskWorktree.read_front_matter(path)
+      id = task["id"].to_s
+      next if id.empty? || mentioned[id]
+      next unless path.include?("/tasks/archive/") || task["status"].to_s == "done"
+      next if task["status"].to_s == "cancelled"
+
+      report = task["report_to"].to_s
+      next if report.empty?
+      next if File.exist?(File.join(root, report))
+      next if File.directory?(File.join(root, ".ai_project/reports", id))
+
+      puts "#{id}: #{report} is gone"
+    end
+  ' "$1"
+}
+
 cmd_knowledge() {
   action="${1:-}"
   [ "$#" -gt 0 ] || die "knowledge requires an action: init, pack, lint, status"
@@ -12881,6 +12944,8 @@ cmd_release_check() {
     "$core/runtime/tool_extras.rb" \
     "$core/runtime/orchestrate.rb" \
     "$core/runtime/task_worktree.rb" \
+    "$core/runtime/history.rb" \
+    "$core/templates/history/record.md" \
     "$core/runtime/model_catalog.json" \
     "$core/templates/reports/transition_receipt.json" \
     "$core/templates/reports/task_cleanup_receipt.json" \
@@ -13365,6 +13430,7 @@ main() {
     sync-status) cmd_sync_status "$@" ;;
     worktree) cmd_worktree "$@" ;;
     knowledge) cmd_knowledge "$@" ;;
+    history) cmd_history "$@" ;;
     ci) cmd_ci "$@" ;;
     export) cmd_export "$@" ;;
     version) cmd_version "$@" ;;

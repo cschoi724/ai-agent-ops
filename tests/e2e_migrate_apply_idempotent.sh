@@ -16,6 +16,7 @@ mkdir -p \
   "$tmpdir/.ai_project/handoffs"
 cp "$repo_root/templates/ai_project/guided_full/ops_migration_plan.md" "$tmpdir/.ai_project/ops_migration_plan.md"
 "$repo_root/bin/aiops" knowledge init --target "$tmpdir" --mode minimal >/tmp/aiops-e2e-migrate-idempotent-knowledge.out
+"$repo_root/bin/aiops" history index --target "$tmpdir" >/dev/null
 printf '%s\n' '.ai_project/.runtime/' > "$tmpdir/.gitignore"
 
 awk -v version="$current_version" '{ gsub(/\{\{CORE_VERSION\}\}/, version); print }' \
