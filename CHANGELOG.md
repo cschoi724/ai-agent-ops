@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+## 0.20.0 - 2026-11-20
+
 ### Added
 
 - Project history archive in `.ai_project/history/`. Before agents delete worktrees, Task reports, experiment or build folders, or archive Tasks, they write a small text record of the background, the Owner's exact words, the judgment, experiment results, what was removed, and how to restore it. `INDEX.md` lists one row per record (date, category, title, Task, summary, link) so agents find records with grep. See `policies/history_policy.md`.
