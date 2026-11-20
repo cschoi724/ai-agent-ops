@@ -12,6 +12,7 @@ description: "AI Ops Completion Role. 검증을 통과한 Task의 완료 조건,
 ## 하는 일
 - 완료 기준 충족 여부, 잔여 위험 수용 여부, 후속 Task 필요 여부를 판단한다.
 - 운영 방침상 필요한 병합 상태를 확인한다.
+- Task가 무언가를 지웠거나 보고서를 줄였다면 `.ai_project/history/`에 기록이 있고 `aiops history lint`가 통과하는지 확인한다. 없으면 완료하지 않고 Lead에게 돌려보낸다.
 - 완료 가능하면 `aiops task accept` / `aiops task advance`로 `done`까지 진행한다.
 - 완료할 수 없으면 이유와 필요한 조치를 Lead에게 반환한다.
 

@@ -58,13 +58,19 @@ module AiopsGuard
   OPERATOR_ROLE = "Operator Role"
   EDIT_TOOLS = %w[Edit Write MultiEdit].freeze
   RECEIPT_PATTERN = %r{\A\.ai_project/reports/[^/]+-transition-receipt\.json\z}i.freeze
+  HISTORY_DIR = ".ai_project/history"
+  HISTORY_INDEX = "INDEX.md"
+  HISTORY_DRAFT_MARK = "(작성 전)"
+  HISTORY_HINT = "지난 기록은 고치거나 지울 수 없고 덧붙이기만 됩니다. 기존 줄은 그대로 두고 아래에 \"## 정정 (YYYY-MM-DD)\" 항목을 추가하세요. " \
+                 "새 기록은 aiops history new 로 만드세요. 지워야 하면 Owner(사용자)에게 요청하세요."
 
   LABELS = {
     core: "AI Ops 헌법 폴더(.ai/)",
     structure: "Agent Registry(셸 수정 불가)",
     unlock: "Owner 잠금 해제 기록",
     receipt: "aiops가 기록하는 transition receipt",
-    git: "git hook·설정"
+    git: "git hook·설정",
+    history: "기록보관소(.ai_project/history/)의 지난 기록"
   }.freeze
 
   class Error < StandardError; end
@@ -120,8 +126,41 @@ module AiopsGuard
         return :unlock if lowered == RUNTIME_UNLOCK_PATH.downcase
         return :structure if STRUCTURE_FILES.include?(lowered) && File.exist?(item) && !structure_edit_allowed?
         return :receipt if lowered.match?(RECEIPT_PATTERN)
+        return :history if sealed_history_file?(relative, item)
       end
       nil
+    end
+
+    # A history record file that is no longer a draft: not created today and
+    # without the template's draft mark. INDEX.md stays editable (lint checks it).
+    def sealed_history_file?(relative, item)
+      parts = relative.split("/")
+      return false unless parts.length >= 3 && parts[0] == ".ai_project" && parts[1] == "history"
+      return false if parts.length == 3 && parts[2] == HISTORY_INDEX
+      return false unless File.file?(item)
+      return false if parts[2].start_with?(Date.today.to_s)
+
+      !File.read(item, 1_000_000).to_s.force_encoding("UTF-8").scrub.include?(HISTORY_DRAFT_MARK)
+    rescue SystemCallError
+      false
+    end
+
+    # True when deleting or moving path would remove the history folder (or a
+    # folder above it) or a past record folder.
+    def covers_history?(path, base = @root)
+      return false unless aiops_project?
+
+      history = root_forms.map { |root| File.join(root, HISTORY_DIR) }
+      return false unless history.any? { |dir| File.directory?(dir) }
+
+      candidates_for(path, base).any? do |item|
+        item = item.chomp("/")
+        next true if history.any? { |dir| dir == item || dir.start_with?("#{item}/") }
+
+        record = history.map { |dir| item.start_with?("#{dir}/") ? item.delete_prefix("#{dir}/") : nil }.compact.first
+        next true if record && File.file?(item) && protection(item) == :history
+        record && !record.include?("/") && File.directory?(item) && !record.start_with?(Date.today.to_s)
+      end
     end
 
     # Shared git directory (the main repository's .git for linked worktrees).
@@ -245,6 +284,12 @@ module AiopsGuard
 
         kind = protection(value)
         next unless kind
+        if kind == :history && key == "file_path" && EDIT_TOOLS.include?(payload["tool_name"].to_s)
+          reason = history_edit_reason(value) { |text| RegistryCheck.apply_tool_edit(text, payload["tool_name"].to_s, input) }
+          return reason if reason
+
+          next
+        end
         if kind == :structure && key == "file_path" && EDIT_TOOLS.include?(payload["tool_name"].to_s)
           reason = registry_edit_reason(value) { |text| RegistryCheck.apply_tool_edit(text, payload["tool_name"].to_s, input) }
           return reason if reason
@@ -280,8 +325,17 @@ module AiopsGuard
         kind = protection(section[:path])
         moved = section[:move_to] && protection(section[:move_to])
         return "patch가 #{label(section[:move_to])}의 #{section[:move_to]} 를 수정합니다." if moved
+        if section[:op] == "Delete" && @project.covers_history?(section[:path], @cwd)
+          return "patch가 기록보관소의 #{section[:path]} 를 지웁니다. #{HISTORY_HINT}"
+        end
         next unless kind
 
+        if kind == :history && %w[Update Add].include?(section[:op]) && section[:move_to].nil?
+          reason = history_edit_reason(section[:path]) { |current| RegistryCheck.apply_patch_section(current, section) }
+          return reason if reason
+
+          next
+        end
         if kind == :structure && %w[Update Add].include?(section[:op]) && section[:move_to].nil?
           reason = registry_edit_reason(section[:path]) { |current| RegistryCheck.apply_patch_section(current, section) }
           return reason if reason
@@ -291,6 +345,18 @@ module AiopsGuard
         return "patch가 #{label(section[:path])}의 #{section[:path]} 를 수정합니다."
       end
       nil
+    end
+
+    # Past history records are append-only: every existing line must stay, in order.
+    def history_edit_reason(path)
+      current = File.read(File.expand_path(path, @cwd))
+      updated = yield(current)
+      return "기록 수정 결과를 계산할 수 없어 차단합니다. 파일을 다시 읽고 덧붙일 내용만 추가하세요." if updated.nil?
+      return nil if RegistryCheck.append_only?(current, updated)
+
+      "#{path} 는 #{LABELS[:history]}입니다. #{HISTORY_HINT}"
+    rescue SystemCallError => e
+      "기록을 읽을 수 없어 차단합니다: #{e.message}"
     end
 
     # Allows a file-edit tool change to the Agent Registry unless it changes
@@ -399,7 +465,13 @@ module AiopsGuard
                    match[1]
                  end
         next unless target && !target.start_with?("&")
-        return "출력 리다이렉션이 #{label(target)}의 #{target} 를 덮어씁니다." if protection(target)
+
+        kind = protection(target)
+        next unless kind
+        next if kind == :history && token.include?(">>")
+
+        hint = kind == :history ? " #{HISTORY_HINT}" : ""
+        return "출력 리다이렉션이 #{label(target)}의 #{target} 를 덮어씁니다.#{hint}"
       end
       nil
     end
@@ -418,8 +490,17 @@ module AiopsGuard
       return script_reason(operands.first, shell: true) if %w[source .].include?(name) && operands.first
       return shell_command_reason(args) if SHELLS.include?(name)
 
+      if %w[rm rmdir unlink shred mv].include?(name)
+        hit = operands.find { |arg| @project.covers_history?(arg, @cwd) }
+        return "#{name} 명령이 기록보관소의 #{hit} 를 지우거나 옮깁니다. #{HISTORY_HINT}" if hit
+      end
       if WRITE_ANY_ARG.include?(name)
-        hit = operands.find { |arg| protection(arg) }
+        appending = name == "tee" && args.any? { |arg| arg == "--append" || arg.match?(/\A-[a-zA-Z]*a/) }
+        hit = operands.find do |arg|
+          kind = protection(arg)
+          kind && !(kind == :history && (%w[mkdir touch].include?(name) || appending))
+        end
+        return "#{name} 명령이 #{label(hit)}의 #{hit} 를 변경합니다. #{HISTORY_HINT}" if hit && protection(hit) == :history
         return "#{name} 명령이 #{label(hit)}의 #{hit} 를 변경합니다." if hit
         if RECURSIVE_WRITERS.include?(name) && args.any? { |arg| arg.match?(/\A-[a-zA-Z]*[rR]/) || arg == "--recursive" }
           hit = operands.find { |arg| @project.covers_core?(arg, @cwd, follow_links: name == "rm") }
@@ -500,6 +581,11 @@ module AiopsGuard
       starts = ["."] if starts.empty?
       hit = starts.find { |arg| protection(arg) }
       return "find 가 #{label(hit)}의 #{hit} 를 변경합니다." if hit
+
+      if args.include?("-delete")
+        hit = starts.find { |arg| @project.covers_history?(arg, @cwd) }
+        return "find -delete 가 기록보관소가 있는 #{hit} 아래를 지울 수 있습니다. 시작 경로를 좁히세요." if hit
+      end
 
       hit = starts.find { |arg| @project.covers_core?(arg, @cwd, follow_links: follow) }
       hit ? "find 가 #{hit} 아래의 AI Ops 헌법 폴더(.ai/)까지 변경할 수 있습니다. 시작 경로를 좁히세요." : nil
@@ -606,6 +692,10 @@ module AiopsGuard
       return nil unless GIT_WRITE_SUBCOMMANDS.include?(sub) || (git_dir_protected && %w[push tag branch config].include?(sub))
       return "git #{sub} 가 AI Ops core 저장소(.ai/)를 변경합니다." if git_dir_protected
 
+      if %w[rm mv].include?(sub)
+        hit = rest.reject { |arg| arg.start_with?("-") }.find { |arg| @project.covers_history?(arg, @cwd) }
+        return "git #{sub} 가 기록보관소의 #{hit} 를 지우거나 옮깁니다. #{HISTORY_HINT}" if hit
+      end
       hit = rest.reject { |arg| arg.start_with?("-") }.find { |arg| protection(arg) }
       hit ? "git #{sub} 가 #{label(hit)}의 #{hit} 를 변경합니다." : nil
     end
@@ -732,6 +822,16 @@ module AiopsGuard
           replace(current, edit["old_string"], edit["new_string"], edit["replace_all"])
         end
       end
+    end
+
+    # True when every line of before is still in after, in the same order.
+    def append_only?(before, after)
+      return false unless after.is_a?(String)
+
+      old = before.to_s.gsub("\r\n", "\n").split("\n")
+      index = 0
+      after.gsub("\r\n", "\n").split("\n").each { |line| index += 1 if index < old.length && line == old[index] }
+      index == old.length
     end
 
     def replace(text, old, new, all)
@@ -993,7 +1093,7 @@ module AiopsGuard
 
     def deny(reason)
       warn "AI Ops 차단: #{reason}"
-      warn "보호 대상(.ai/, Operator Role, receipt, git hook)은 Agent가 바꿀 수 없습니다. Agent Registry의 다른 내용은 Edit/Write나 apply_patch로 고치세요. 꼭 필요하면 작업을 멈추고 Owner(사용자)에게 알리세요."
+      warn "보호 대상(.ai/, Operator Role, receipt, git hook, 지난 history 기록)은 Agent가 바꿀 수 없습니다. Agent Registry의 다른 내용은 Edit/Write나 apply_patch로 고치세요. 꼭 필요하면 작업을 멈추고 Owner(사용자)에게 알리세요."
       2
     end
 

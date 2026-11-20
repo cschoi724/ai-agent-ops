@@ -119,6 +119,8 @@ YourProject/
 | `aiops task transition TASK_ID --to STATUS --role ROLE` | 예외 처리용 저수준 상태 전이 |
 | `aiops handoff create TASK_ID --from ROLE --to ROLE --next-action TEXT` | Role 인계 |
 | `aiops knowledge init --mode minimal` | `.ai_knowledge/` 생성 |
+| `aiops history new TOPIC --category C --task TASK_ID` | `.ai_project/history/` 기록보관소에 기록 템플릿 생성, INDEX에 한 줄 추가 |
+| `aiops history lint` / `index` | 기록보관소 검사 / 목록에 없는 기록을 INDEX에 추가 |
 | `aiops ci init` | 프로젝트용 GitHub Actions 생성 |
 | `aiops export runtime` | 외부 runtime adapter용 JSON export |
 
@@ -136,6 +138,7 @@ YourProject/
 - Agent·팀 추가와 변경은 Agent에게 맡길 수 있다. Agent는 `.ai_project/agent_registry.md`를 파일 수정 도구로 고치고, guard가 수정 결과를 미리 계산해 Operator Role을 가진 Agent가 바뀌는 경우(추가·제거·비활성화·이름 변경)만 막는다. 셸 명령으로 Agent Registry를 고치는 것은 결과를 검사할 수 없어 막는다. `.ai_project/operating_model.md`는 보호하지 않는다.
 - Operator Role 변경을 Agent에게 맡기려면 Owner가 `aiops guard allow-structure-edit --minutes 30`을 실행하고 끝나면 `aiops guard lock-structure`로 잠근다. git 저장소가 아니어도 동작한다.
 - Owner만 쓰는 점검(테스트)은 제품 저장소 대신 `.ai_project/checks/`에 두고 `run.sh`로 돌린다. `aiops worktree checks TASK_ID`가 Task 작업 폴더를 `AIOPS_WORKTREE`로 넘겨 실행한다.
+- worktree, 보고서, 실험·빌드 폴더를 지우거나 Task를 보관하기 전에 `.ai_project/history/`에 배경, Owner 발언 원문, 판단 근거, 실험 결과, 복원 방법을 텍스트로 남긴다(`aiops history new`, `policies/history_policy.md`). Wiki는 "지금 어떤가", history는 "왜 이렇게 됐나"를 담는다. guard는 지난 기록을 덧붙이기만 허용하고 지우기·고치기를 막는다(오늘 만든 기록과 초안은 자유).
 - 오래(`stale_task_days`, 기본 3일) 손대지 않은 진행 중 Task는 `aiops doctor`가 경고한다. 경로를 잡고 있어 다른 Task 시작을 막기 때문이다.
 - guard는 세션 폴더에서 위로 올라가며 `.ai`나 `.ai_project`가 있는 폴더를 프로젝트로 본다. 프로젝트 안의 앱 저장소나 팀 작업 폴더에서 세션을 열어도 보호된다.
 - 동시 진행 Task 수 제한은 없다. 팀 Task들은 팀 작업 폴더 하나를 같이 쓰고, 진행 중인 Task끼리 `allowed_paths`가 겹치면 나중 Task는 시작할 수 없다. Agent는 자기 경로만 stage·commit한다(`git add .`, `git commit -a`, `git reset --hard` 같은 폴더 전체 명령은 guard가 막는다).

@@ -10,6 +10,15 @@
 
 ## Unreleased
 
+### Added
+
+- Project history archive in `.ai_project/history/`. Before agents delete worktrees, Task reports, experiment or build folders, or archive Tasks, they write a small text record of the background, the Owner's exact words, the judgment, experiment results, what was removed, and how to restore it. `INDEX.md` lists one row per record (date, category, title, Task, summary, link) so agents find records with grep. See `policies/history_policy.md`.
+- `aiops history new TOPIC --category C --task TASK_ID --title TEXT --summary TEXT` creates a record from the `aiops.history.v1` template and adds its INDEX row. `aiops history index` creates INDEX.md and lists records it does not list yet without rewriting them. `aiops history lint` checks INDEX rows and links, and for new-format records the category, required sections, size (`history_record_max_kb`, default 1024), and text-only files. Older records without front matter only get notes.
+- `aiops doctor` reports history lint errors and done or archived Tasks whose report is gone while no history record mentions the Task.
+- `aiops migrate --apply` creates `.ai_project/history/INDEX.md` and lists existing records; `aiops migrate --check` reports a missing INDEX as `migration_needed`.
+- Adapters and the Lead and Completion roles describe when to write a history record.
+- The guard keeps past history records append-only in agent sessions: edits, Write, and apply_patch must keep every existing line, and overwriting redirects, `sed -i`, `tee` without `-a`, `rm`, `mv`, `git rm`, `find -delete`, and patch deletes of past records, record folders, the history folder, or a folder above it are blocked. Records created today, drafts that still have the template's draft mark, new files, and `INDEX.md` stay editable.
+
 ## 0.19.1 - 2026-11-19
 
 ### Added
